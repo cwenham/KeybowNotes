@@ -51,6 +51,6 @@ See [FINDINGS.md](FINDINGS.md) for detail.
 
 | # | Question | Result |
 |---|----------|--------|
-| 1 | Which URL form (if any) pre-fills an editable message? | not yet run |
+| 1 | Which URL form (if any) pre-fills an editable message? | all of them — using `sms:<handle>&body=<text>`; nothing is sent without the user pressing Return |
 | 2 | Does append preserve checklist / table / image / formatting? | partly — table kept, checklist flattened to bullets, inline photo becomes an attachment, heading downgraded. Accepted with limitations. |
-| 3 | Does create + show give a usable "edit it now" experience? | not yet run |
+| 3 | Does create + show give a usable "edit it now" experience? | yes-ish — event is created and selected in 2s, but not opened for editing. Use EventKit for speed; identify calendars by ID, not name. |

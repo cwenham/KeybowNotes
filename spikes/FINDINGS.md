@@ -49,8 +49,49 @@ through AppleScript, so large notes are slow and memory-hungry.
 
 ## Spike 1 — Messages: pre-filled compose via URL
 
-Not yet run.
+**Verdict: works. Every URL form carrying a body pre-filled an editable message.**
+
+| # | URL form | Result |
+|---|----------|--------|
+| 1 | `sms:<handle>&body=<text>` | pre-filled, ready to edit |
+| 2 | `sms:<handle>?body=<text>` | pre-filled, ready to edit |
+| 3 | `sms:/open?addresses=<handle>&body=<text>` | pre-filled, ready to edit |
+| 4 | `imessage:<handle>?body=<text>` | pre-filled, ready to edit |
+| 5 | `imessage:<handle>&body=<text>` | pre-filled, ready to edit |
+| 6 | `imessage://<handle>` (control, no body) | conversation opened, field empty |
+
+All six opened the same conversation for the same handle. Percent-encoded
+non-ASCII text (accents, emoji, em dash) and a literal `&` survived intact.
+
+Chosen form: **`sms:<handle>&body=<text>`**, which lets Messages decide between
+iMessage and SMS rather than forcing iMessage.
+
+Nothing is ever sent by the app: the message sits in the compose field until the
+user presses Return. AppleScript's `send` command is deliberately not used —
+it sends immediately, with no draft, which is unacceptable behind a key press.
 
 ## Spike 3 — Calendar: create then show
 
-Not yet run.
+**Verdict: works, with one extra step for the user.**
+
+Creating an event with summary, start/end, location, description and URL, then
+`show`ing it, took **2 seconds** via AppleScript. Calendar came to the front,
+navigated to the day and **selected** the event, but did not open it for editing —
+the user still double-clicks it to change anything.
+
+- 2s is slow enough to notice behind a key press. **Use EventKit from Swift
+  instead** for this action: faster, proper date types, and a write-only
+  permission level for events.
+- Optional later: after showing, send Cmd-E via System Events to open the
+  inspector. That needs Accessibility permission, so it should be opt-in.
+
+### Calendar names are ambiguous
+
+Listing the calendars showed **two called "Chris Wenham"** (different accounts),
+alongside several read-only ones (`Holidays in United States`, `UK Holidays`,
+`Scheduled Reminders`, `Siri Suggestions`). AppleScript's `calendar "name"`
+silently takes the first match.
+
+- The config must identify a calendar by **stable ID**, keeping the name as a
+  display label only.
+- Only writable calendars should be offered when choosing one.

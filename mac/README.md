@@ -48,6 +48,10 @@ swift build
 Working against the hardware: discovery, connect, `HELLO`, `PING`/`PONG`,
 `LEDS`, and `DOWN`/`UP` with correct row/column reporting.
 
-Not built yet: reconnect has only been exercised incidentally (unplug/replug
-still needs a proper test), and everything above the transport — config loading,
-the tree, the overlay, the actions.
+**Reconnect verified** by unplugging mid-session: the supervisor reported
+"device disappeared", reconnected by itself when the Keybow came back, and keys
+worked again with no intervention. Overlapping presses interleave correctly
+(`DOWN 4, DOWN 0, UP 4, UP 0`), so chords and press-and-hold are both workable.
+
+Not built yet: everything above the transport — config loading, the tree, the
+overlay, the actions.

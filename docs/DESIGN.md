@@ -55,10 +55,19 @@ sees the device; the firmware translates to the hardware's column-major order.
 shows a distinct "no host" pattern (a dim breathing red, say), so a dead app is
 obvious rather than silently ignoring presses.
 
-**Connection handling.** The app finds the device by USB vendor/product ID, not by
-a fixed `/dev/cu.*` path, and must survive unplugging, replugging and sleep/wake.
-Of the two serial ports CircuitPython exposes, the console is ignored and the data
-port used.
+**Connection handling.** The app finds the device by USB vendor/product ID
+(`0x16d0` / `0x08c6`), not by a fixed `/dev/cu.*` path, and must survive
+unplugging, replugging and sleep/wake. Of the two serial ports CircuitPython
+exposes, the console is ignored and the data port used.
+
+**The port stays open.** The firmware writes only while the host asserts DTR, so
+the app opens the data port once and holds it for as long as the device is
+present. Opening and closing per command loses every reply. `HELLO` arrives on
+boot and whenever a host resumes talking after a silence, which is the app's cue
+to resend the LED state.
+
+Verified on hardware on 2026-09-23 against CircuitPython 10.3.1; see
+`firmware/README.md`.
 
 ---
 

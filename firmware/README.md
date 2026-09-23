@@ -3,8 +3,10 @@
 CircuitPython for the Pimoroni Keybow 2040. It reports key presses and obeys LED
 commands; the Mac app holds the category tree and all the logic.
 
-**Untested on hardware so far** — written from the documented API, and the key
-numbering in particular needs checking with the probe tool below.
+**Verified on hardware** (2026-09-23): CircuitPython 10.3.1 on a Keybow 2040,
+with `pmk` unchanged. `HELLO`, `PING`/`PONG`, `LEDS`, the error replies and
+`DOWN`/`UP` for all keys all behave as specified, and `ROTATION = "top"` gives
+the numbering the protocol expects (top row 0-3, left column 0, 4, 8, 12).
 
 ## Install
 
@@ -64,6 +66,17 @@ Any line from the host counts as a heartbeat. After `HOST_TIMEOUT_S` (5s) of
 silence the keys breathe dim red, so a Mac app that has died or was never
 started is visible at a glance. All keys lighting **blue** instead means
 `usb_cdc.data` is missing: `boot.py` did not run, so hard-reset the device.
+
+## The host must hold the port open
+
+The firmware only writes when CircuitPython reports the host as connected, which
+means **DTR asserted**. A tool that opens the port, writes a line and closes it
+again drops DTR between calls, and replies are silently discarded — the symptom
+is commands that appear to be ignored while the device is working perfectly.
+
+The Mac app therefore opens the data port once and keeps it open for as long as
+the device is present. `HELLO` is sent on boot and again whenever a host starts
+talking after a silence, so the app can resynchronise without a reset.
 
 ## Trying it by hand
 

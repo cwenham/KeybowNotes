@@ -39,7 +39,8 @@ keybow = PMK(Hardware())
 keys = keybow.keys
 serial = usb_cdc.data
 
-_rx = bytearray()
+# Kept as bytes, not bytearray: CircuitPython's bytearray has no slice deletion.
+_rx = b""
 _pressed = [False] * KEY_COUNT
 _host_last_seen = 0.0
 _host_present = False
@@ -102,16 +103,16 @@ def handle(line):
 
 def read_serial():
     """Drain whatever has arrived and act on each complete line."""
+    global _rx
+
     if serial is None or not serial.connected:
         return
     waiting = serial.in_waiting
     if not waiting:
         return
-    _rx.extend(serial.read(waiting))
+    _rx += serial.read(waiting)
     while b"\n" in _rx:
-        raw, _, rest = bytes(_rx).partition(b"\n")
-        del _rx[:]
-        _rx.extend(rest)
+        raw, _, _rx = _rx.partition(b"\n")
         try:
             handle(raw.decode("utf-8"))
         except UnicodeError:

@@ -11,6 +11,10 @@ public enum KeybowEvent: Equatable, Sendable {
 ///
 /// Events arrive on `events`; commands go out through `send(_:)`. Everything is
 /// serialised on a private queue, so it is safe to call from anywhere.
+///
+/// `events` is an `AsyncStream`, which has **one** consumer: two `for await`
+/// loops over it compete and each sees only some of the events. When something
+/// else needs the same news, republish it (see `SelectionDriver`).
 public final class KeybowConnection: @unchecked Sendable {
     public struct Timings: Sendable {
         /// How often to look for the device while disconnected, and to ping while connected.

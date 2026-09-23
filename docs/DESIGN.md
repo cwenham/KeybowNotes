@@ -83,8 +83,11 @@ the next row.
   are valid; unused positions stay dark.
 - **Branches may end early.** A node with an action instead of children fires as
   soon as it is selected, so a branch can be two or three levels deep.
-- **Cancel:** long-press (≥ 1s) any key to clear the whole selection. There is no
-  spare key for this — all 16 belong to the tree.
+- **Cancel:** long-press (≥ 1.5s by default) any key to clear the whole
+  selection. There is no spare key for this — all 16 belong to the tree. A due
+  action wins over the long press, so holding the final key runs it rather than
+  cancelling it; cancelling within the commit window is done by pressing another
+  key.
 - **Commit delay:** after the final press the overlay shows the action for ~1
   second before running it; any key press in that window cancels. Guards against
   a mis-press creating unwanted content. Configurable, including off.

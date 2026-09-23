@@ -18,6 +18,12 @@ usage: keybow <command>
                      <spec> is 1-16 rrggbb values, separated by spaces or commas;
                      the last one fills the remaining keys
   demo               light each key in turn, top-left to bottom-right
+  tree [config]      load a config file and print the tree it describes
+  run [config]       drive the Keybow from a config: lights, selection, and the
+                     action each completed path would run (nothing is executed yet)
+
+The config defaults to ~/Library/Application Support/KeybowNotes/config.json,
+falling back to ./config.example.json.
 """
 
 func fail(_ message: String) -> Never {
@@ -72,6 +78,61 @@ func withConnection(seconds: TimeInterval, _ body: @escaping (KeybowConnection) 
     }
     // Ctrl-C ends the run; the timer above handles the bounded commands.
     dispatchMain()
+}
+
+func configURL(_ arguments: [String]) -> URL {
+    if let given = arguments.first {
+        return URL(fileURLWithPath: (given as NSString).expandingTildeInPath)
+    }
+    let installed = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Application Support/KeybowNotes/config.json")
+    if FileManager.default.fileExists(atPath: installed.path) { return installed }
+    return URL(fileURLWithPath: "config.example.json")
+}
+
+func loadConfig(_ arguments: [String]) -> (KeybowConfig, URL) {
+    let url = configURL(arguments)
+    do {
+        return (try KeybowConfig.load(from: url), url)
+    } catch let error as ConfigError {
+        fail("config error in \(url.lastPathComponent): \(error.description)")
+    } catch {
+        fail("config error: \(error)")
+    }
+}
+
+func printTree(_ nodes: [TreeNode?], indent: String = "") {
+    for (column, node) in nodes.enumerated() {
+        guard let node else { continue }
+        let marker = node.isLeaf ? "\u{25CF}" : "\u{25B8}"
+        let detail = node.action.map { " -> \($0.type)" } ?? ""
+        print("\(indent)\(marker) key \(column): \(node.label)\(detail)")
+        if !node.isLeaf { printTree(node.children, indent: indent + "    ") }
+    }
+}
+
+func describe(_ event: NavigatorEvent) -> String {
+    switch event {
+    case .selectionChanged(let selection):
+        guard let selection else { return "selection cleared" }
+        return "selected: \(selection.pathDescription)"
+    case .invalidPress(let key):
+        return "ignored key \(key) (not an option here)"
+    case .pending(let selection):
+        return "about to run \(selection.action?.type ?? "?") for \(selection.pathDescription) — press any key to cancel"
+    case .fire(let selection):
+        var line = "FIRE \(selection.action?.type ?? "?") for \(selection.pathDescription)"
+        if !selection.params.isEmpty {
+            let params = selection.params.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+            line += "\n     params: \(params.joined(separator: ", "))"
+        }
+        for (key, value) in (selection.action?.fields ?? [:]).sorted(by: { $0.key < $1.key }) {
+            line += "\n     \(key): \(value.stringValue ?? "\(value)")"
+        }
+        return line
+    case .cleared(let reason):
+        return "cleared (\(reason.rawValue))"
+    }
 }
 
 func describe(_ message: DeviceMessage) -> String {
@@ -136,9 +197,33 @@ case "demo":
         }
     }
 
+case "tree":
+    let (config, url) = loadConfig(Array(arguments.dropFirst()))
+    print("\(url.path)  (version \(config.version), commit delay \(config.commitDelay)s)")
+    printTree(config.tree)
+
+case "run":
+    let (config, url) = loadConfig(Array(arguments.dropFirst()))
+    print("config: \(url.path)")
+    printTree(config.tree)
+    print("---")
+    let connection = KeybowConnection()
+    let driver = SelectionDriver(config: config, connection: connection)
+    Task {
+        for await event in driver.connectionEvents {
+            if case .connected(let path) = event { print("connected: \(path)") }
+            if case .disconnected(let reason) = event { print("disconnected: \(reason)") }
+        }
+    }
+    Task {
+        for await event in driver.events { print(describe(event)) }
+    }
+    driver.start()
+    dispatchMain()
+
 default:
     fail(usage)
 }
 
-// `ports` is the only command that does not block.
-if command == "ports" { exit(0) }
+// These commands do not block.
+if command == "ports" || command == "tree" { exit(0) }

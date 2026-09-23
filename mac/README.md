@@ -17,6 +17,10 @@ swift test
 | `USBSerialPorts.swift` | Finds the Keybow's serial ports through the IO registry, by USB vendor/product ID |
 | `SerialPort.swift` | A raw port held open, plus line assembly |
 | `KeybowConnection.swift` | Connect, heartbeat, reconnect; an `AsyncStream` of events |
+| `Config.swift` | JSON config into a validated tree, with errors that name the offending node |
+| `Navigator.swift` | The selection state machine; time is injected, so it tests without waiting |
+| `Lighting.swift` | Selection state into 16 key colours |
+| `SelectionDriver.swift` | Joins device to navigator: keys in, lights out, events published |
 
 Two details that are easy to get wrong, both learned the hard way:
 
@@ -53,5 +57,16 @@ Working against the hardware: discovery, connect, `HELLO`, `PING`/`PONG`,
 worked again with no intervention. Overlapping presses interleave correctly
 (`DOWN 4, DOWN 0, UP 4, UP 0`), so chords and press-and-hold are both workable.
 
-Not built yet: everything above the transport — config loading, the tree, the
-overlay, the actions.
+**Config and tree navigation verified on hardware**: four-level walks, branches
+that end early, switching mid-path, invalid presses ignored with a red flash,
+parameter inheritance, and the commit window with its cancel.
+
+Not built yet: the overlay, and the actions themselves — `run` prints what it
+would do and executes nothing.
+
+### A trap worth remembering
+
+`AsyncStream` has a **single** consumer. Two `for await` loops over the same
+stream compete, and each sees only some events — which silently ate key presses
+until `SelectionDriver` became the sole consumer and republished what others
+need.

@@ -1,0 +1,146 @@
+{
+  "version": 1,
+
+  "defaults": {
+    "colour": "202020",
+    "commitDelayMs": 1000,
+    "idleTimeoutMs": 10000,
+    "longPressCancelMs": 1000,
+    "notes": { "account": "iCloud", "folder": "Notes" }
+  },
+
+  "tree": [
+    {
+      "label": "Work",
+      "colour": "0060ff",
+      "params": { "area": "work" },
+      "children": [
+        {
+          "label": "Meeting",
+          "colour": "00a0ff",
+          "params": { "kind": "meeting" },
+          "children": [
+            {
+              "label": "1:1",
+              "children": [
+                {
+                  "label": "New note",
+                  "action": {
+                    "type": "notes.create",
+                    "folder": "Work",
+                    "title": "1:1 — {{date:d MMM yyyy}}",
+                    "template": "templates/one-to-one.md"
+                  }
+                },
+                {
+                  "label": "Add to weekly log",
+                  "action": {
+                    "type": "notes.append",
+                    "find": { "byName": "1:1 log — week {{isoWeek}}" },
+                    "createIfMissing": true,
+                    "template": "templates/one-to-one-entry.md",
+                    "guards": { "maxBodyBytes": 262144, "refuseInlineImages": true }
+                  }
+                }
+              ]
+            },
+            {
+              "label": "Standup",
+              "action": {
+                "type": "notes.create",
+                "folder": "Work",
+                "title": "Standup — {{date:yyyy-MM-dd}}",
+                "template": "templates/standup.md"
+              }
+            },
+            {
+              "label": "Schedule",
+              "action": {
+                "type": "calendar.createEvent",
+                "calendarId": "REPLACE-WITH-CALENDAR-ID",
+                "title": "{{level2}} — {{level3}}",
+                "start": "tomorrow 10:00",
+                "duration": "+30m"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Task",
+          "colour": "ffa000",
+          "children": [
+            {
+              "label": "Today",
+              "action": {
+                "type": "reminders.create",
+                "list": "Work",
+                "title": "{{clipboard|New task}}",
+                "due": "today 17:00"
+              }
+            },
+            {
+              "label": "This week",
+              "action": {
+                "type": "reminders.create",
+                "list": "Work",
+                "title": "{{clipboard|New task}}",
+                "due": "next friday 12:00"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Idea",
+          "colour": "b060ff",
+          "action": {
+            "type": "notes.create",
+            "folder": "Work",
+            "title": "Idea — {{datetime}}",
+            "template": "templates/idea.md"
+          }
+        }
+      ]
+    },
+
+    {
+      "label": "Home",
+      "colour": "00c060",
+      "params": { "area": "home" },
+      "children": [
+        {
+          "label": "Shopping",
+          "action": {
+            "type": "reminders.create",
+            "list": "Shopping",
+            "title": "{{clipboard|Shopping}}"
+          }
+        },
+        {
+          "label": "Message",
+          "children": [
+            {
+              "label": "Running late",
+              "action": {
+                "type": "messages.compose",
+                "handle": "+15551234567",
+                "body": "Running late — see you about {{time}}."
+              }
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "label": "Journal",
+      "colour": "ff5050",
+      "key": 3,
+      "action": {
+        "type": "notes.append",
+        "find": { "byName": "Journal — {{date:MMMM yyyy}}" },
+        "createIfMissing": true,
+        "template": "templates/journal-entry.md"
+      }
+    }
+  ]
+}

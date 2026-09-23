@@ -16,13 +16,33 @@ on run argv
 		if mode is "read" then
 			return body of theNote
 		else if mode is "info" then
-			return "id: " & (id of theNote) & linefeed & ¬
-				"folder: " & (name of container of theNote) & linefeed & ¬
-				"attachments: " & (count of attachments of theNote) & linefeed & ¬
-				"modified: " & ((modification date of theNote) as text)
+			-- Fetch each value into a local variable first. Compound expressions like
+			-- "name of container of theNote" are sent to Notes to evaluate, and it
+			-- returns something that won't coerce to text (error -1700).
+			set noteID to id of theNote
+			set modDate to modification date of theNote
+			set noteTextValue to plaintext of theNote
+
+			set folderName to "(unavailable)"
+			try
+				set theFolder to container of theNote
+				set folderName to name of theFolder
+			end try
+			set attachmentCount to "(unavailable)"
+			try
+				set theAttachments to attachments of theNote
+				set attachmentCount to (count theAttachments) as text
+			end try
+
+			return "id: " & noteID & linefeed & ¬
+				"folder: " & folderName & linefeed & ¬
+				"attachments: " & attachmentCount & linefeed & ¬
+				"characters: " & ((count characters of noteTextValue) as text) & linefeed & ¬
+				"modified: " & (modDate as text)
 		else if mode is "append" then
 			set stamp to (current date) as text
-			set body of theNote to (body of theNote) & "<div><b>Appended by KeybowNotes spike</b> at " & stamp & "</div>"
+			set currentBody to body of theNote
+			set body of theNote to currentBody & "<div><b>Appended by KeybowNotes spike</b> at " & stamp & "</div>"
 			show theNote
 			activate
 			return "appended"

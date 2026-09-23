@@ -47,8 +47,10 @@ immediately, or just jump to the day? How long did it take? Delete the event aft
 
 ## Results
 
-| # | Question | Result | Notes |
-|---|----------|--------|-------|
-| 1 | Which URL form (if any) pre-fills an editable message? | | |
-| 2 | Does append preserve checklist / table / image / formatting? | | |
-| 3 | Does create + show give a usable "edit it now" experience? | | |
+See [FINDINGS.md](FINDINGS.md) for detail.
+
+| # | Question | Result |
+|---|----------|--------|
+| 1 | Which URL form (if any) pre-fills an editable message? | not yet run |
+| 2 | Does append preserve checklist / table / image / formatting? | partly — table kept, checklist flattened to bullets, inline photo becomes an attachment, heading downgraded. Accepted with limitations. |
+| 3 | Does create + show give a usable "edit it now" experience? | not yet run |

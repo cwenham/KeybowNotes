@@ -33,7 +33,7 @@ public struct SelectionSnapshot: Equatable, Sendable {
 public final class SelectionDriver: @unchecked Sendable {
     private let queue = DispatchQueue(label: "SelectionDriver")
     private let connection: KeybowConnection
-    public let config: KeybowConfig
+    private var config: KeybowConfig
     private let lighting: Lighting
     private let flashDuration: TimeInterval = 0.2
 
@@ -121,6 +121,17 @@ public final class SelectionDriver: @unchecked Sendable {
             snapshotContinuation = nil
         }
         connection.stop()
+    }
+
+    /// Swaps in a new config — after the file was edited, say. Any selection in
+    /// progress is dropped, since its path may not exist any more.
+    public func replaceConfig(_ newConfig: KeybowConfig) {
+        queue.async { [self] in
+            config = newConfig
+            navigator = Navigator(config: newConfig)
+            flash = nil
+            refresh()
+        }
     }
 
     /// Feeds a key event in as though it came from the device. The device's own

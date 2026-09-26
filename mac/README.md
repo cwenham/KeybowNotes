@@ -31,6 +31,39 @@ swift test
 
 ## The app
 
+### Building and installing KeybowNotes.app
+
+```bash
+scripts/build-app.sh             # → build/KeybowNotes.app
+scripts/build-app.sh --install   # and copy it to /Applications, quitting a running copy
+```
+
+A universal (Intel and Apple Silicon) release build, with its Info.plist, icon,
+example config and templates, signed with the first "Apple Development"
+identity in your keychain. macOS remembers permissions by signature, and a real
+identity keeps them across rebuilds; an ad-hoc signature would be asked about
+again after every build. The first signing asks whether `codesign` may use your
+key — that dialog can open behind other windows and isn't in Exposé or the Dock.
+
+Once installed it runs like any menu-bar app:
+
+- **Config** is `~/Library/Application Support/KeybowNotes/config.json`, with
+  templates in `templates/` beside it. On first run with no config, the example
+  is installed there. Edits are picked up within a couple of seconds; a config
+  with a mistake is reported in the menu and the previous one stays in use.
+- **One copy only** — two would compete for the Keybow, so a second refuses to start.
+- **Open at Login** is in the menu.
+- **Logs** go to the unified log. From a terminal (zsh has its own `log`, hence the path):
+
+  ```bash
+  /usr/bin/log stream --predicate 'subsystem == "io.github.cwenham.keybownotes"'
+  ```
+
+- **Permissions**: each app it drives — Notes, Calendar, Reminders, Mail — asks
+  once, as "KeybowNotes".
+
+### Running from the package, for development
+
 ```bash
 swift run keybownotes --config config.demo.json
 ```
@@ -110,8 +143,10 @@ tried on the hardware.
 **All eight actions verified against the real apps** — see
 [docs/DESIGN.md](../docs/DESIGN.md#what-the-first-live-runs-showed-2026-09-26).
 
-Not built yet: a proper app bundle (for its own permissions, EventKit and
-launch at login), and a settings window.
+**Packaged as KeybowNotes.app** (see above): signed, universal, installed in
+/Applications, with config reloading, a single-instance lock and Open at Login.
+
+Not built yet: EventKit for Calendar and Reminders, and a settings window.
 
 ### A trap worth remembering
 

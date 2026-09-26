@@ -4,6 +4,9 @@ import KeybowKit
 // KeybowNotes: the Keybow drives the trees, a HUD overlay shows where you are,
 // and completing a path runs its action.
 //
+// Normally launched as KeybowNotes.app (see mac/scripts/build-app.sh). From a
+// terminal, for development:
+//
 //   swift run keybownotes [--config file.json] [--screen cursor|main] [--dry-run]
 //                         [--simulate "4 8 12"] [--pace 1.2] [--debug-snapshots dir]
 //
@@ -29,7 +32,8 @@ func fail(_ message: String) -> Never {
 
 func parseOptions() -> Options {
     var options = Options()
-    var arguments = Array(CommandLine.arguments.dropFirst()).makeIterator()
+    // Finder passes -psn_… on some systems; ignore anything that isn't ours.
+    var arguments = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("-psn_") }.makeIterator()
     while let argument = arguments.next() {
         switch argument {
         case "--config":
@@ -60,238 +64,32 @@ func parseOptions() -> Options {
     return options
 }
 
-func loadConfig(_ path: String?) -> (KeybowConfig, URL) {
-    let url: URL
-    if let path {
-        url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
-    } else {
-        let installed = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/KeybowNotes/config.json")
-        url = FileManager.default.fileExists(atPath: installed.path)
-            ? installed : URL(fileURLWithPath: "config.demo.json")
-    }
-    do {
-        return (try KeybowConfig.load(from: url), url)
-    } catch {
-        fail("config error in \(url.path): \(error)")
-    }
-}
-
-@MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let options: Options
-    private let config: KeybowConfig
-    private let configURL: URL
-    private var driver: SelectionDriver?
-    private var overlay: OverlayController?
-    private var statusItem: NSStatusItem?
-    private let connectionItem = NSMenuItem(title: "Keybow: looking…", action: nil, keyEquivalent: "")
-    private var dryRun: Bool
-
-    init(options: Options, config: KeybowConfig, configURL: URL) {
-        self.options = options
-        self.config = config
-        self.configURL = configURL
-        self.dryRun = options.dryRun
-    }
-
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        let overlay = OverlayController(config: config, placement: options.placement)
-        overlay.debugDirectory = options.debugDirectory
-        let driver = SelectionDriver(config: config, connection: KeybowConnection())
-        self.overlay = overlay
-        self.driver = driver
-        setUpMenu()
-
-        Task { @MainActor in
-            for await snapshot in driver.snapshots { overlay.handle(snapshot) }
-        }
-        Task { @MainActor in
-            for await event in driver.events {
-                overlay.handle(event)
-                log(event)
-                if case .fire(let selection) = event { self.fire(selection) }
-            }
-        }
-        Task { @MainActor [weak self] in
-            for await event in driver.connectionEvents {
-                overlay.handle(event)
-                self?.updateConnection(event)
-            }
-        }
-        driver.start()
-        print("KeybowNotes running with \(configURL.lastPathComponent)\(dryRun ? " (dry run)" : ""). Quit from the menu bar or with Ctrl-C.")
-
-        if !options.simulated.isEmpty { simulate(options.simulated, pace: options.pace) }
-    }
-
-    func applicationWillTerminate(_ notification: Notification) {
-        driver?.stop()
-        // Give the lights-off command a moment to reach the device.
-        Thread.sleep(forTimeInterval: 0.2)
-    }
-
-    // MARK: - Running actions
-
-    private func fire(_ selection: ResolvedSelection) {
-        guard let overlay else { return }
-        let summary = ActionSummary(selection: selection, config: config)
-        let path = selection.pathDescription
-
-        if dryRun {
-            overlay.showPreview(summary, path: path)
-            return
-        }
-
-        let planned: PlannedAction
-        do {
-            planned = try ActionPlanner.plan(selection, config: config, context: ActionContext(
-                templatesDirectory: configURL.deletingLastPathComponent().appendingPathComponent("templates"),
-                environment: environment()))
-        } catch {
-            print("  can't run: \(error)")
-            overlay.showRefused("\(error)", summary: summary)
-            return
-        }
-
-        overlay.showRunning(summary, path: path)
-        Task { @MainActor in
-            let started = Date()
-            let outcome = await ActionRunner.run(planned.plan)
-            let seconds = String(format: "%.1fs", Date().timeIntervalSince(started))
-            print("  \(outcome.succeeded ? "done" : "FAILED") in \(seconds): \(outcome.message)"
-                  + (outcome.detail.map { " — \($0)" } ?? ""))
-            for warning in planned.warnings { print("  warning: \(warning)") }
-            overlay.showFinished(outcome, summary: summary, warnings: planned.warnings)
-        }
-    }
-
-    /// {{clipboard}} and {{frontApp}}. This app never takes focus, so the
-    /// frontmost app is whatever you were using when you pressed the key.
-    private func environment() -> [String: String] {
-        var values: [String: String] = [:]
-        if let text = NSPasteboard.general.string(forType: .string) {
-            values["clipboard"] = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if let app = NSWorkspace.shared.frontmostApplication?.localizedName {
-            values["frontApp"] = app
-        }
-        return values
-    }
-
-    private func simulate(_ keys: [Int], pace: TimeInterval) {
-        guard let driver else { return }
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1))
-            for key in keys {
-                print("simulated press: key \(key)")
-                driver.inject(.down(key: key))
-                try? await Task.sleep(for: .milliseconds(120))
-                driver.inject(.up(key: key))
-                try? await Task.sleep(for: .seconds(pace))
-            }
-        }
-    }
-
-    // MARK: - Menu bar
-
-    private func setUpMenu() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "keyboard", accessibilityDescription: "KeybowNotes")
-
-        let menu = NSMenu()
-        menu.addItem(withTitle: "KeybowNotes", action: nil, keyEquivalent: "").isEnabled = false
-        connectionItem.isEnabled = false
-        menu.addItem(connectionItem)
-        let configItem = menu.addItem(withTitle: "Config: \(configURL.lastPathComponent)", action: nil, keyEquivalent: "")
-        configItem.isEnabled = false
-        menu.addItem(.separator())
-
-        let placementItem = NSMenuItem(title: "Show on the main screen", action: #selector(togglePlacement(_:)), keyEquivalent: "")
-        placementItem.target = self
-        placementItem.state = options.placement == .mainScreen ? .on : .off
-        menu.addItem(placementItem)
-        let dryRunItem = NSMenuItem(title: "Dry run (show, don't do)", action: #selector(toggleDryRun(_:)), keyEquivalent: "")
-        dryRunItem.target = self
-        dryRunItem.state = dryRun ? .on : .off
-        menu.addItem(dryRunItem)
-        let testItem = NSMenuItem(title: "Test the overlay", action: #selector(testOverlay), keyEquivalent: "")
-        testItem.target = self
-        menu.addItem(testItem)
-
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        item.menu = menu
-        statusItem = item
-    }
-
-    @objc private func togglePlacement(_ sender: NSMenuItem) {
-        guard let overlay else { return }
-        overlay.placement = overlay.placement == .mainScreen ? .screenWithCursor : .mainScreen
-        sender.state = overlay.placement == .mainScreen ? .on : .off
-    }
-
-    @objc private func toggleDryRun(_ sender: NSMenuItem) {
-        dryRun.toggle()
-        sender.state = dryRun ? .on : .off
-        print(dryRun ? "dry run: on" : "dry run: off — actions will run")
-    }
-
-    @objc private func testOverlay() {
-        overlay?.flashNotice("The overlay appears here", symbol: "rectangle.inset.filled.and.person.filled")
-    }
-
-    private func updateConnection(_ event: KeybowEvent) {
-        switch event {
-        case .connected(let path):
-            connectionItem.title = "Keybow: port open, waiting for a reply (\((path as NSString).lastPathComponent))"
-        case .disconnected(let reason):
-            connectionItem.title = "Keybow: not connected"
-            print("disconnected: \(reason)")
-        case .message(.hello(let version)):
-            connectionItem.title = "Keybow: connected (protocol \(version))"
-            print("device: HELLO, protocol \(version)")
-        case .message(.pong):
-            connectionItem.title = connectionItem.title.hasPrefix("Keybow: connected")
-                ? connectionItem.title : "Keybow: connected"
-        case .message(.deviceError(let text)):
-            // Usually something else writing to the port.
-            print("device: ERR \(text)")
-        case .message(.unrecognised(let text)):
-            print("device said something unexpected: \(text)")
-        case .message:
-            break
-        }
-    }
-
-    private func log(_ event: NavigatorEvent) {
-        switch event {
-        case .selectionChanged(let selection):
-            if let selection { print("selected: \(selection.pathDescription)  [\(selection.tree.rawValue)]") }
-        case .invalidPress(let key):
-            print("ignored key \(key)")
-        case .pending(let selection):
-            print("pending: \(selection.pathDescription)")
-        case .fire(let selection):
-            let summary = ActionSummary(selection: selection, config: config)
-            var line = "FIRE: \(summary.verb) · \(summary.subject)"
-            if !summary.details.isEmpty { line += " · " + summary.details.joined(separator: " · ") }
-            if !summary.missing.isEmpty { line += "  [missing: \(summary.missing.joined(separator: ", "))]" }
-            print(line)
-        case .cleared(let reason):
-            print("cleared (\(reason.rawValue))")
-        }
-    }
-}
-
 let options = parseOptions()
-let (config, configURL) = loadConfig(options.configPath)
 
 // Top-level code runs on the main thread; tell the compiler so.
 MainActor.assumeIsolated {
     let app = NSApplication.shared
     app.setActivationPolicy(.accessory)
-    let delegate = AppDelegate(options: options, config: config, configURL: configURL)
+
+    guard SingleInstance.acquire() else {
+        Log.error("KeybowNotes is already running; only one copy can use the Keybow.")
+        if Bundle.main.bundleIdentifier != nil {
+            let alert = NSAlert()
+            alert.messageText = "KeybowNotes is already running"
+            alert.informativeText = "Only one copy can use the Keybow at a time. Look for the keyboard icon in the menu bar."
+            alert.runModal()
+        }
+        exit(1)
+    }
+
+    if options.configPath == nil, let installed = ConfigStore.installDefaultsIfNeeded() {
+        Log.info(installed)
+    }
+    let url = options.configPath.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
+        ?? ConfigStore.defaultURL
+    let store = ConfigStore(url: url)
+
+    let delegate = AppDelegate(options: options, store: store)
     app.delegate = delegate
     app.run()
 }

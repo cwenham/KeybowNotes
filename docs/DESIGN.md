@@ -1,6 +1,6 @@
 # KeybowNotes — design
 
-**Status:** the device layer, config, overlay and actions work; packaging and settings are next. Written after the spikes in
+**Status:** working end to end, and packaged as KeybowNotes.app; EventKit and settings are next. Written after the spikes in
 [../spikes/FINDINGS.md](../spikes/FINDINGS.md), which settled the Notes, Calendar
 and Messages questions.
 
@@ -417,4 +417,6 @@ from template values.
 5. ✅ Actions: all eight types, run against the real apps.
 6. ✅ Template engine and parameters, including `{{clipboard}}` and `{{frontApp}}`.
 7. Spikes for the unknowns above: channels in Discord and Meshtastic, Claude projects.
-8. Settings window: overlay screen, timeouts, config file location.
+8. ✅ Packaging: signed universal KeybowNotes.app, config reloading, Open at Login.
+9. EventKit for Calendar and Reminders, now the app has a bundle to hold the permissions.
+10. Settings window: overlay screen, timeouts, config file location, default calendar.

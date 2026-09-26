@@ -69,7 +69,8 @@ final class OverlayController {
     /// with the window's frame logged — a check that needs no screen recording.
     var debugDirectory: URL?
 
-    private let config: KeybowConfig
+    /// Used to describe actions; replaced when the config file changes.
+    var config: KeybowConfig
     private let panel = OverlayPanel()
     private let hosting: NSHostingView<OverlayView>
     private var hideTask: Task<Void, Never>?

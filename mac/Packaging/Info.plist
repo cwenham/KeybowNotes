@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template: build-app.sh fills in __BUNDLE_ID__, __VERSION__ and __BUILD__. -->
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>KeybowNotes</string>
+	<key>CFBundleDisplayName</key>
+	<string>KeybowNotes</string>
+	<key>CFBundleIdentifier</key>
+	<string>__BUNDLE_ID__</string>
+	<key>CFBundleExecutable</key>
+	<string>KeybowNotes</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>__VERSION__</string>
+	<key>CFBundleVersion</key>
+	<string>__BUILD__</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>15.0</string>
+	<!-- A menu-bar app: no Dock icon, never takes focus from what you're doing. -->
+	<key>LSUIElement</key>
+	<true/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Christopher Wenham</string>
+
+	<!-- Shown in the macOS permission prompts. -->
+	<key>NSAppleEventsUsageDescription</key>
+	<string>KeybowNotes creates notes, reminders, events and email drafts when you choose them on the Keybow.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>KeybowNotes adds the events you choose on the Keybow, and opens them for editing.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>KeybowNotes adds the events you choose on the Keybow.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>KeybowNotes adds the reminders and timers you choose on the Keybow.</string>
+</dict>
+</plist>

@@ -330,7 +330,10 @@ the process — so it keeps using AppleScript.
   Settings while the app runs is picked up by recreating the store.
 - **Opening the new event** uses the link Calendar builds for itself,
   `ical://ekevent/<eventIdentifier>?method=show&options=more` — found in
-  Calendar's binary, so undocumented and could change.
+  Calendar's binary, so undocumented and could change. **Verified:** Calendar
+  comes forward on the event's day with its details open, and an edit made
+  there (renaming it) stuck. Better than the AppleScript `show`, which only
+  selected the event.
 - **Prompts come forward.** The app never takes focus, so a permission prompt
   could open unseen behind other windows; it activates itself just before
   asking. The menu's *Allow Calendar and Reminders Access…* asks up front.

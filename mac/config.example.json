@@ -1,146 +1,104 @@
 {
-  "version": 1,
+  "version": 2,
 
   "defaults": {
     "colour": "202020",
     "commitDelayMs": 1000,
     "idleTimeoutMs": 10000,
-    "longPressCancelMs": 1000,
-    "notes": { "account": "iCloud", "folder": "Notes" }
+    "longPressCancelMs": 1500,
+    "dates": { "todayOffsetMinutes": 30, "defaultTime": "09:00" }
   },
 
-  "tree": [
-    {
-      "label": "Work",
-      "colour": "0060ff",
-      "params": { "area": "work" },
-      "children": [
-        {
-          "label": "Meeting",
-          "colour": "00a0ff",
-          "params": { "kind": "meeting" },
-          "children": [
-            {
-              "label": "1:1",
-              "children": [
-                {
-                  "label": "New note",
-                  "action": {
-                    "type": "notes.create",
-                    "folder": "Work",
-                    "title": "1:1 — {{date:d MMM yyyy}}",
-                    "template": "templates/one-to-one.md"
-                  }
-                },
-                {
-                  "label": "Add to weekly log",
-                  "action": {
-                    "type": "notes.append",
-                    "find": { "byName": "1:1 log — week {{isoWeek}}" },
-                    "createIfMissing": true,
-                    "template": "templates/one-to-one-entry.md",
-                    "guards": { "maxBodyBytes": 262144, "refuseInlineImages": true }
-                  }
-                }
-              ]
-            },
-            {
-              "label": "Standup",
-              "action": {
-                "type": "notes.create",
-                "folder": "Work",
-                "title": "Standup — {{date:yyyy-MM-dd}}",
-                "template": "templates/standup.md"
-              }
-            },
-            {
-              "label": "Schedule",
-              "action": {
-                "type": "calendar.createEvent",
-                "calendarId": "REPLACE-WITH-CALENDAR-ID",
-                "title": "{{level2}} — {{level3}}",
-                "start": "tomorrow 10:00",
-                "duration": "+30m"
-              }
-            }
-          ]
-        },
-        {
-          "label": "Task",
-          "colour": "ffa000",
-          "children": [
-            {
-              "label": "Today",
-              "action": {
-                "type": "reminders.create",
-                "list": "Work",
-                "title": "{{clipboard|New task}}",
-                "due": "today 17:00"
-              }
-            },
-            {
-              "label": "This week",
-              "action": {
-                "type": "reminders.create",
-                "list": "Work",
-                "title": "{{clipboard|New task}}",
-                "due": "next friday 12:00"
-              }
-            }
-          ]
-        },
-        {
-          "label": "Idea",
-          "colour": "b060ff",
-          "action": {
-            "type": "notes.create",
-            "folder": "Work",
-            "title": "Idea — {{datetime}}",
-            "template": "templates/idea.md"
-          }
-        }
-      ]
-    },
+  "contacts": {
+    "Alex Example": { "phone": "+15550100", "email": "alex@example.com" }
+  },
 
-    {
-      "label": "Home",
-      "colour": "00c060",
-      "params": { "area": "home" },
-      "children": [
-        {
-          "label": "Shopping",
-          "action": {
-            "type": "reminders.create",
-            "list": "Shopping",
-            "title": "{{clipboard|Shopping}}"
-          }
-        },
-        {
-          "label": "Message",
-          "children": [
-            {
-              "label": "Running late",
-              "action": {
-                "type": "messages.compose",
-                "handle": "+15551234567",
-                "body": "Running late — see you about {{time}}."
-              }
-            }
-          ]
-        }
-      ]
-    },
+  "projects": {
+    "Website": { "path": "~/Code/website" },
+    "Firmware": { "path": "~/Code/firmware" }
+  },
 
-    {
-      "label": "Journal",
-      "colour": "ff5050",
-      "key": 3,
-      "action": {
-        "type": "notes.append",
-        "find": { "byName": "Journal — {{date:MMMM yyyy}}" },
-        "createIfMissing": true,
-        "template": "templates/journal-entry.md"
+  "lists": {
+    "when": [
+      { "label": "Today", "params": { "when": "today" } },
+      { "label": "Tomorrow", "params": { "when": "tomorrow" } },
+      { "label": "Next week", "params": { "when": "next week" } },
+      { "label": "Next month", "params": { "when": "next month" } }
+    ]
+  },
+
+  "trees": {
+    "main": [
+      {
+        "label": "Work",
+        "colour": "0060ff",
+        "children": [
+          {
+            "label": "Code",
+            "children": [
+              { "label": "Website", "action": { "type": "app.open", "app": "Visual Studio Code", "bundleId": "com.microsoft.VSCode" } },
+              { "label": "Firmware", "action": { "type": "app.open", "app": "Thonny" } }
+            ]
+          },
+          {
+            "label": "Schedule",
+            "action": { "type": "calendar.createEvent" },
+            "children": [
+              { "label": "Meeting", "action": { "alertMinutes": 5 }, "children": "@when" },
+              { "label": "Deployment", "action": { "alertMinutes": 20 }, "children": "@when" }
+            ]
+          },
+          {
+            "label": "Contact",
+            "children": [
+              { "label": "Message", "action": { "type": "messages.compose" }, "children": [ { "label": "Alex Example" } ] },
+              { "label": "Mail", "action": { "type": "mail.compose" }, "children": [ { "label": "Alex Example" } ] }
+            ]
+          },
+          {
+            "label": "Docs",
+            "action": { "type": "notes.append", "template": "templates/project-entry.md" },
+            "children": [
+              { "label": "New project", "action": { "type": "notes.create", "template": "templates/new-project.md" } },
+              { "label": "Website" },
+              { "label": "Firmware" }
+            ]
+          }
+        ]
+      },
+      {
+        "label": "Home",
+        "colour": "00c060",
+        "children": [
+          {
+            "label": "Groceries",
+            "action": { "type": "reminders.create", "list": "Shopping" },
+            "children": [ { "label": "Milk" }, { "label": "Bread" }, { "label": "Eggs" }, { "label": "Coffee" } ]
+          },
+          { "label": "Appointment", "action": { "type": "calendar.createEvent" }, "children": "@when" }
+        ]
+      },
+      {
+        "label": "Writing",
+        "colour": "ff8c00",
+        "children": [
+          { "label": "Characters", "children": [ { "label": "The Detective" }, { "label": "The Witness" } ] },
+          { "label": "Scenes" }
+        ]
+      },
+      {
+        "label": "Ideas",
+        "colour": "b060ff",
+        "children": [ { "label": "Inventions" }, { "label": "Stories" }, { "label": "Wild speculation" } ]
       }
-    }
-  ]
+    ],
+
+    "bottom": [
+      {
+        "label": "Journal",
+        "colour": "ff5050",
+        "action": { "type": "notes.append", "find": { "byName": "Journal — {{date:MMMM yyyy}}" }, "folder": "Journal" }
+      }
+    ]
+  }
 }

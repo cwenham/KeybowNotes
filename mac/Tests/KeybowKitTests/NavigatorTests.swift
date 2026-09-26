@@ -155,7 +155,10 @@ final class NavigatorTests: XCTestCase {
     func testCurrentOptionsFollowTheSelection() throws {
         let config = try makeConfig()
         var navigator = Navigator(config: config, now: start)
-        XCTAssertEqual(navigator.currentOptions.compactMap { $0?.label }, ["Work", "Home", "Journal"])
+        // Idle, every tree's first row is on offer at once, so there is no
+        // single "current" row until the first press picks a tree.
+        XCTAssertEqual(navigator.currentOptions.compactMap { $0?.label }, [])
+        XCTAssertNil(navigator.currentRow)
         _ = navigator.keyDown(0, at: start)
         XCTAssertEqual(navigator.currentOptions.compactMap { $0?.label }, ["Meeting", "Task"])
         XCTAssertEqual(navigator.currentRow, 1)

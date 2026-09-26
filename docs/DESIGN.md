@@ -1,6 +1,6 @@
 # KeybowNotes — design
 
-**Status:** draft, pre-implementation. Written after the spikes in
+**Status:** draft; the device layer and config are built, actions are next. Written after the spikes in
 [../spikes/FINDINGS.md](../spikes/FINDINGS.md), which settled the Notes, Calendar
 and Messages questions.
 
@@ -73,24 +73,45 @@ Verified on hardware on 2026-09-23 against CircuitPython 10.3.1; see
 
 ## 3. Interaction model
 
-Row 1 (keys 0–3) picks a broad category; rows 2, 3 and 4 narrow it. The overlay
-appears on the first press and shows the path chosen so far plus the labels for
-the next row.
+The overlay appears on the first press and shows the path chosen so far plus the
+labels for the next row.
 
-- **Pressing a key on a higher row resets every row below it.** Selections can be
-  changed at any point before the action fires.
-- **Out-of-order presses are ignored**, with the key flashing red. Only lit keys
-  are valid; unused positions stay dark.
-- **Branches may end early.** A node with an action instead of children fires as
-  soon as it is selected, so a branch can be two or three levels deep.
-- **Cancel:** long-press (≥ 1.5s by default) any key to clear the whole
-  selection. There is no spare key for this — all 16 belong to the tree. A due
-  action wins over the long press, so holding the final key runs it rather than
-  cancelling it; cancelling within the commit window is done by pressing another
-  key.
+### Four trees
+
+The keypad holds up to four independent trees. **With nothing chosen, the row of
+the first press decides which tree is in play:**
+
+| First press on | Runs | Levels | Most leaves |
+|---|---|---|---|
+| Row 1 | downwards | 4 | 256 — the main tree |
+| Row 2 | downwards | 3 | 64 |
+| Row 3 | downwards | 2 | 16 |
+| Row 4 | upwards | 4 | 256 |
+
+Idle, every tree's first row is lit in its own colours, so all 16 keys may be
+entry points. Only the main tree is required; the others are optional.
+
+### Choosing
+
+- **A press on a row already passed, or on the next row, chooses at that depth
+  and drops everything beyond it.** "Nearer the tree's start" is what counts, so
+  in the upward tree a new press on row 4 starts it over.
+- **Presses further along than the next row are ignored**, with the key flashing
+  red. Only lit keys are valid; unused positions stay dark.
+- **The top row escapes to the main tree** whenever it is not a legal move in the
+  tree in play. In a side tree it glows faintly to say so. It is the only way to
+  switch trees mid-path; otherwise finish, cancel or wait. (Row 4 cannot do the
+  same in reverse, because it is the main tree's final choice.)
+- **Branches may end early.** A leaf fires as soon as it is chosen, whatever its
+  depth.
+- **Cancel:** long-press (≥ 1.5s by default) any key to clear the selection. There
+  is no spare key for this — all 16 belong to the trees. A due action wins over
+  the long press, so holding the final key runs it rather than cancelling it;
+  cancelling within the commit window is done by pressing another key.
 - **Commit delay:** after the final press the overlay shows the action for ~1
-  second before running it; any key press in that window cancels. Guards against
-  a mis-press creating unwanted content. Configurable, including off.
+  second before running it; any key press in that window cancels. This matters
+  more with side trees, where every key starts something and the row 3 tree
+  reaches an action in two presses. Configurable, including off.
 - **Idle timeout:** an incomplete selection clears itself after ~10 seconds.
 
 ### Overlay
@@ -105,74 +126,125 @@ to the cursor's screen when that display is absent.
 ## 4. Config file
 
 JSON, reloaded on change. Location: `~/Library/Application Support/KeybowNotes/config.json`.
-A commented example ships as `config.example.json`; **the real config is never
-committed**, since it holds personal categories, phone numbers and email addresses.
+[`mac/config.example.json`](../mac/config.example.json) shows every feature. **The
+real config is never committed**: it holds personal categories, names, phone
+numbers and paths, and the repository is public.
 
-### Node shape
+### Writing it as an outline
 
-Each level is an array of up to four nodes. Array position is the key position
-unless an explicit `key` (0–3) is given, which allows gaps.
+Trees are easier to sketch as a numbered outline than as JSON, so the outline is
+the intended way to write one:
+
+```
+1. Work
+   2. General Tasks
+      1. Meeting (Calendar, 5 min alert)
+         1. Today
+         2. Tomorrow
+      3.
+      4. Notes
+         1. Work log (worklog.md)
+```
+
+```bash
+keybow convert tree.md -o ~/Library/Application\ Support/KeybowNotes/config.json
+```
+
+- **Numbers are key positions**, 1-4 left to right; indentation is nesting.
+  `3.` with nothing after it leaves that key empty.
+- **Headings name side trees**: `# row 2`, `# row 3`, `# bottom`. Other headings,
+  and any line that is not a numbered item, are ignored — so a title is fine.
+- **Brackets hold annotations**, comma-separated, applying to everything beneath
+  until overridden:
+
+| Annotation | Means |
+|---|---|
+| `Notes`, `Calendar`, `Reminders`, `Messages`, `Mail` | the action type |
+| an app name — `Rider`, `VSCode`, `KiCad`… | open the leaf in that app |
+| `something.md` | a template; `Append…` / `New…` names choose append or create |
+| `append`, `new` | append to a note / create a new one |
+| `5 min alert`, `1 hour alert` | an alert before an event |
+| anything else, under an app | a channel or target inside it |
+
+The converter reports what it **guessed** (an app it substituted, append-or-create
+from a template name), what is **still to fill in** (paths, phone numbers,
+channel URLs), and **warnings** (an app not installed). Apps are recorded with
+their bundle ID, so they are found wherever they are installed. The output is
+checked by loading it before it is written.
+
+### Shape
 
 ```jsonc
 {
-  "version": 1,
+  "version": 2,
   "defaults": {
-    "notes": { "account": "iCloud", "folder": "Notes" },
     "colour": "202020",
-    "commitDelayMs": 1000
+    "commitDelayMs": 1000, "idleTimeoutMs": 10000, "longPressCancelMs": 1500,
+    "dates": { "todayOffsetMinutes": 30, "defaultTime": "09:00" },
+    "action": { "type": "notes.create", "folder": "{{folderPath}}" },  // optional
+    "types": { "calendar.createEvent": { "duration": "+1h" } }          // optional
   },
-  "tree": [
-    {
-      "label": "Work",
-      "colour": "0060ff",
-      "params": { "area": "work" },
-      "children": [
-        {
-          "label": "Meeting",
-          "colour": "00a0ff",
-          "params": { "kind": "meeting" },
-          "children": [
-            {
-              "label": "1:1",
-              "children": [
-                {
-                  "label": "New note",
-                  "action": {
-                    "type": "notes.create",
-                    "folder": "Work",
-                    "title": "1:1 — {{date:d MMM yyyy}}",
-                    "template": "templates/one-to-one.md"
-                  }
-                },
-                {
-                  "label": "Add to this week",
-                  "action": {
-                    "type": "notes.append",
-                    "find": { "byName": "1:1 log — week {{isoWeek}}" },
-                    "createIfMissing": true,
-                    "template": "templates/one-to-one-entry.md"
-                  }
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  ]
+  "contacts": { "Alex Example": { "phone": "+15550100", "email": "alex@example.com" } },
+  "projects": { "Website": { "path": "~/Code/website" } },
+  "lists":    { "when": [ { "label": "Today", "params": { "when": "today" } }, … ] },
+  "trees": {
+    "main":   [ … ],   // row 1 down
+    "row2":   [ … ],   // row 2 down
+    "row3":   [ … ],   // row 3 down
+    "bottom": [ … ]    // row 4 up
+  }
 }
 ```
 
-### Node fields
+Version 1 files, with a single `"tree"`, still load as the main tree.
+
+### Nodes
 
 | Field | Meaning |
 |---|---|
-| `label` | Shown in the overlay |
-| `colour` | `rrggbb` for this key; inherited from the parent when omitted |
-| `key` | Optional explicit position 0–3 |
-| `params` | Values for templates, inherited downwards, deeper nodes overriding |
-| `children` | Up to four child nodes |
-| `action` | A leaf's action; mutually exclusive with `children` |
+| `label` | Shown in the overlay; also a value for templates |
+| `key` | Position 0-3; otherwise the next free one |
+| `colour` | `rrggbb`, inherited from the parent when omitted |
+| `params` | Template values, inherited downwards, deeper nodes overriding |
+| `action` | Some or all of an action — inherited by every leaf beneath |
+| `children` | Up to four nodes, or `"@name"` for a list under `lists` |
+
+A node with no children is a leaf. **A leaf does not need an action of its own.**
+
+### How a leaf's action is worked out
+
+Most leaves supply a *value* — a date, a person, a grocery item — while the
+action is decided higher up. So actions are inherited, in increasing priority:
+
+1. **Per-type defaults**, built in and overridable under `defaults.types`
+2. **The default action** (`defaults.action`), only when nothing on the path names
+   a type. Built in: a new note in nested folders mirroring the path —
+   `Projects/Fiction/Characters/The Detective/` gets a new note per press.
+3. **Each node's `action` fields**, shallow to deep.
+
+A node naming a *different* type from the one it inherited starts afresh: fields
+meant for another kind of action are dropped instead of leaking in. That is how
+"Project Documentation (append)" can hold a "New Project (create)" leaf.
+
+Built-in per-type defaults:
+
+| Type | Defaults |
+|---|---|
+| `notes.create` (default action) | `folder: {{folderPath}}`, `title: {{leaf}} — {{date:d MMM yyyy}}` |
+| `notes.append` | `folder: {{parentPath}}`, find by name `{{leaf}}`, create if missing |
+| `calendar.createEvent` | `title: {{parent}}`, `start: {{when}}`, `duration: +30m`, show for editing |
+| `reminders.create` | `title: {{leaf}}` |
+| `messages.compose` | `to: {{contact.phone}}` |
+| `mail.compose` | `to: {{contact.email}}` |
+| `app.open` | `open: {{project.path\|}}` — the matching project, if any |
+
+### Contacts and projects
+
+People and projects recur across the tree — the same colleague under Messages and
+Mail, the same project under an IDE, Claude and documentation — so they are
+defined once. **Any label on the chosen path matching a name** brings that entry
+in as `{{contact.*}}` or `{{project.*}}`, the deepest match winning. A node can
+name one explicitly with a `contact` or `project` param.
 
 ---
 
@@ -182,12 +254,13 @@ Every text field in an action is expanded through the template system first.
 
 | `type` | Mechanism | Notes |
 |---|---|---|
-| `notes.create` | AppleScript | New note, then shown. Unaffected by the append problems below. |
+| `notes.create` | AppleScript | New note, then shown. Creates nested folders as needed. |
 | `notes.append` | AppleScript | See constraints. Finds by `byName`, `byId`, `selection`; `createIfMissing` supported. |
 | `reminders.create` | EventKit | Title, notes, due date, alert, priority, flag, list. |
-| `calendar.createEvent` | EventKit | Created then shown for editing. Calendar identified **by ID**, not name. |
+| `calendar.createEvent` | EventKit | Created then shown for editing. Calendar identified **by ID**, not name. `alertMinutes` for an alert. |
 | `messages.compose` | `sms:` URL | Opens a conversation with the text filled in. **Never sends.** |
 | `mail.compose` | AppleScript | Opens a real draft window, ready to edit. |
+| `app.open` | `NSWorkspace` | Opens an app (by `bundleId`, else `app` name), optionally with a file, folder or URL. |
 | `openURL` | `NSWorkspace` | For apps with URL schemes (Things, OmniFocus, Drafts, Obsidian, Bear…). |
 | `shortcut` | `shortcuts run` | Escape hatch for anything supporting Shortcuts. |
 
@@ -219,6 +292,16 @@ with the name as a display label; only writable calendars are offered.
 waits for the user. AppleScript's `send` is not used, because it transmits
 immediately with no draft.
 
+### Not yet known
+
+- **Channels inside apps** — Discord, Meshtastic. Discord has per-channel URLs,
+  which is promising; Meshtastic is unexplored. Until tested, a channel is carried
+  as `target` and the converter lists each one as needing a URL.
+- **Claude projects** — whether the desktop app can be opened on a specific one.
+- **Fusion** keeps projects in Autodesk's cloud, so there may be no local file to
+  open.
+- **Nested Notes folders** — creating them by AppleScript needs confirming.
+
 ---
 
 ## 6. Templates and parameters
@@ -233,14 +316,16 @@ Placeholders are `{{…}}`:
 |---|---|
 | `{{name}}` | A parameter or built-in |
 | `{{date:d MMM yyyy}}` | Format specifier, using Unicode date patterns |
-| `{{project\|none}}` | Fallback when missing or empty |
+| `{{project\|none}}` | Fallback when missing or empty; `{{x\|}}` falls back to nothing |
 
 ### Sources, in precedence order
 
 1. **Node params** — declared on any node, inherited downwards, deeper wins.
-2. **Path values** — `{{level1}}`…`{{level4}}` (the labels chosen) and `{{path}}`
-   (joined with " / ").
-3. **Built-ins** — `{{date}}`, `{{time}}`, `{{datetime}}`, `{{weekday}}`,
+2. **Contacts and projects** — `{{contact.phone}}`, `{{project.path}}` and so on.
+3. **Path values** — `{{leaf}}` (the label chosen last), `{{parent}}`,
+   `{{level1}}`…`{{level4}}`, `{{path}}` ("Work / Notes / Standup"),
+   `{{folderPath}}` ("Work/Notes/Standup"), `{{parentPath}}`, `{{tree}}`.
+4. **Built-ins** — `{{date}}`, `{{time}}`, `{{datetime}}`, `{{weekday}}`,
    `{{isoWeek}}`, `{{clipboard}}`, `{{frontApp}}`.
 
 `{{selection}}` (the selected text in the frontmost app) is deferred: it needs
@@ -248,9 +333,21 @@ Accessibility permission, so it would be opt-in if added.
 
 ### Date expressions
 
-Reminders and events need dates, not just formatted output. Fields such as `due`
-and `start` accept: `tomorrow 09:00`, `+1d 09:00`, `next monday 14:00`,
-`2026-10-01 09:30`, and `+90m` for durations.
+Events and reminders need dates. Agreed defaults, for leaves like Today / Tomorrow
+/ Next week / Next month:
+
+| Phrase | Means |
+|---|---|
+| `today` | 30 minutes from now, rounded up to 5 |
+| `tomorrow`, `next week`, `next month` | that day at 09:00 |
+| `friday`, `next friday` | the next Friday after today, 09:00 |
+| `+3d`, `+2w` | days or weeks ahead, 09:00 |
+| `+90m`, `+2h` | exactly that long from now |
+| `2026-10-01` | that day, 09:00 |
+
+Any day can take a time: `tomorrow 14:00`, `friday 2:30pm`, `today at 16:15`. A
+time alone means today. Offsets and the default time are set under
+`defaults.dates`. Events are created with these and **opened for editing**.
 
 ### Title
 
@@ -287,16 +384,16 @@ from template values.
    `{{?Label}}` is reserved for it. **Not in the first version.**
 2. **Multiple actions per leaf** — e.g. create a note *and* a reminder linking to
    it. Plausible later; one action per leaf for now.
-3. **Tree editor UI**, deferred until the config format has settled in use.
+3. **Tree editor UI**, deferred: the outline and its converter serve for now.
 4. **Per-node Notes account**, once more than one account is in play.
 
 ## 9. Build order
 
-1. Firmware: keys and LEDs over the data port, with the protocol above.
-2. Mac app skeleton: menu-bar agent, serial connection, reconnect handling.
+1. ✅ Firmware: keys and LEDs over the data port, with the protocol above.
+2. ✅ Serial connection and reconnect handling (`KeybowKit`).
 3. Overlay: path display, next-row options, cancel and commit behaviour.
-4. Config loading and tree navigation.
+4. ✅ Config loading, tree navigation, side trees, outline converter.
 5. Actions, starting with `notes.create`, then `notes.append`.
-6. Template engine and parameters.
-7. Remaining actions.
+6. Template engine and parameters (date expressions ✅).
+7. Remaining actions, and spikes for the unknowns above.
 8. Settings window: overlay screen, timeouts, config file location.

@@ -18,9 +18,12 @@ usage: keybow <command>
                      <spec> is 1-16 rrggbb values, separated by spaces or commas;
                      the last one fills the remaining keys
   demo               light each key in turn, top-left to bottom-right
-  tree [config]      load a config file and print the tree it describes
+  tree [config]      load a config file and print the trees it describes
   run [config]       drive the Keybow from a config: lights, selection, and the
                      action each completed path would run (nothing is executed yet)
+  convert <outline> [-o config.json]
+                     turn a numbered outline into a config, listing what it
+                     guessed and what still needs filling in
 
 The config defaults to ~/Library/Application Support/KeybowNotes/config.json,
 falling back to ./config.example.json.
@@ -101,15 +104,33 @@ func loadConfig(_ arguments: [String]) -> (KeybowConfig, URL) {
     }
 }
 
-func printTree(_ nodes: [TreeNode?], indent: String = "") {
-    for (column, node) in nodes.enumerated() {
-        guard let node else { continue }
-        let marker = node.isLeaf ? "\u{25CF}" : "\u{25B8}"
-        let detail = node.action.map { " -> \($0.type)" } ?? ""
-        print("\(indent)\(marker) key \(column): \(node.label)\(detail)")
-        if !node.isLeaf { printTree(node.children, indent: indent + "    ") }
+func printTrees(_ config: KeybowConfig) {
+    for tree in TreeKind.allCases where config.trees[tree] != nil {
+        let rows = tree.rows.map { String($0 + 1) }.joined(separator: " → ")
+        print("\(tree.rawValue) tree (rows \(rows))")
+        printTree(config, tree, nodes: config.roots(tree), indent: "  ")
     }
 }
+
+func printTree(_ config: KeybowConfig, _ tree: TreeKind, nodes: [TreeNode?], path: [Int] = [], indent: String) {
+    for (column, node) in nodes.enumerated() {
+        guard let node else { continue }
+        let here = path + [column]
+        if node.isLeaf {
+            let type = config.resolve(tree: tree, path: here)?.action?.type ?? "?"
+            print("\(indent)\u{25CF} \(column + 1). \(node.label) -> \(type)")
+        } else {
+            print("\(indent)\u{25B8} \(column + 1). \(node.label)")
+            printTree(config, tree, nodes: node.children, path: here, indent: indent + "    ")
+        }
+    }
+}
+
+let displayFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "EEE d MMM yyyy, HH:mm"
+    return formatter
+}()
 
 func describe(_ event: NavigatorEvent) -> String {
     switch event {
@@ -121,19 +142,26 @@ func describe(_ event: NavigatorEvent) -> String {
     case .pending(let selection):
         return "about to run \(selection.action?.type ?? "?") for \(selection.pathDescription) — press any key to cancel"
     case .fire(let selection):
-        var line = "FIRE \(selection.action?.type ?? "?") for \(selection.pathDescription)"
-        if !selection.params.isEmpty {
-            let params = selection.params.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
-            line += "\n     params: \(params.joined(separator: ", "))"
-        }
+        var line = "FIRE \(selection.action?.type ?? "?") for \(selection.pathDescription)  [\(selection.tree.rawValue) tree]"
         for (key, value) in (selection.action?.fields ?? [:]).sorted(by: { $0.key < $1.key }) {
             line += "\n     \(key): \(value.stringValue ?? "\(value)")"
+        }
+        let interesting = selection.params.filter { !["path", "tree"].contains($0.key) && !$0.key.hasPrefix("level") }
+        if !interesting.isEmpty {
+            let params = interesting.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+            line += "\n     params: \(params.joined(separator: ", "))"
+        }
+        if let when = selection.params["when"],
+           let date = DateExpression.resolve(when, now: Date(), rules: currentRules) {
+            line += "\n     \"\(when)\" resolves to \(displayFormatter.string(from: date))"
         }
         return line
     case .cleared(let reason):
         return "cleared (\(reason.rawValue))"
     }
 }
+
+nonisolated(unsafe) var currentRules = DateRules()
 
 func describe(_ message: DeviceMessage) -> String {
     switch message {
@@ -200,12 +228,66 @@ case "demo":
 case "tree":
     let (config, url) = loadConfig(Array(arguments.dropFirst()))
     print("\(url.path)  (version \(config.version), commit delay \(config.commitDelay)s)")
-    printTree(config.tree)
+    printTrees(config)
+
+case "convert":
+    var rest = Array(arguments.dropFirst())
+    var output: String?
+    if let flag = rest.firstIndex(of: "-o"), flag + 1 < rest.count {
+        output = rest[flag + 1]
+        rest.removeSubrange(flag...(flag + 1))
+    }
+    guard let input = rest.first else { fail("usage: keybow convert <outline> [-o config.json]") }
+    let outlineURL = URL(fileURLWithPath: (input as NSString).expandingTildeInPath)
+    let text: String
+    do {
+        text = try String(contentsOf: outlineURL, encoding: .utf8)
+    } catch {
+        fail("cannot read \(outlineURL.path): \(error.localizedDescription)")
+    }
+
+    let result: OutlineConverter.Result
+    do {
+        result = try OutlineConverter.convert(text)
+    } catch {
+        fail("\(outlineURL.lastPathComponent): \(error)")
+    }
+
+    // The output must load; anything else is a converter bug.
+    do {
+        _ = try KeybowConfig.parse(Data(result.json.utf8))
+    } catch {
+        fail("internal error: the converted config does not load: \(error)")
+    }
+
+    if let output {
+        let url = URL(fileURLWithPath: (output as NSString).expandingTildeInPath)
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try result.json.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            fail("cannot write \(url.path): \(error.localizedDescription)")
+        }
+    } else {
+        print(result.json, terminator: "")
+    }
+
+    func report(_ title: String, _ lines: [String]) {
+        guard !lines.isEmpty else { return }
+        FileHandle.standardError.write(Data("\n\(title) (\(lines.count)):\n".utf8))
+        for line in lines { FileHandle.standardError.write(Data("  • \(line)\n".utf8)) }
+    }
+    report("Guessed — check these", result.inferences)
+    report("Still to fill in", result.todo)
+    report("Warnings", result.warnings)
+    if let output { FileHandle.standardError.write(Data("\nWrote \(output)\n".utf8)) }
+    exit(0)
 
 case "run":
     let (config, url) = loadConfig(Array(arguments.dropFirst()))
+    currentRules = config.dateRules
     print("config: \(url.path)")
-    printTree(config.tree)
+    printTrees(config)
     print("---")
     let connection = KeybowConnection()
     let driver = SelectionDriver(config: config, connection: connection)

@@ -17,8 +17,10 @@ swift test
 | `USBSerialPorts.swift` | Finds the Keybow's serial ports through the IO registry, by USB vendor/product ID |
 | `SerialPort.swift` | A raw port held open, plus line assembly |
 | `KeybowConnection.swift` | Connect, heartbeat, reconnect; an `AsyncStream` of events |
-| `Config.swift` | JSON config into a validated tree, with errors that name the offending node |
-| `Navigator.swift` | The selection state machine; time is injected, so it tests without waiting |
+| `Config.swift` | JSON config into validated trees: inheritance, lists, contacts, projects; errors name the offending node |
+| `DateExpression.swift` | "today", "tomorrow 14:00", "next friday", "+90m" into dates |
+| `OutlineConverter.swift` | A numbered outline into a config, reporting guesses and gaps |
+| `Navigator.swift` | The selection state machine across four trees; time is injected, so it tests without waiting |
 | `Lighting.swift` | Selection state into 16 key colours |
 | `SelectionDriver.swift` | Joins device to navigator: keys in, lights out, events published |
 
@@ -47,6 +49,17 @@ swift build
 
 `leds` takes 1-16 `rrggbb` values; the last one fills the remaining keys.
 
+Config commands:
+
+```bash
+./.build/debug/keybow convert tree.md -o config.json   # outline → config
+./.build/debug/keybow tree config.json                 # print the trees and each leaf's action
+./.build/debug/keybow run config.json                  # drive the Keybow; prints, runs nothing
+```
+
+The config format, the outline syntax and how a leaf's action is worked out are
+described in [docs/DESIGN.md](../docs/DESIGN.md#4-config-file).
+
 ## Status
 
 Working against the hardware: discovery, connect, `HELLO`, `PING`/`PONG`,
@@ -60,6 +73,11 @@ worked again with no intervention. Overlapping presses interleave correctly
 **Config and tree navigation verified on hardware**: four-level walks, branches
 that end early, switching mid-path, invalid presses ignored with a red flash,
 parameter inheritance, and the commit window with its cancel.
+
+**Config format version 2**: actions inherited down the tree, leaves as values,
+shared lists, contacts and projects, four trees (main, row 2, row 3, bottom-up),
+and an outline converter. Covered by 86 tests; side-tree navigation is not yet
+tried on the hardware.
 
 Not built yet: the overlay, and the actions themselves — `run` prints what it
 would do and executes nothing.

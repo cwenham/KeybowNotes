@@ -411,6 +411,12 @@ extension KeybowConfig {
     )
 
     public static let builtInTypeDefaults: [String: [String: JSONValue]] = [
+        // The same as the default action, so a note is filed alike whether its
+        // leaf is bare or marked "(Notes)" or "new".
+        "notes.create": [
+            "folder": .string("{{folderPath}}"),
+            "title": .string("{{leaf}} — {{date:d MMM yyyy}}"),
+        ],
         "notes.append": [
             "folder": .string("{{parentPath}}"),
             "find": .object(["byName": .string("{{leaf}}")]),

@@ -136,6 +136,10 @@ to the cursor's screen when that display is absent.
 
 ## 4. Config file
 
+The full language — outline syntax, keywords, JSON fields, inheritance, every
+action's fields, placeholders and dates — is in
+[CONFIG-LANGUAGE.md](CONFIG-LANGUAGE.md). This section gives the design.
+
 JSON, reloaded on change. Location: `~/Library/Application Support/KeybowNotes/config.json`.
 [`mac/config.example.json`](../mac/config.example.json) shows every feature. **The
 real config is never committed**: it holds personal categories, names, phone

@@ -92,6 +92,27 @@ final class ActionPlanTests: XCTestCase {
         XCTAssertTrue(html.contains("<div><h2>Yesterday</h2></div>"))
     }
 
+    func testTemplateHeadingBeatsTheDefaultTitle() throws {
+        // A bare leaf with a template: the default title would be "Standup — date",
+        // but the template's heading was written to be the title.
+        let planned = try plan("""
+        { "tree": [ { "label": "Standup", "action": { "template": "standup.md" } } ] }
+        """, path: [0])
+        guard case .createNote(_, let title, _) = planned.plan else { return XCTFail("\(planned)") }
+        XCTAssertEqual(title, "Standup — 26 Sep 2026")
+    }
+
+    func testMarkedNotesAreFiledLikeBareLeaves() throws {
+        // "(Notes)" on a branch names the type explicitly; filing is the same.
+        let planned = try plan("""
+        { "tree": [ { "label": "Ideas", "action": { "type": "notes.create" },
+            "children": [ { "label": "Inventions" } ] } ] }
+        """, path: [0, 0])
+        guard case .createNote(let location, let title, _) = planned.plan else { return XCTFail("\(planned)") }
+        XCTAssertEqual(location.folders, ["Ideas", "Inventions"])
+        XCTAssertEqual(title, "Inventions — 26 Sep 2026")
+    }
+
     func testMissingTemplateIsReported() {
         XCTAssertThrowsError(try plan("""
         { "tree": [ { "label": "X", "action": { "template": "nope.md" } } ] }
@@ -123,9 +144,20 @@ final class ActionPlanTests: XCTestCase {
         { "tree": [ { "label": "Docs", "action": { "type": "notes.append" },
             "children": [ { "label": "Website" } ] } ] }
         """, path: [0, 0])
-        guard case .appendToNote(let location, let name, _, _, _, _) = planned.plan else { return XCTFail("\(planned)") }
+        guard case .appendToNote(let location, let name, let entry, _, _, _) = planned.plan else { return XCTFail("\(planned)") }
         XCTAssertEqual(location.folders, ["Docs"])
         XCTAssertEqual(name, "Website")
+        // The note is named after the leaf, so the entry needs only the time.
+        XCTAssertEqual(entry, "<div><br></div><div><b>26 Sep 2026, 14:07</b></div>")
+    }
+
+    func testAppendToASharedNoteRecordsThePath() throws {
+        let planned = try plan("""
+        { "tree": [ { "label": "Check-in", "action": { "type": "notes.append", "find": { "byName": "Check-ins" } },
+            "children": [ { "label": "Great" } ] } ] }
+        """, path: [0, 0])
+        guard case .appendToNote(_, _, let entry, _, _, _) = planned.plan else { return XCTFail("\(planned)") }
+        XCTAssertEqual(entry, "<div><br></div><div><b>26 Sep 2026, 14:07</b> — Check-in / Great</div>")
     }
 
     // MARK: - Calendar and reminders

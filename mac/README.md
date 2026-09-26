@@ -124,8 +124,9 @@ Config commands:
 ./.build/debug/keybow run config.json                  # drive the Keybow; prints, runs nothing
 ```
 
-The config format, the outline syntax and how a leaf's action is worked out are
-described in [docs/DESIGN.md](../docs/DESIGN.md#4-config-file).
+The config language — the outline syntax and its keywords, the JSON form, how a
+leaf's action is worked out, and every action's fields — is described in
+[docs/CONFIG-LANGUAGE.md](../docs/CONFIG-LANGUAGE.md).
 
 ## Status
 

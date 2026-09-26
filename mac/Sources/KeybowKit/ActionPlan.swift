@@ -122,9 +122,12 @@ private struct Planner {
         switch action.type {
         case "notes.create":
             let location = noteLocation()
+            // A template that opens with a "#" heading names the note: its author
+            // wrote that heading to be the title. Otherwise the action's title,
+            // then the leaf's label.
             let (templateTitle, templateBody) = try templateParts()
-            var title = optional("title")
-            if title.isEmpty { title = templateTitle ?? "" }
+            var title = templateTitle ?? ""
+            if title.isEmpty { title = optional("title") }
             if title.isEmpty { title = selection.labels.last ?? "" }
             guard !title.isEmpty else { throw ActionPlanError.empty("note title") }
             return .createNote(location, title: title, html: NotesHTML.title(title) + NotesHTML.from(markdown: templateBody))
@@ -134,7 +137,11 @@ private struct Planner {
             let name = try required(nested("find", "byName"), for: "note to add to")
             var entry = try templateText()
             if entry == nil { entry = optional("entry") }
-            let markdown = entry?.isEmpty == false ? entry! : "**{{datetime}}** — {{path}}"
+            // With no entry text given: a note named after the leaf (a character,
+            // a project) needs only the time, while a note shared by many leaves
+            // (monthly check-ins) needs the path to say which one was chosen.
+            let standard = name == selection.labels.last ? "**{{datetime}}**" : "**{{datetime}}** — {{path}}"
+            let markdown = entry?.isEmpty == false ? entry! : standard
             let entryHTML = "<div><br></div>" + NotesHTML.from(markdown: expanded(markdown))
             return .appendToNote(location, name: name, entryHTML: entryHTML, titleHTML: NotesHTML.title(name),
                                  createIfMissing: boolField("createIfMissing", default: true), guards: guards())

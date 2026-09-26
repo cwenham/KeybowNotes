@@ -1,6 +1,6 @@
 # KeybowNotes — design
 
-**Status:** draft; the device layer and config are built, actions are next. Written after the spikes in
+**Status:** the device layer, config, overlay and actions work; packaging and settings are next. Written after the spikes in
 [../spikes/FINDINGS.md](../spikes/FINDINGS.md), which settled the Notes, Calendar
 and Messages questions.
 
@@ -256,8 +256,8 @@ Every text field in an action is expanded through the template system first.
 |---|---|---|
 | `notes.create` | AppleScript | New note, then shown. Creates nested folders as needed. |
 | `notes.append` | AppleScript | See constraints. Finds by `byName`, `byId`, `selection`; `createIfMissing` supported. |
-| `reminders.create` | EventKit | Title, notes, due date, alert, priority, flag, list. |
-| `calendar.createEvent` | EventKit | Created then shown for editing. Calendar identified **by ID**, not name. `alertMinutes` for an alert. |
+| `reminders.create` | AppleScript (EventKit later) | Title, notes, due date — also set as the alert, which makes the row 3 timers work — and list. |
+| `calendar.createEvent` | AppleScript (EventKit later) | Created then shown for editing. Calendar by `calendarId` (stable), `calendar` (name), else the first writable one. `alertMinutes` for an alert. |
 | `messages.compose` | `sms:` URL | Opens a conversation with the text filled in. **Never sends.** |
 | `mail.compose` | AppleScript | Opens a real draft window, ready to edit. |
 | `app.open` | `NSWorkspace` | Opens an app (by `bundleId`, else `app` name), optionally with a file, folder or URL. |
@@ -292,6 +292,28 @@ with the name as a display label; only writable calendars are offered.
 waits for the user. AppleScript's `send` is not used, because it transmits
 immediately with no draft.
 
+### What the first live runs showed (2026-09-26)
+
+All eight actions were run against the real apps. Everything worked, with these
+lessons:
+
+- **Every Apple app is driven by `osascript`**, values passed as arguments. EventKit
+  would be faster for Calendar and Reminders but needs a proper app bundle with
+  usage descriptions; that comes with packaging.
+- **Notes drops links set by a script**, keeping only underlined text. Markdown
+  links are therefore written as `text (https://…)` so the address survives.
+- **Headings are restyled**: `<h1>`/`<h2>` come back as bold 24pt/18pt text. They
+  look right; they are not Notes' own heading styles.
+- **AppleScript variable names must avoid dictionary terms.** A variable called
+  `container` is read as Notes' `container` property and fails with -10006 — the
+  same trap as `plaintext` in the spike.
+- **Nested folders can be created by script**, one level at a time.
+- **First use of each app triggers a macOS permission prompt**, and the script
+  waits until it is answered. Scripts time out after 45 seconds with a message
+  pointing at the prompt, rather than hanging.
+- **Calendar's scripting is slow** — the first event took well over ten seconds
+  while Calendar launched. The overlay shows a spinner until it finishes.
+
 ### Not yet known
 
 - **Channels inside apps** — Discord, Meshtastic. Discord has per-channel URLs,
@@ -300,7 +322,6 @@ immediately with no draft.
 - **Claude projects** — whether the desktop app can be opened on a specific one.
 - **Fusion** keeps projects in Autodesk's cloud, so there may be no local file to
   open.
-- **Nested Notes folders** — creating them by AppleScript needs confirming.
 
 ---
 
@@ -393,7 +414,7 @@ from template values.
 2. ✅ Serial connection and reconnect handling (`KeybowKit`).
 3. Overlay: path display, next-row options, cancel and commit behaviour.
 4. ✅ Config loading, tree navigation, side trees, outline converter.
-5. Actions, starting with `notes.create`, then `notes.append`.
-6. Template engine and parameters (date expressions ✅).
-7. Remaining actions, and spikes for the unknowns above.
+5. ✅ Actions: all eight types, run against the real apps.
+6. ✅ Template engine and parameters, including `{{clipboard}}` and `{{frontApp}}`.
+7. Spikes for the unknowns above: channels in Discord and Meshtastic, Claude projects.
 8. Settings window: overlay screen, timeouts, config file location.

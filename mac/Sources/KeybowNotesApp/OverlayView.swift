@@ -174,24 +174,48 @@ private struct OutcomeView: View {
 
     var body: some View {
         switch outcome {
-        case .fired(let summary, let path, _):
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(.green)
-                VStack(alignment: .leading, spacing: 6) {
-                    ActionHeadline(summary: summary, caption: "\(summary.verb) — demo, nothing was run")
-                    Text(path)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
-                    if !summary.missing.isEmpty {
-                        Label("Config still needs \(summary.missing.joined(separator: ", "))",
-                              systemImage: "exclamationmark.triangle.fill")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.orange)
-                    }
+        case .previewed(let summary, let path):
+            ResultLayout(symbol: "eye.circle.fill", tint: .blue) {
+                ActionHeadline(summary: summary, caption: "\(summary.verb) — dry run, nothing was done")
+                Text(path).font(.system(size: 11)).foregroundStyle(.tertiary)
+                if !summary.missing.isEmpty {
+                    Warning(text: "Config still needs \(summary.missing.joined(separator: ", "))")
                 }
             }
+
+        case .running(let summary, let path):
+            HStack(alignment: .center, spacing: 14) {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 30)
+                VStack(alignment: .leading, spacing: 6) {
+                    ActionHeadline(summary: summary, caption: "\(summary.verb)…")
+                    Text(path).font(.system(size: 11)).foregroundStyle(.tertiary)
+                }
+            }
+
+        case .finished(let result, let summary, let warnings):
+            ResultLayout(symbol: result.succeeded ? "checkmark.circle.fill" : "exclamationmark.octagon.fill",
+                         tint: result.succeeded ? .green : .red) {
+                Text(summary.verb)
+                    .font(.system(size: 10, weight: .semibold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(.secondary)
+                Text(result.message)
+                    .font(.system(size: 16, weight: .semibold))
+                    .lineLimit(2)
+                if let detail = result.detail {
+                    Text(detail).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(3)
+                }
+                ForEach(warnings, id: \.self) { Warning(text: $0) }
+            }
+
+        case .refused(let reason, let summary):
+            ResultLayout(symbol: "exclamationmark.triangle.fill", tint: .orange) {
+                ActionHeadline(summary: summary, caption: "Can't \(summary.verb.lowercased()) yet")
+                Text(reason).font(.system(size: 12)).foregroundStyle(.orange).lineLimit(3)
+            }
+
         case .cleared(let reason):
             Label(text(for: reason), systemImage: "xmark.circle.fill")
                 .font(.system(size: 15, weight: .medium))
@@ -206,6 +230,33 @@ private struct OutcomeView: View {
         case .idleTimeout: return "Timed out"
         case .completed: return "Done"
         }
+    }
+}
+
+/// A large status symbol beside a column of text.
+private struct ResultLayout<Content: View>: View {
+    let symbol: String
+    let tint: Color
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: symbol)
+                .font(.system(size: 30))
+                .foregroundStyle(tint)
+            VStack(alignment: .leading, spacing: 5) { content }
+        }
+    }
+}
+
+private struct Warning: View {
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: "exclamationmark.triangle.fill")
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(.orange)
+            .lineLimit(3)
     }
 }
 

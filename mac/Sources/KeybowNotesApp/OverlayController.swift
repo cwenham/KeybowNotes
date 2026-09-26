@@ -6,7 +6,12 @@ import SwiftUI
 @MainActor @Observable
 final class OverlayModel {
     enum Outcome: Equatable {
-        case fired(ActionSummary, path: String, tree: TreeKind)
+        /// A dry run: what would have happened.
+        case previewed(ActionSummary, path: String)
+        case running(ActionSummary, path: String)
+        case finished(ActionOutcome, summary: ActionSummary, warnings: [String])
+        /// The action couldn't even be attempted: a value missing from the config.
+        case refused(String, summary: ActionSummary)
         case cleared(NavigatorEvent.ClearReason)
     }
 
@@ -121,11 +126,6 @@ final class OverlayController {
 
     func handle(_ event: NavigatorEvent) {
         switch event {
-        case .fire(let selection):
-            let summary = ActionSummary(selection: selection, config: config)
-            model.outcome = .fired(summary, path: selection.pathDescription, tree: selection.tree)
-            show()
-            hide(after: 2.6)
         case .cleared(let reason) where reason != .completed:
             model.outcome = .cleared(reason)
             show()
@@ -150,6 +150,35 @@ final class OverlayController {
             }
             deviceAnswering = false
         }
+    }
+
+    // MARK: - Actions
+
+    func showPreview(_ summary: ActionSummary, path: String) {
+        present(.previewed(summary, path: path), for: 2.6)
+    }
+
+    func showRunning(_ summary: ActionSummary, path: String) {
+        // Stays until the result arrives; the long timeout is only a backstop.
+        present(.running(summary, path: path), for: 30)
+    }
+
+    func showFinished(_ outcome: ActionOutcome, summary: ActionSummary, warnings: [String]) {
+        // A new selection may have started while the action ran; don't cover it.
+        guard model.snapshot.isIdle else { return }
+        present(.finished(outcome, summary: summary, warnings: warnings),
+                for: outcome.succeeded && warnings.isEmpty ? 2.6 : 6)
+    }
+
+    func showRefused(_ reason: String, summary: ActionSummary) {
+        present(.refused(reason, summary: summary), for: 6)
+    }
+
+    private func present(_ outcome: OverlayModel.Outcome, for duration: TimeInterval) {
+        model.outcome = outcome
+        model.notice = nil
+        show()
+        hide(after: duration)
     }
 
     /// Something to show without a selection, e.g. from the menu.

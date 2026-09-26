@@ -25,21 +25,28 @@ swift test
 | `SelectionDriver.swift` | Joins device to navigator: keys in, lights out, events and state snapshots published |
 | `Template.swift` | `{{placeholders}}`, fallbacks and date built-ins, reporting what is missing |
 | `ActionSummary.swift` | "New event · Meeting · Sun 27 Sep, 09:00" — what an action will do |
+| `NotesHTML.swift` | Markdown templates into the HTML Notes accepts |
+| `ActionPlan.swift` | A selection into exactly what to do, or a clear reason it can't — pure, tested |
+| `ActionRunner.swift` | Carries a plan out: AppleScript via `osascript`, `NSWorkspace`, `shortcuts` |
 
-## The demo app
+## The app
 
 ```bash
-swift run keybownotes-demo --config config.demo.json
+swift run keybownotes --config config.demo.json
 ```
 
 A menu-bar app (no Dock icon) that drives the Keybow and shows a HUD overlay:
 which tree you are in, the path so far, the next row's choices laid out where
-they sit on the keypad, a mirror of the key lights, the commit countdown, and
-what the action *would* do — nothing is run yet. `config.demo.json` has made-up
-trees in all four positions.
+they sit on the keypad, a mirror of the key lights, the commit countdown, then
+the action running and its result. `config.demo.json` has made-up trees in all
+four positions; its templates are in `templates/`.
+
+Run from a terminal, macOS attributes permission prompts to the terminal app
+rather than KeybowNotes; each app you drive asks once.
 
 | Option | |
 |---|---|
+| `--dry-run` | show what each action would do without doing it (also in the menu) |
 | `--screen main` | show on the display with the menu bar, rather than the one with the cursor |
 | `--simulate "4 8 12"` | press these keys (0-15) in turn, with or without a Keybow |
 | `--pace 1.5` | seconds between simulated presses |
@@ -100,8 +107,11 @@ shared lists, contacts and projects, four trees (main, row 2, row 3, bottom-up),
 and an outline converter. Covered by 86 tests; side-tree navigation is not yet
 tried on the hardware.
 
-Not built yet: the overlay, and the actions themselves — `run` prints what it
-would do and executes nothing.
+**All eight actions verified against the real apps** — see
+[docs/DESIGN.md](../docs/DESIGN.md#what-the-first-live-runs-showed-2026-09-26).
+
+Not built yet: a proper app bundle (for its own permissions, EventKit and
+launch at login), and a settings window.
 
 ### A trap worth remembering
 

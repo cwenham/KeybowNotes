@@ -434,7 +434,8 @@ public enum AppLocator {
         return nil
     }
 
-    private static func installedPath(_ name: String) -> URL? {
+    /// Where an app is installed, looking in the usual places.
+    public static func installedPath(_ name: String) -> URL? {
         let manager = FileManager.default
         for directory in searchDirectories {
             let direct = directory.appendingPathComponent(name + ".app")

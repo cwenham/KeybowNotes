@@ -59,6 +59,15 @@ public enum ActionRunner {
                             "in \(location.description)")
 
         case .createReminder(let title, let notes, let due, let list):
+            if EventKitService.isAvailable {
+                let created = try await eventKit {
+                    try await EventKitService.shared.createReminder(title: title, notes: notes, due: due, list: list)
+                }
+                var detail = "in \(created.listTitle)"
+                if let due { detail += ", due \(displayed(due))" }
+                if created.usedDefault { detail += " — there is no list called “\(list)”" }
+                return .success("Reminder: \(title)", detail)
+            }
             let reply = try await appleScript(Scripts.createReminder, app: "Reminders",
                                               [list, title, notes, due.map(stamp) ?? ""])
             let listUsed = reply.split(separator: ":", maxSplits: 1).last.map(String.init) ?? ""
@@ -68,6 +77,18 @@ public enum ActionRunner {
             return .success("Reminder: \(title)", detail)
 
         case .createEvent(let title, let start, let duration, let alert, let calendarID, let calendarName, let notes, let show):
+            if EventKitService.isAvailable {
+                let created = try await eventKit {
+                    try await EventKitService.shared.createEvent(
+                        title: title, start: start, duration: duration, alertMinutes: alert,
+                        calendarID: calendarID, calendarName: calendarName, notes: notes)
+                }
+                if show { await showInCalendar(created.identifier) }
+                var detail = "\(displayed(start)) in \(created.calendarTitle)"
+                if let alert { detail += ", alert \(alert) min before" }
+                if let note = created.note { detail += ". " + note }
+                return .success("Event: \(title)", detail)
+            }
             let reply = try await appleScript(Scripts.createEvent, app: "Calendar", [
                 calendarID, calendarName, title, stamp(start), String(Int(duration / 60)),
                 String(alert ?? -1), notes, show ? "1" : "0",
@@ -147,6 +168,27 @@ public enum ActionRunner {
     }
 
     // MARK: - Plumbing
+
+    /// Runs an EventKit call, turning its errors into ones worth showing.
+    private static func eventKit<T>(_ body: () async throws -> T) async throws -> T {
+        do {
+            return try await body()
+        } catch let error as EventKitService.AccessError {
+            throw RunError(error.message, error.detail)
+        } catch {
+            throw RunError("Couldn't save it", error.localizedDescription)
+        }
+    }
+
+    /// Opens the event in Calendar with its details showing, ready to edit —
+    /// the same link Calendar builds for itself. No scripting needed.
+    @MainActor
+    private static func showInCalendar(_ identifier: String) async {
+        guard !identifier.isEmpty,
+              let encoded = identifier.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+              let url = URL(string: "ical://ekevent/\(encoded)?method=show&options=more") else { return }
+        try? await openURL(url)
+    }
 
     struct RunError: Error {
         let message: String

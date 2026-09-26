@@ -1,6 +1,6 @@
 # KeybowNotes — design
 
-**Status:** working end to end, and packaged as KeybowNotes.app; EventKit and settings are next. Written after the spikes in
+**Status:** working end to end, packaged as KeybowNotes.app, with EventKit; the settings window is next. Written after the spikes in
 [../spikes/FINDINGS.md](../spikes/FINDINGS.md), which settled the Notes, Calendar
 and Messages questions.
 
@@ -256,8 +256,8 @@ Every text field in an action is expanded through the template system first.
 |---|---|---|
 | `notes.create` | AppleScript | New note, then shown. Creates nested folders as needed. |
 | `notes.append` | AppleScript | See constraints. Finds by `byName`, `byId`, `selection`; `createIfMissing` supported. |
-| `reminders.create` | AppleScript (EventKit later) | Title, notes, due date — also set as the alert, which makes the row 3 timers work — and list. |
-| `calendar.createEvent` | AppleScript (EventKit later) | Created then shown for editing. Calendar by `calendarId` (stable), `calendar` (name), else the first writable one. `alertMinutes` for an alert. |
+| `reminders.create` | EventKit (AppleScript in dev runs) | Title, notes, due date — also set as the alert, which makes the row 3 timers work — and list, else the default list. |
+| `calendar.createEvent` | EventKit (AppleScript in dev runs) | Created, then opened for editing via `ical://ekevent/<id>?method=show&options=more`. Calendar by `calendarId` (stable), `calendar` (name), else your default calendar. `alertMinutes` for an alert. |
 | `messages.compose` | `sms:` URL | Opens a conversation with the text filled in. **Never sends.** |
 | `mail.compose` | AppleScript | Opens a real draft window, ready to edit. |
 | `app.open` | `NSWorkspace` | Opens an app (by `bundleId`, else `app` name), optionally with a file, folder or URL. |
@@ -313,6 +313,27 @@ lessons:
   pointing at the prompt, rather than hanging.
 - **Calendar's scripting is slow** — the first event took well over ten seconds
   while Calendar launched. The overlay shows a spinner until it finishes.
+
+### EventKit (2026-09-26)
+
+The packaged app creates events and reminders through EventKit rather than
+AppleScript: under 0.1 seconds instead of ten or more, because neither Calendar
+nor Reminders has to launch. A development run (`swift run`) has no Info.plist
+to hold the usage descriptions EventKit requires — asking without them crashes
+the process — so it keeps using AppleScript.
+
+- **Full access, not write-only.** KeybowNotes finds calendars and lists by name
+  and opens the new event afterwards, which write-only access can't do. The
+  Info.plist deliberately has no write-only description, so the prompt doesn't
+  offer that choice.
+- **A store keeps the access it was created with.** Access changed in System
+  Settings while the app runs is picked up by recreating the store.
+- **Opening the new event** uses the link Calendar builds for itself,
+  `ical://ekevent/<eventIdentifier>?method=show&options=more` — found in
+  Calendar's binary, so undocumented and could change.
+- **Prompts come forward.** The app never takes focus, so a permission prompt
+  could open unseen behind other windows; it activates itself just before
+  asking. The menu's *Allow Calendar and Reminders Access…* asks up front.
 
 ### Not yet known
 
@@ -418,5 +439,5 @@ from template values.
 6. ✅ Template engine and parameters, including `{{clipboard}}` and `{{frontApp}}`.
 7. Spikes for the unknowns above: channels in Discord and Meshtastic, Claude projects.
 8. ✅ Packaging: signed universal KeybowNotes.app, config reloading, Open at Login.
-9. EventKit for Calendar and Reminders, now the app has a bundle to hold the permissions.
+9. ✅ EventKit for Calendar and Reminders.
 10. Settings window: overlay screen, timeouts, config file location, default calendar.

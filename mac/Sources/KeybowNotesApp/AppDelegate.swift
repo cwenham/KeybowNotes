@@ -1,9 +1,10 @@
 import AppKit
+import EventKit
 import KeybowKit
 import ServiceManagement
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let options: Options
     private let store: ConfigStore
     private var driver: SelectionDriver?
@@ -15,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let configItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let problemItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let loginItem = NSMenuItem(title: "Open at Login", action: nil, keyEquivalent: "")
+    private let accessItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
 
     /// A packaged app has a bundle identifier; `swift run` doesn't.
     private var isPackaged: Bool { Bundle.main.bundleIdentifier != nil }
@@ -119,6 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        bringPermissionPromptsForward(for: planned.plan)
         overlay.showRunning(summary, path: path)
         Task { @MainActor in
             let started = Date()
@@ -130,6 +133,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for warning in planned.warnings { Log.info("  warning: \(warning)") }
             overlay.showFinished(outcome, summary: summary, warnings: planned.warnings)
         }
+    }
+
+    /// The first event or reminder asks for access. This app never comes to the
+    /// front, so without this the prompt can open behind other windows, out of
+    /// sight — and the action waits on it.
+    private func bringPermissionPromptsForward(for plan: ActionPlan) {
+        guard EventKitService.isAvailable else { return }
+        let type: EKEntityType
+        switch plan {
+        case .createEvent: type = .event
+        case .createReminder: type = .reminder
+        default: return
+        }
+        if EventKitService.status(for: type) == .notDetermined { NSApp.activate() }
     }
 
     /// {{clipboard}} and {{frontApp}}. This app never takes focus, so the
@@ -193,12 +210,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loginItem.toolTip = isPackaged ? nil : "Only available when run as KeybowNotes.app"
         loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(loginItem)
+        accessItem.action = #selector(requestCalendarAccess)
+        accessItem.target = self
+        menu.addItem(accessItem)
+        updateAccessItem()
         addItem(to: menu, "Test the Overlay", #selector(testOverlay))
 
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit KeybowNotes", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.delegate = self
         item.menu = menu
         statusItem = item
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        updateAccessItem()
+        loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
+    }
+
+    private func updateAccessItem() {
+        // Only the packaged app uses EventKit; a development run uses AppleScript.
+        accessItem.isHidden = !EventKitService.isAvailable
+        let allowed = EventKitService.status(for: .event) == .fullAccess
+            && EventKitService.status(for: .reminder) == .fullAccess
+        accessItem.title = allowed ? "Calendar and Reminders: Allowed" : "Allow Calendar and Reminders Access…"
+        accessItem.isEnabled = !allowed
+    }
+
+    @objc private func requestCalendarAccess() {
+        // Come forward so the prompts do too.
+        NSApp.activate()
+        Task { @MainActor in
+            var problems: [EventKitService.AccessError] = []
+            for type in [EKEntityType.event, .reminder] {
+                do {
+                    try await EventKitService.shared.ensureAccess(to: type)
+                } catch let error as EventKitService.AccessError {
+                    problems.append(error)
+                } catch {
+                    problems.append(.init(message: error.localizedDescription, detail: ""))
+                }
+            }
+            updateAccessItem()
+            if problems.isEmpty {
+                Log.info("calendar and reminders access allowed")
+                overlay?.flashNotice("Calendar and Reminders access allowed", symbol: "checkmark.circle")
+            } else {
+                let text = problems.map(\.message).joined(separator: "; ")
+                Log.error("access: \(text)")
+                overlay?.flashNotice(text, symbol: "exclamationmark.triangle")
+                // Straight to the place it can be changed.
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+        }
     }
 
     @discardableResult

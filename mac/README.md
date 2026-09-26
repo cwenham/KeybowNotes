@@ -28,6 +28,7 @@ swift test
 | `NotesHTML.swift` | Markdown templates into the HTML Notes accepts |
 | `ActionPlan.swift` | A selection into exactly what to do, or a clear reason it can't — pure, tested |
 | `ActionRunner.swift` | Carries a plan out: AppleScript via `osascript`, `NSWorkspace`, `shortcuts` |
+| `EventKitService.swift` | Events and reminders through EventKit, in the packaged app |
 
 ## The app
 
@@ -59,8 +60,9 @@ Once installed it runs like any menu-bar app:
   /usr/bin/log stream --predicate 'subsystem == "io.github.cwenham.keybownotes"'
   ```
 
-- **Permissions**: each app it drives — Notes, Calendar, Reminders, Mail — asks
-  once, as "KeybowNotes".
+- **Permissions**: Notes and Mail each ask once, as "KeybowNotes". Calendar and
+  Reminders go through EventKit and need **full** access — use *Allow Calendar
+  and Reminders Access…* in the menu to answer those prompts up front.
 
 ### Running from the package, for development
 
@@ -146,7 +148,10 @@ tried on the hardware.
 **Packaged as KeybowNotes.app** (see above): signed, universal, installed in
 /Applications, with config reloading, a single-instance lock and Open at Login.
 
-Not built yet: EventKit for Calendar and Reminders, and a settings window.
+**EventKit** creates events and reminders in under 0.1 seconds, and opens a new
+event in Calendar ready to edit.
+
+Not built yet: a settings window.
 
 ### A trap worth remembering
 

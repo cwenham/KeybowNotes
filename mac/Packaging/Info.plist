@@ -33,13 +33,14 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>Christopher Wenham</string>
 
-	<!-- Shown in the macOS permission prompts. -->
+	<!-- Shown in the macOS permission prompts. There is deliberately no
+	     write-only calendar description: offering "add events only" would let
+	     people choose an access level KeybowNotes can't work with, since it
+	     finds calendars by name and opens the new event afterwards. -->
 	<key>NSAppleEventsUsageDescription</key>
 	<string>KeybowNotes creates notes, reminders, events and email drafts when you choose them on the Keybow.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>KeybowNotes adds the events you choose on the Keybow, and opens them for editing.</string>
-	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
-	<string>KeybowNotes adds the events you choose on the Keybow.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>KeybowNotes adds the reminders and timers you choose on the Keybow.</string>
 </dict>

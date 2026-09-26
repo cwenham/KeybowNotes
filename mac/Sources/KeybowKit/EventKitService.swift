@@ -83,6 +83,40 @@ public actor EventKitService {
         EKEventStore.authorizationStatus(for: type)
     }
 
+    // MARK: - Choices for the settings window
+
+    public struct Choice: Identifiable, Hashable, Sendable {
+        public let id: String
+        public let title: String
+        /// The account it belongs to: iCloud, Google, On My Mac…
+        public let account: String
+        public let colour: KeyColour
+    }
+
+    /// Calendars that can be added to, grouped by account. Empty without access.
+    public func writableCalendars() -> [Choice] {
+        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { return [] }
+        return choices(store.calendars(for: .event).filter(\.allowsContentModifications))
+    }
+
+    public func reminderLists() -> [Choice] {
+        guard EKEventStore.authorizationStatus(for: .reminder) == .fullAccess else { return [] }
+        return choices(store.calendars(for: .reminder).filter(\.allowsContentModifications))
+    }
+
+    private func choices(_ calendars: [EKCalendar]) -> [Choice] {
+        calendars.map { calendar in
+            let colour = calendar.color.usingColorSpace(.sRGB)
+            return Choice(
+                id: calendar.calendarIdentifier, title: calendar.title, account: calendar.source.title,
+                colour: KeyColour(red: UInt8((colour?.redComponent ?? 0.5) * 255),
+                                  green: UInt8((colour?.greenComponent ?? 0.5) * 255),
+                                  blue: UInt8((colour?.blueComponent ?? 0.5) * 255))
+            )
+        }
+        .sorted { ($0.account, $0.title) < ($1.account, $1.title) }
+    }
+
     // MARK: - Events
 
     public func createEvent(title: String, start: Date, duration: TimeInterval, alertMinutes: Int?,
@@ -132,7 +166,9 @@ public actor EventKitService {
     public func createReminder(title: String, notes: String, due: Date?, list: String) async throws -> CreatedReminder {
         try await ensureAccess(to: .reminder)
 
-        var target = list.isEmpty ? nil : store.calendars(for: .reminder).first { $0.title == list }
+        // A list can be named, or given by identifier (as the settings window stores it).
+        var target = list.isEmpty ? nil
+            : store.calendar(withIdentifier: list) ?? store.calendars(for: .reminder).first { $0.title == list }
         let usedDefault = target == nil
         if target == nil { target = store.defaultCalendarForNewReminders() }
         guard let target else {

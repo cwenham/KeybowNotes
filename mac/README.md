@@ -53,7 +53,11 @@ Once installed it runs like any menu-bar app:
   is installed there. Edits are picked up within a couple of seconds; a config
   with a mistake is reported in the menu and the previous one stays in use.
 - **One copy only** — two would compete for the Keybow, so a second refuses to start.
-- **Open at Login** is in the menu.
+- **Settings** (⌘, from the menu): Open at login, dry run, key brightness, which
+  screen the overlay uses, timings, the default calendar and reminders list, and
+  which config file to load. Settings belong to this Mac and live in
+  UserDefaults; the tree stays in the config file. A timing slider overrides the
+  file's value only once moved, and says which is in force.
 - **Logs** go to the unified log. From a terminal (zsh has its own `log`, hence the path):
 
   ```bash
@@ -151,7 +155,7 @@ tried on the hardware.
 **EventKit** creates events and reminders in under 0.1 seconds, and opens a new
 event in Calendar ready to edit.
 
-Not built yet: a settings window.
+**Settings window** for everything that belongs to this Mac rather than the tree.
 
 ### A trap worth remembering
 

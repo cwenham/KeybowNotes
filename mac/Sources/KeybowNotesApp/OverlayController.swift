@@ -29,9 +29,12 @@ final class OverlayModel {
 }
 
 /// Where the overlay appears.
-enum OverlayPlacement {
+enum OverlayPlacement: Hashable {
     case screenWithCursor
+    /// The screen with the menu bar.
     case mainScreen
+    /// A display by name; the pointer's screen when it isn't connected.
+    case display(String)
 }
 
 /// A HUD panel in the style of the volume overlay: it floats above everything,
@@ -284,6 +287,9 @@ final class OverlayController {
             // NSScreen.main is the screen of the focused window; the first
             // screen is the one with the menu bar, which is what "main" means here.
             return NSScreen.screens.first ?? NSScreen.main!
+        case .display(let name):
+            if let screen = NSScreen.screens.first(where: { $0.localizedName == name }) { return screen }
+            fallthrough
         case .screenWithCursor:
             let cursor = NSEvent.mouseLocation
             return NSScreen.screens.first { NSMouseInRect(cursor, $0.frame, false) }

@@ -1,7 +1,7 @@
 import Foundation
 
 /// One key's colour. The firmware takes 16 of these per `LEDS` command.
-public struct KeyColour: Equatable, Sendable {
+public struct KeyColour: Hashable, Sendable {
     public var red: UInt8
     public var green: UInt8
     public var blue: UInt8

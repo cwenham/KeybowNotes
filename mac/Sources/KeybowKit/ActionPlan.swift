@@ -77,13 +77,20 @@ public struct ActionContext: Sendable {
     /// Values from outside the tree — the clipboard, the frontmost app. The
     /// lowest precedence: anything the tree defines under the same name wins.
     public var environment: [String: String]
+    /// Used when an action names no calendar or list: identifiers chosen in
+    /// the settings window. Empty means the system's own defaults.
+    public var defaultCalendarID: String
+    public var defaultReminderListID: String
 
     public init(templatesDirectory: URL?, now: Date = Date(), calendar: Calendar = .current,
-                environment: [String: String] = [:]) {
+                environment: [String: String] = [:], defaultCalendarID: String = "",
+                defaultReminderListID: String = "") {
         self.templatesDirectory = templatesDirectory
         self.now = now
         self.calendar = calendar
         self.environment = environment
+        self.defaultCalendarID = defaultCalendarID
+        self.defaultReminderListID = defaultReminderListID
     }
 }
 
@@ -135,7 +142,9 @@ private struct Planner {
         case "reminders.create":
             let title = try required(action.string("title"), for: "reminder title")
             let due = try date(optional("due"))
-            return .createReminder(title: title, notes: optional("notes"), due: due, list: optional("list"))
+            var list = optional("list")
+            if list.isEmpty { list = context.defaultReminderListID }
+            return .createReminder(title: title, notes: optional("notes"), due: due, list: list)
 
         case "calendar.createEvent":
             let title = try required(action.string("title"), for: "event title")
@@ -144,8 +153,11 @@ private struct Planner {
             let duration = DateExpression.duration(optional("duration")) ?? 30 * 60
             var alert: Int?
             if case .number(let minutes)? = action.fields["alertMinutes"] { alert = Int(minutes) }
+            var calendarID = optional("calendarId")
+            let calendarName = optional("calendar")
+            if calendarID.isEmpty && calendarName.isEmpty { calendarID = context.defaultCalendarID }
             return .createEvent(title: title, start: start, duration: duration, alertMinutes: alert,
-                                calendarID: optional("calendarId"), calendarName: optional("calendar"),
+                                calendarID: calendarID, calendarName: calendarName,
                                 notes: optional("notes"), show: boolField("show", default: true))
 
         case "messages.compose":

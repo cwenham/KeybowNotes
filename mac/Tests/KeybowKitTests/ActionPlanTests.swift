@@ -221,3 +221,71 @@ final class ActionPlanTests: XCTestCase {
         """, path: [0], with: .unsupported("teleport"))
     }
 }
+
+final class SettingsSupportTests: XCTestCase {
+    private func config(_ json: String) throws -> KeybowConfig {
+        try KeybowConfig.parse(Data(json.utf8))
+    }
+
+    func testTimingOverridesReplaceOnlyWhatIsGiven() throws {
+        let base = try config("""
+        { "defaults": { "commitDelayMs": 1000, "idleTimeoutMs": 10000, "longPressCancelMs": 1500 },
+          "tree": [ { "label": "A" } ] }
+        """)
+        let tuned = base.with(commitDelay: 0.4)
+        XCTAssertEqual(tuned.commitDelay, 0.4)
+        XCTAssertEqual(tuned.idleTimeout, 10)
+        XCTAssertEqual(tuned.longPressCancel, 1.5)
+        XCTAssertEqual(tuned.tree[0]?.label, "A", "the tree is untouched")
+    }
+
+    func testBrightnessScalesEveryKey() throws {
+        let tree = try config("""
+        { "tree": [ { "label": "A", "colour": "ff0000", "children": [ { "label": "B" } ] } ] }
+        """)
+        let navigator = Navigator(config: tree)
+        var lighting = Lighting()
+        let full = lighting.colours(for: navigator, config: tree)
+        lighting.brightness = 0.5
+        let half = lighting.colours(for: navigator, config: tree)
+        XCTAssertEqual(Int(half[0].red), Int((Double(full[0].red) * 0.5).rounded()))
+        XCTAssertEqual(half[5], .off, "dark keys stay dark")
+    }
+
+    private func plan(_ json: String, path: [Int], calendar: String = "", list: String = "") throws -> ActionPlan {
+        let tree = try config(json)
+        let selection = try XCTUnwrap(tree.resolve(path: path))
+        return try ActionPlanner.plan(selection, config: tree, context: ActionContext(
+            templatesDirectory: nil, defaultCalendarID: calendar, defaultReminderListID: list)).plan
+    }
+
+    func testSettingsDefaultCalendarAppliesWhenTheTreeNamesNone() throws {
+        let json = """
+        { "tree": [ { "label": "Meeting", "action": { "type": "calendar.createEvent", "start": "tomorrow" } } ] }
+        """
+        guard case .createEvent(_, _, _, _, let id, let name, _, _) = try plan(json, path: [0], calendar: "CAL-1")
+        else { return XCTFail() }
+        XCTAssertEqual(id, "CAL-1")
+        XCTAssertEqual(name, "")
+    }
+
+    func testTreeCalendarBeatsTheSettingsDefault() throws {
+        let json = """
+        { "tree": [ { "label": "Meeting", "action": { "type": "calendar.createEvent", "start": "tomorrow",
+                                                      "calendar": "Home" } } ] }
+        """
+        guard case .createEvent(_, _, _, _, let id, let name, _, _) = try plan(json, path: [0], calendar: "CAL-1")
+        else { return XCTFail() }
+        XCTAssertEqual(id, "", "a named calendar is not overridden")
+        XCTAssertEqual(name, "Home")
+    }
+
+    func testSettingsDefaultReminderList() throws {
+        let json = """
+        { "tree": [ { "label": "Milk", "action": { "type": "reminders.create" } } ] }
+        """
+        guard case .createReminder(_, _, _, let list) = try plan(json, path: [0], list: "LIST-9")
+        else { return XCTFail() }
+        XCTAssertEqual(list, "LIST-9")
+    }
+}

@@ -166,6 +166,20 @@ public struct KeybowConfig: Sendable {
     /// The main tree's top row.
     public var tree: [TreeNode?] { roots(.main) }
 
+    /// The same config with some timings replaced — by the settings window,
+    /// which overrides the file's values once the user moves a slider.
+    public func with(commitDelay: TimeInterval? = nil, idleTimeout: TimeInterval? = nil,
+                     longPressCancel: TimeInterval? = nil) -> KeybowConfig {
+        KeybowConfig(
+            version: version, defaultColour: defaultColour,
+            commitDelay: commitDelay ?? self.commitDelay,
+            idleTimeout: idleTimeout ?? self.idleTimeout,
+            longPressCancel: longPressCancel ?? self.longPressCancel,
+            dateRules: dateRules, trees: trees, defaultAction: defaultAction, typeDefaults: typeDefaults,
+            contacts: contacts, projects: projects, defaults: defaults
+        )
+    }
+
     public func roots(_ tree: TreeKind) -> [TreeNode?] {
         trees[tree] ?? Self.emptyRow
     }
@@ -254,7 +268,9 @@ public struct KeybowConfig: Sendable {
         let folderSafe = labels.map { $0.replacingOccurrences(of: "/", with: "-") }
         var params: [String: String] = [
             "leaf": labels.last ?? "",
-            "parent": labels.count > 1 ? labels[labels.count - 2] : "",
+            // A top-level leaf has no parent; it stands for itself, so an event
+            // named "{{parent}}" by default gets the leaf's own label.
+            "parent": labels.count > 1 ? labels[labels.count - 2] : (labels.last ?? ""),
             "path": labels.joined(separator: " / "),
             "parentPath": folderSafe.dropLast().joined(separator: "/"),
             "folderPath": folderSafe.joined(separator: "/"),

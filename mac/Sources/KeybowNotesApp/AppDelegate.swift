@@ -6,37 +6,44 @@ import ServiceManagement
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let options: Options
-    private let store: ConfigStore
+    private let settings = AppSettings()
+    private var store: ConfigStore
     private var driver: SelectionDriver?
     private var overlay: OverlayController?
     private var statusItem: NSStatusItem?
-    private var dryRun: Bool
+    private var settingsWindow: SettingsWindowController?
 
     private let connectionItem = NSMenuItem(title: "Keybow: looking…", action: nil, keyEquivalent: "")
     private let configItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let problemItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-    private let loginItem = NSMenuItem(title: "Open at Login", action: nil, keyEquivalent: "")
-    private let accessItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let dryRunItem = NSMenuItem(title: "Dry Run (Show, Don't Do)", action: nil, keyEquivalent: "")
+    private let accessItem = NSMenuItem(title: "Allow Calendar and Reminders Access…", action: nil, keyEquivalent: "")
 
     /// A packaged app has a bundle identifier; `swift run` doesn't.
     private var isPackaged: Bool { Bundle.main.bundleIdentifier != nil }
 
-    init(options: Options, store: ConfigStore) {
+    init(options: Options) {
         self.options = options
-        self.store = store
-        self.dryRun = options.dryRun
+        // A --config on the command line wins for this run, without being saved.
+        let url = options.configPath.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
+            ?? AppSettings().configURL
+        store = ConfigStore(url: url)
     }
 
-    private var config: KeybowConfig { store.config }
+    /// The config as it runs: the file's tree, with any timings set in Settings.
+    private var config: KeybowConfig { settings.apply(to: store.config) }
+    private var dryRun: Bool { options.dryRun || settings.dryRun }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let overlay = OverlayController(config: config, placement: options.placement)
+        let overlay = OverlayController(config: config, placement: options.placement ?? settings.placement)
         overlay.debugDirectory = options.debugDirectory
         let driver = SelectionDriver(config: config, connection: KeybowConnection())
+        driver.setBrightness(settings.brightness)
         self.overlay = overlay
         self.driver = driver
         setUpMenu()
-        updateConfigItems()
+        updateConfigStatus()
+        refreshOpenAtLogin()
 
         Task { @MainActor in
             for await snapshot in driver.snapshots { overlay.handle(snapshot) }
@@ -56,15 +63,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         driver.start()
 
-        store.onChange = { [weak self] in self?.configChanged() }
-        store.startWatching()
+        watch(store)
+        settings.onChange = { [weak self] change in self?.settingsChanged(change) }
 
         Log.info("KeybowNotes \(versionDescription) running with \(store.url.path)\(dryRun ? " (dry run)" : "")")
         if let problem = store.problem {
             Log.error("config problem: \(problem)")
-            overlay.flashNotice("Config problem — see the menu", symbol: "exclamationmark.triangle")
+            overlay.flashNotice("Config problem — see Settings", symbol: "exclamationmark.triangle")
         }
         if !options.simulated.isEmpty { simulate(options.simulated, pace: options.pace) }
+        if options.showSettings { showSettings() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -73,22 +81,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Thread.sleep(forTimeInterval: 0.2)
     }
 
+    // MARK: - Settings
+
+    private func settingsChanged(_ change: AppSettings.Change) {
+        switch change {
+        case .placement:
+            overlay?.placement = settings.placement
+        case .timing:
+            applyConfig()
+        case .brightness:
+            driver?.setBrightness(settings.brightness)
+        case .dryRun:
+            dryRunItem.state = dryRun ? .on : .off
+            Log.info(dryRun ? "dry run: on" : "dry run: off — actions will run")
+        case .configFile:
+            switchConfig(to: settings.configURL)
+        case .defaults:
+            break    // read when an action runs
+        }
+    }
+
+    private func showSettings() {
+        if settingsWindow == nil {
+            settingsWindow = SettingsWindowController(settings: settings, actions: SettingsActions(
+                testOverlay: { [weak self] in
+                    self?.overlay?.flashNotice("The overlay appears here", symbol: "rectangle.inset.filled")
+                },
+                requestCalendarAccess: { [weak self] in await self?.requestCalendarAccess() },
+                reloadConfig: { [weak self] in self?.store.reload() },
+                loadCalendarChoices: {
+                    guard EventKitService.isAvailable else { return ([], []) }
+                    return (await EventKitService.shared.writableCalendars(),
+                            await EventKitService.shared.reminderLists())
+                },
+                setOpenAtLogin: { [weak self] enabled in self?.setOpenAtLogin(enabled) }
+            ))
+        }
+        refreshOpenAtLogin()
+        settingsWindow?.show()
+    }
+
     // MARK: - Config
 
+    private func watch(_ store: ConfigStore) {
+        store.onChange = { [weak self] in self?.configChanged() }
+        store.startWatching()
+    }
+
+    private func switchConfig(to url: URL) {
+        guard url != store.url else { return }
+        store.stopWatching()
+        store = ConfigStore(url: url)
+        watch(store)
+        Log.info("config file: \(url.path)")
+        configChanged()
+    }
+
     private func configChanged() {
-        updateConfigItems()
+        updateConfigStatus()
         if let problem = store.problem {
             Log.error("config problem: \(problem)")
-            overlay?.flashNotice("Config not reloaded — see the menu", symbol: "exclamationmark.triangle")
+            overlay?.flashNotice("Config not loaded — see Settings", symbol: "exclamationmark.triangle")
             return
         }
-        driver?.replaceConfig(config)
-        overlay?.config = config
+        applyConfig()
         Log.info("config reloaded")
         overlay?.flashNotice("Config reloaded", symbol: "arrow.clockwise")
     }
 
-    private func updateConfigItems() {
+    private func applyConfig() {
+        driver?.replaceConfig(config)
+        overlay?.config = config
+    }
+
+    private func updateConfigStatus() {
         configItem.title = "Config: \(store.url.lastPathComponent)"
         if let problem = store.problem {
             problemItem.title = "⚠︎ " + (problem.count > 90 ? String(problem.prefix(90)) + "…" : problem)
@@ -97,6 +163,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             problemItem.isHidden = true
         }
+        settings.configProblem = store.problem
+        settings.configSummary = store.problem == nil ? summary(of: store.config) : ""
+        let file = store.config
+        settings.fileTimings = (file.commitDelay, file.idleTimeout, file.longPressCancel)
+    }
+
+    /// "Main tree: 4 branches, 87 choices · Bottom tree: 2 branches, 19 choices"
+    private func summary(of config: KeybowConfig) -> String {
+        func leaves(_ nodes: [TreeNode?]) -> Int {
+            nodes.compactMap { $0 }.reduce(0) { $0 + ($1.isLeaf ? 1 : leaves($1.children)) }
+        }
+        let parts = TreeKind.allCases.compactMap { tree -> String? in
+            let roots = config.roots(tree).compactMap { $0 }
+            guard !roots.isEmpty else { return nil }
+            let name = tree == .main ? "Main" : tree == .bottom ? "Bottom" : tree == .row2 ? "Row 2" : "Row 3"
+            return "\(name) tree: \(roots.count) branches, \(leaves(config.roots(tree))) choices"
+        }
+        return parts.isEmpty ? "No trees yet." : parts.joined(separator: " · ")
     }
 
     // MARK: - Running actions
@@ -114,7 +198,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let planned: PlannedAction
         do {
             planned = try ActionPlanner.plan(selection, config: config, context: ActionContext(
-                templatesDirectory: store.templatesDirectory, environment: environment()))
+                templatesDirectory: store.templatesDirectory,
+                environment: environment(),
+                defaultCalendarID: settings.defaultCalendarID,
+                defaultReminderListID: settings.defaultReminderListID))
         } catch {
             Log.info("  can't run: \(error)")
             overlay.showRefused("\(error)", summary: summary)
@@ -176,6 +263,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    // MARK: - Calendar access and login item
+
+    private func requestCalendarAccess() async {
+        // Come forward so the prompts do too.
+        NSApp.activate()
+        var problems: [EventKitService.AccessError] = []
+        for type in [EKEntityType.event, .reminder] {
+            do {
+                try await EventKitService.shared.ensureAccess(to: type)
+            } catch let error as EventKitService.AccessError {
+                problems.append(error)
+            } catch {
+                problems.append(.init(message: error.localizedDescription, detail: ""))
+            }
+        }
+        updateAccessItem()
+        if problems.isEmpty {
+            Log.info("calendar and reminders access allowed")
+            overlay?.flashNotice("Calendar and Reminders access allowed", symbol: "checkmark.circle")
+        } else {
+            let text = problems.map(\.message).joined(separator: "; ")
+            Log.error("access: \(text)")
+            overlay?.flashNotice(text, symbol: "exclamationmark.triangle")
+            // Straight to the place it can be changed.
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
+                NSWorkspace.shared.open(url)
+            }
+        }
+    }
+
+    private func setOpenAtLogin(_ enabled: Bool) {
+        let service = SMAppService.mainApp
+        do {
+            if enabled { try service.register() } else { try service.unregister() }
+        } catch {
+            Log.error("open at login: \(error.localizedDescription)")
+        }
+        refreshOpenAtLogin()
+        if service.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
+    }
+
+    private func refreshOpenAtLogin() {
+        guard isPackaged else {
+            settings.openAtLogin = false
+            settings.openAtLoginNote = "Only available when running as KeybowNotes.app."
+            return
+        }
+        let status = SMAppService.mainApp.status
+        settings.openAtLogin = status == .enabled
+        settings.openAtLoginNote = status == .requiresApproval
+            ? "Approve KeybowNotes in System Settings → General → Login Items." : nil
+    }
+
     // MARK: - Menu bar
 
     private var versionDescription: String {
@@ -197,74 +337,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.addItem(.separator())
 
+        addItem(to: menu, "Settings…", #selector(openSettings), key: ",")
         addItem(to: menu, "Reload Config", #selector(reloadConfig), key: "r")
         addItem(to: menu, "Open Config Folder", #selector(openConfigFolder))
         menu.addItem(.separator())
 
-        addItem(to: menu, "Dry Run (Show, Don't Do)", #selector(toggleDryRun(_:))).state = dryRun ? .on : .off
-        addItem(to: menu, "Show on the Main Screen", #selector(togglePlacement(_:))).state =
-            options.placement == .mainScreen ? .on : .off
-        loginItem.action = #selector(toggleLogin(_:))
-        loginItem.target = self
-        loginItem.isEnabled = isPackaged
-        loginItem.toolTip = isPackaged ? nil : "Only available when run as KeybowNotes.app"
-        loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
-        menu.addItem(loginItem)
-        accessItem.action = #selector(requestCalendarAccess)
+        dryRunItem.action = #selector(toggleDryRun)
+        dryRunItem.target = self
+        dryRunItem.state = dryRun ? .on : .off
+        menu.addItem(dryRunItem)
+        accessItem.action = #selector(askForCalendarAccess)
         accessItem.target = self
         menu.addItem(accessItem)
         updateAccessItem()
-        addItem(to: menu, "Test the Overlay", #selector(testOverlay))
 
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit KeybowNotes", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.delegate = self
         item.menu = menu
         statusItem = item
-    }
-
-    func menuWillOpen(_ menu: NSMenu) {
-        updateAccessItem()
-        loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
-    }
-
-    private func updateAccessItem() {
-        // Only the packaged app uses EventKit; a development run uses AppleScript.
-        accessItem.isHidden = !EventKitService.isAvailable
-        let allowed = EventKitService.status(for: .event) == .fullAccess
-            && EventKitService.status(for: .reminder) == .fullAccess
-        accessItem.title = allowed ? "Calendar and Reminders: Allowed" : "Allow Calendar and Reminders Access…"
-        accessItem.isEnabled = !allowed
-    }
-
-    @objc private func requestCalendarAccess() {
-        // Come forward so the prompts do too.
-        NSApp.activate()
-        Task { @MainActor in
-            var problems: [EventKitService.AccessError] = []
-            for type in [EKEntityType.event, .reminder] {
-                do {
-                    try await EventKitService.shared.ensureAccess(to: type)
-                } catch let error as EventKitService.AccessError {
-                    problems.append(error)
-                } catch {
-                    problems.append(.init(message: error.localizedDescription, detail: ""))
-                }
-            }
-            updateAccessItem()
-            if problems.isEmpty {
-                Log.info("calendar and reminders access allowed")
-                overlay?.flashNotice("Calendar and Reminders access allowed", symbol: "checkmark.circle")
-            } else {
-                let text = problems.map(\.message).joined(separator: "; ")
-                Log.error("access: \(text)")
-                overlay?.flashNotice(text, symbol: "exclamationmark.triangle")
-                // Straight to the place it can be changed.
-                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
-                    NSWorkspace.shared.open(url)
-                }
-            }
-        }
     }
 
     @discardableResult
@@ -275,50 +366,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return item
     }
 
-    @objc private func reloadConfig() {
-        store.reload()
+    func menuWillOpen(_ menu: NSMenu) {
+        updateAccessItem()
     }
+
+    /// Shown only while there's something to do about it.
+    private func updateAccessItem() {
+        let allowed = EventKitService.status(for: .event) == .fullAccess
+            && EventKitService.status(for: .reminder) == .fullAccess
+        accessItem.isHidden = !EventKitService.isAvailable || allowed
+    }
+
+    @objc private func openSettings() { showSettings() }
+
+    @objc private func reloadConfig() { store.reload() }
 
     @objc private func openConfigFolder() {
-        let folder = store.url.deletingLastPathComponent()
-        NSWorkspace.shared.activateFileViewerSelecting([store.url.hasDirectoryPath ? folder : store.url])
+        NSWorkspace.shared.activateFileViewerSelecting([store.url])
     }
 
-    @objc private func togglePlacement(_ sender: NSMenuItem) {
-        guard let overlay else { return }
-        overlay.placement = overlay.placement == .mainScreen ? .screenWithCursor : .mainScreen
-        sender.state = overlay.placement == .mainScreen ? .on : .off
+    @objc private func toggleDryRun() {
+        settings.dryRun.toggle()
     }
 
-    @objc private func toggleDryRun(_ sender: NSMenuItem) {
-        dryRun.toggle()
-        sender.state = dryRun ? .on : .off
-        Log.info(dryRun ? "dry run: on" : "dry run: off — actions will run")
-    }
-
-    @objc private func toggleLogin(_ sender: NSMenuItem) {
-        let service = SMAppService.mainApp
-        do {
-            if service.status == .enabled {
-                try service.unregister()
-            } else {
-                try service.register()
-            }
-        } catch {
-            Log.error("open at login: \(error.localizedDescription)")
-            overlay?.flashNotice("Couldn't change Open at Login: \(error.localizedDescription)",
-                                 symbol: "exclamationmark.triangle")
-        }
-        sender.state = service.status == .enabled ? .on : .off
-        if service.status == .requiresApproval {
-            overlay?.flashNotice("Approve KeybowNotes in System Settings → General → Login Items",
-                                 symbol: "person.badge.key")
-            SMAppService.openSystemSettingsLoginItems()
-        }
-    }
-
-    @objc private func testOverlay() {
-        overlay?.flashNotice("The overlay appears here", symbol: "rectangle.inset.filled.and.person.filled")
+    @objc private func askForCalendarAccess() {
+        Task { await requestCalendarAccess() }
     }
 
     // MARK: - Logging
@@ -327,14 +399,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch event {
         case .connected(let path):
             connectionItem.title = "Keybow: port open, waiting for a reply (\((path as NSString).lastPathComponent))"
+            settings.keybowStatus = "Port open, waiting for a reply"
         case .disconnected(let reason):
             connectionItem.title = "Keybow: not connected"
+            settings.keybowStatus = "Not connected"
             Log.info("disconnected: \(reason)")
         case .message(.hello(let version)):
             connectionItem.title = "Keybow: connected (protocol \(version))"
+            settings.keybowStatus = "Connected"
             Log.info("device: HELLO, protocol \(version)")
         case .message(.pong):
-            if !connectionItem.title.hasPrefix("Keybow: connected") { connectionItem.title = "Keybow: connected" }
+            if !connectionItem.title.hasPrefix("Keybow: connected") {
+                connectionItem.title = "Keybow: connected"
+                settings.keybowStatus = "Connected"
+            }
         case .message(.deviceError(let text)):
             // Usually something else writing to the port.
             Log.error("device: ERR \(text)")

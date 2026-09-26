@@ -1,6 +1,6 @@
 # KeybowNotes — design
 
-**Status:** working end to end, packaged as KeybowNotes.app, with EventKit; the settings window is next. Written after the spikes in
+**Status:** working end to end: packaged as KeybowNotes.app, with EventKit and a settings window. Written after the spikes in
 [../spikes/FINDINGS.md](../spikes/FINDINGS.md), which settled the Notes, Calendar
 and Messages questions.
 
@@ -113,6 +113,17 @@ entry points. Only the main tree is required; the others are optional.
   more with side trees, where every key starts something and the row 3 tree
   reaches an action in two presses. Configurable, including off.
 - **Idle timeout:** an incomplete selection clears itself after ~10 seconds.
+
+### Settings
+
+Settings that belong to this Mac rather than the tree live in UserDefaults and
+are edited in a settings window: the overlay's screen (the pointer's, the one
+with the menu bar, or a named display — falling back to the pointer's when that
+one isn't connected), key brightness, dry run, open at login, which config file
+to load, and the default calendar and reminders list, chosen from your own and
+stored by permanent identifier. Timings can live in either place: the config
+file sets them, and a slider in the window overrides the file's value only once
+it is moved, with "Use the Config File's Timings" to undo that.
 
 ### Overlay
 
@@ -443,4 +454,4 @@ from template values.
 7. Spikes for the unknowns above: channels in Discord and Meshtastic, Claude projects.
 8. ✅ Packaging: signed universal KeybowNotes.app, config reloading, Open at Login.
 9. ✅ EventKit for Calendar and Reminders.
-10. Settings window: overlay screen, timeouts, config file location, default calendar.
+10. ✅ Settings window: overlay screen, timings, key brightness, default calendar and list, config file, open at login.

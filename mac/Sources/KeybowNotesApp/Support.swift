@@ -104,6 +104,11 @@ final class ConfigStore {
         }
     }
 
+    func stopWatching() {
+        timer?.invalidate()
+        timer = nil
+    }
+
     private func load() {
         lastModified = modificationDate()
         do {

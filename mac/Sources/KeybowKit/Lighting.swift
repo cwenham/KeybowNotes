@@ -12,6 +12,8 @@ public struct Lighting {
     public var optionLevel: Double = 0.35
     public var escapeLevel: Double = 0.1
     public var invalidColour = KeyColour(red: 255, green: 0, blue: 0)
+    /// Scales everything, the invalid-press flash included: 1 is full strength.
+    public var brightness: Double = 1
 
     public init() {}
 
@@ -59,7 +61,7 @@ public struct Lighting {
         if let key, key >= 0, key < colours.count {
             colours[key] = invalidColour
         }
-        return colours
+        return brightness >= 1 ? colours : colours.map { scale($0, by: brightness) }
     }
 
     private func scale(_ colour: KeyColour, by factor: Double) -> KeyColour {

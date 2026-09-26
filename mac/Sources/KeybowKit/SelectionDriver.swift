@@ -34,7 +34,7 @@ public final class SelectionDriver: @unchecked Sendable {
     private let queue = DispatchQueue(label: "SelectionDriver")
     private let connection: KeybowConnection
     private var config: KeybowConfig
-    private let lighting: Lighting
+    private var lighting: Lighting
     private let flashDuration: TimeInterval = 0.2
 
     private var navigator: Navigator
@@ -130,6 +130,14 @@ public final class SelectionDriver: @unchecked Sendable {
             config = newConfig
             navigator = Navigator(config: newConfig)
             flash = nil
+            refresh()
+        }
+    }
+
+    /// 0.05 to 1: dims every key, for a dark room.
+    public func setBrightness(_ value: Double) {
+        queue.async { [self] in
+            lighting.brightness = min(1, max(0.05, value))
             refresh()
         }
     }

@@ -8,7 +8,8 @@ import KeybowKit
 // terminal, for development:
 //
 //   swift run keybownotes [--config file.json] [--screen cursor|main] [--dry-run]
-//                         [--simulate "4 8 12"] [--pace 1.2] [--debug-snapshots dir]
+//                         [--show-settings] [--simulate "4 8 12"] [--pace 1.2]
+//                         [--debug-snapshots dir]
 //
 // --dry-run shows what each action would do without doing it.
 // --simulate presses the given keys (0-15) in turn, with or without a Keybow,
@@ -17,12 +18,14 @@ import KeybowKit
 setvbuf(stdout, nil, _IOLBF, 0)
 
 struct Options {
+    /// Each of these, when given, wins for this run without being saved.
     var configPath: String?
-    var placement = OverlayPlacement.screenWithCursor
+    var placement: OverlayPlacement?
     var simulated: [Int] = []
     var pace: TimeInterval = 1.2
     var debugDirectory: URL?
     var dryRun = false
+    var showSettings = false
 }
 
 func fail(_ message: String) -> Never {
@@ -52,6 +55,8 @@ func parseOptions() -> Options {
             options.pace = arguments.next().flatMap(TimeInterval.init) ?? options.pace
         case "--dry-run":
             options.dryRun = true
+        case "--show-settings":
+            options.showSettings = true
         case "--debug-snapshots":
             guard let path = arguments.next() else { fail("--debug-snapshots needs a directory") }
             let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
@@ -85,11 +90,8 @@ MainActor.assumeIsolated {
     if options.configPath == nil, let installed = ConfigStore.installDefaultsIfNeeded() {
         Log.info(installed)
     }
-    let url = options.configPath.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
-        ?? ConfigStore.defaultURL
-    let store = ConfigStore(url: url)
 
-    let delegate = AppDelegate(options: options, store: store)
+    let delegate = AppDelegate(options: options)
     app.delegate = delegate
     app.run()
 }

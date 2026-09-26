@@ -7,11 +7,17 @@ let package = Package(
     products: [
         .library(name: "KeybowKit", targets: ["KeybowKit"]),
         .executable(name: "keybow", targets: ["keybow"]),
+        .executable(name: "keybownotes-demo", targets: ["KeybowNotesDemo"]),
     ],
     targets: [
         .target(name: "KeybowKit", swiftSettings: [.swiftLanguageMode(.v5)]),
         .executableTarget(
             name: "keybow",
+            dependencies: ["KeybowKit"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .executableTarget(
+            name: "KeybowNotesDemo",
             dependencies: ["KeybowKit"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),

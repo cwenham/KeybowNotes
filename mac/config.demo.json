@@ -1,0 +1,177 @@
+{
+  "version": 2,
+
+  "defaults": {
+    "colour": "202020",
+    "commitDelayMs": 1200,
+    "idleTimeoutMs": 12000,
+    "longPressCancelMs": 1500,
+    "dates": { "todayOffsetMinutes": 30, "defaultTime": "09:00" }
+  },
+
+  "contacts": {
+    "Alex Example": { "phone": "+15550100", "email": "alex@example.com" },
+    "Sam Sample": { "phone": "", "email": "sam@example.com" }
+  },
+
+  "projects": {
+    "Website": { "path": "~/Code/website" },
+    "Firmware": { "path": "~/Code/firmware" }
+  },
+
+  "lists": {
+    "when": [
+      { "label": "Today", "params": { "when": "today" } },
+      { "label": "Tomorrow", "params": { "when": "tomorrow" } },
+      { "label": "Next week", "params": { "when": "next week" } },
+      { "label": "Next month", "params": { "when": "next month" } }
+    ],
+    "rating": [
+      { "label": "Great" }, { "label": "Good" }, { "label": "Meh" }, { "label": "Rough" }
+    ]
+  },
+
+  "trees": {
+    "main": [
+      {
+        "label": "Work",
+        "colour": "0060ff",
+        "children": [
+          {
+            "label": "Code",
+            "children": [
+              { "label": "Website", "action": { "type": "app.open", "app": "Visual Studio Code", "bundleId": "com.microsoft.VSCode" } },
+              { "label": "Firmware", "action": { "type": "app.open", "app": "Thonny" } }
+            ]
+          },
+          {
+            "label": "Schedule",
+            "action": { "type": "calendar.createEvent" },
+            "children": [
+              { "label": "Meeting", "action": { "alertMinutes": 5 }, "children": "@when" },
+              { "label": "Deployment", "action": { "alertMinutes": 20 }, "children": "@when" }
+            ]
+          },
+          {
+            "label": "Contact",
+            "children": [
+              { "label": "Message", "action": { "type": "messages.compose" },
+                "children": [ { "label": "Alex Example" }, { "label": "Sam Sample" } ] },
+              { "label": "Mail", "action": { "type": "mail.compose" },
+                "children": [ { "label": "Alex Example" }, { "label": "Sam Sample" } ] }
+            ]
+          },
+          {
+            "label": "Notes",
+            "children": [
+              { "label": "Standup", "action": { "template": "standup.md" } },
+              { "label": "Work log", "action": { "type": "notes.append", "find": { "byName": "Work log — week {{isoWeek}}" } } }
+            ]
+          }
+        ]
+      },
+      {
+        "label": "Home",
+        "colour": "00c060",
+        "children": [
+          {
+            "label": "Groceries",
+            "action": { "type": "reminders.create", "list": "Shopping" },
+            "children": [ { "label": "Milk" }, { "label": "Bread" }, { "label": "Eggs" }, { "label": "Coffee" } ]
+          },
+          { "label": "Appointment", "action": { "type": "calendar.createEvent" }, "children": "@when" }
+        ]
+      },
+      {
+        "label": "Writing",
+        "colour": "ff8c00",
+        "children": [
+          { "label": "Characters", "children": [ { "label": "The Detective" }, { "label": "The Witness" } ] },
+          { "label": "Scenes" }
+        ]
+      },
+      {
+        "label": "Ideas",
+        "colour": "b060ff",
+        "children": [ { "label": "Inventions" }, { "label": "Stories" }, { "label": "Wild speculation" } ]
+      }
+    ],
+
+    "row2": [
+      {
+        "label": "Check-in",
+        "colour": "00c8c8",
+        "action": { "type": "notes.append", "find": { "byName": "Check-ins — {{date:MMMM yyyy}}" }, "folder": "Journal" },
+        "children": [
+          { "label": "Mood", "children": "@rating" },
+          { "label": "Energy", "children": "@rating" },
+          { "label": "Focus", "children": "@rating" }
+        ]
+      },
+      {
+        "label": "Capture",
+        "colour": "ffd000",
+        "children": [
+          { "label": "Clipboard", "children": [
+              { "label": "To inbox", "action": { "type": "notes.create", "folder": "Inbox", "title": "{{clipboard|Clipping}} — {{time}}" } },
+              { "label": "As task", "action": { "type": "reminders.create", "title": "{{clipboard|Task}}" } } ] },
+          { "label": "Quick note", "children": [
+              { "label": "Blank", "action": { "type": "notes.create", "folder": "Inbox", "title": "Note — {{datetime}}" } } ] }
+        ]
+      }
+    ],
+
+    "row3": [
+      {
+        "label": "Timer",
+        "colour": "ff6030",
+        "action": { "type": "reminders.create", "title": "Timer: {{leaf}}" },
+        "children": [
+          { "label": "5 min", "action": { "due": "+5m" } },
+          { "label": "15 min", "action": { "due": "+15m" } },
+          { "label": "25 min", "action": { "due": "+25m" } },
+          { "label": "50 min", "action": { "due": "+50m" } }
+        ]
+      },
+      {
+        "label": "Open",
+        "colour": "d0d0d0",
+        "action": { "type": "app.open" },
+        "children": [
+          { "label": "Notes", "action": { "app": "Notes" } },
+          { "label": "Calendar", "action": { "app": "Calendar" } },
+          { "label": "Mail", "action": { "app": "Mail" } }
+        ]
+      }
+    ],
+
+    "bottom": [
+      {
+        "label": "Home",
+        "colour": "ff40c0",
+        "action": { "type": "shortcut", "name": "{{level2}} {{level3}} {{leaf}}" },
+        "children": [
+          {
+            "label": "Lights",
+            "children": [
+              { "label": "Kitchen", "children": [ { "label": "On" }, { "label": "Off" }, { "label": "Dim" } ] },
+              { "label": "Lounge", "children": [ { "label": "On" }, { "label": "Off" }, { "label": "Movie" } ] }
+            ]
+          },
+          {
+            "label": "Heating",
+            "children": [
+              { "label": "Upstairs", "children": [ { "label": "Warm" }, { "label": "Cool" }, { "label": "Off" } ] },
+              { "label": "Downstairs", "children": [ { "label": "Warm" }, { "label": "Cool" }, { "label": "Off" } ] }
+            ]
+          }
+        ]
+      },
+      {
+        "label": "Journal",
+        "colour": "ff5050",
+        "action": { "type": "notes.append", "find": { "byName": "Journal — {{date:MMMM yyyy}}" }, "folder": "Journal" }
+      }
+    ]
+  }
+}

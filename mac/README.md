@@ -22,7 +22,28 @@ swift test
 | `OutlineConverter.swift` | A numbered outline into a config, reporting guesses and gaps |
 | `Navigator.swift` | The selection state machine across four trees; time is injected, so it tests without waiting |
 | `Lighting.swift` | Selection state into 16 key colours |
-| `SelectionDriver.swift` | Joins device to navigator: keys in, lights out, events published |
+| `SelectionDriver.swift` | Joins device to navigator: keys in, lights out, events and state snapshots published |
+| `Template.swift` | `{{placeholders}}`, fallbacks and date built-ins, reporting what is missing |
+| `ActionSummary.swift` | "New event · Meeting · Sun 27 Sep, 09:00" — what an action will do |
+
+## The demo app
+
+```bash
+swift run keybownotes-demo --config config.demo.json
+```
+
+A menu-bar app (no Dock icon) that drives the Keybow and shows a HUD overlay:
+which tree you are in, the path so far, the next row's choices laid out where
+they sit on the keypad, a mirror of the key lights, the commit countdown, and
+what the action *would* do — nothing is run yet. `config.demo.json` has made-up
+trees in all four positions.
+
+| Option | |
+|---|---|
+| `--screen main` | show on the display with the menu bar, rather than the one with the cursor |
+| `--simulate "4 8 12"` | press these keys (0-15) in turn, with or without a Keybow |
+| `--pace 1.5` | seconds between simulated presses |
+| `--debug-snapshots <dir>` | write each overlay state as a PNG and log its window frame |
 
 Two details that are easy to get wrong, both learned the hard way:
 

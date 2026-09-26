@@ -9,12 +9,20 @@
 #   -> DOWN <n> / UP <n>           key 0-15, numbered as you see them
 #   <- LEDS <96 hex chars>         16 colours, rrggbb each, logical order
 #   <- PING            -> PONG     heartbeat
+#   <- STOP            -> BYE      end this program, leaving the REPL free
 #   -> ERR <reason>                a line we could not act on
 #
 # If the host goes quiet the keys breathe red, so a Mac app that has died or
 # was never started is obvious rather than silently swallowing presses.
+#
+# Editors that auto-connect to RP2040 boards (MicroPico in VS Code, Thonny)
+# send Ctrl-C down the console to take over the REPL. That would stop this
+# program and leave the keypad dead, so Ctrl-C is ignored. To stop it on
+# purpose, send STOP on the data port or save a change to code.py.
 
 import time
+
+import supervisor
 
 import usb_cdc
 from pmk import PMK
@@ -83,7 +91,9 @@ def apply_leds(payload):
 def handle(line):
     global _host_last_seen, _host_present
 
-    line = line.strip()
+    # Printable ASCII only: a probing tool's control characters (Ctrl-C,
+    # Ctrl-A) would otherwise glue onto the front of a real command.
+    line = "".join(ch for ch in line if " " <= ch <= "~").strip()
     if not line:
         return
 
@@ -95,6 +105,10 @@ def handle(line):
 
     if line == "PING":
         send("PONG")
+    elif line == "STOP":
+        send("BYE")
+        set_all((0, 0, 0))
+        raise SystemExit
     elif line.startswith("LEDS "):
         apply_leds(line[5:])
     else:
@@ -110,7 +124,9 @@ def read_serial():
     waiting = serial.in_waiting
     if not waiting:
         return
-    _rx += serial.read(waiting)
+    # Carriage returns end lines too, so "\r"-terminated junk can't merge
+    # with the next command.
+    _rx += serial.read(waiting).replace(b"\r", b"\n")
     while b"\n" in _rx:
         raw, _, _rx = _rx.partition(b"\n")
         try:
@@ -148,18 +164,39 @@ if serial is None:
         keybow.update()
         time.sleep(0.1)
 
+def run():
+    global _host_present
+
+    while True:
+        keybow.update()
+        read_serial()
+        read_keys()
+
+        now = time.monotonic()
+        if _host_present and now - _host_last_seen > HOST_TIMEOUT_S:
+            _host_present = False
+        if not _host_present:
+            breathe(now)
+
+
 send("HELLO keybow %d" % PROTOCOL_VERSION)
 set_all((0, 0, 0))
 
 while True:
-    keybow.update()
-    read_serial()
-    read_keys()
-
-    now = time.monotonic()
-    if _host_present and now - _host_last_seen > HOST_TIMEOUT_S:
-        _host_present = False
-    if not _host_present:
-        breathe(now)
+    try:
+        run()
+    except KeyboardInterrupt:
+        print("KeybowNotes: ignored Ctrl-C from the console (an editor probing the board?)")
+    except Exception as error:
+        # Anything else: say what happened, show it on the keys, start again.
+        print("KeybowNotes crashed:")
+        try:
+            import traceback
+            traceback.print_exception(error)
+        except Exception:
+            print(repr(error))
+        set_all((60, 0, 60))
+        time.sleep(2)
+        supervisor.reload()
 
     time.sleep(0.005)

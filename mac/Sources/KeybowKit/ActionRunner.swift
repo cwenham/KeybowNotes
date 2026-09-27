@@ -129,6 +129,12 @@ public enum ActionRunner {
         case .openApp(let name, let bundleID, let open):
             return try await openApp(name: name, bundleID: bundleID, open: open)
 
+        case .module(let request):
+            guard let module = ModuleRegistry.shared.module(handling: request.type) else {
+                throw RunError("Nothing here runs “\(request.type)” actions")
+            }
+            return await module.run(request, now: Date())
+
         case .runShortcut(let name, let input):
             try await runShortcut(name, input: input)
             return .success("Ran “\(name)”")

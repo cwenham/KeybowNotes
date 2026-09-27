@@ -140,6 +140,7 @@ An annotation is either a **word** or a **pair**.
 | `Timer` | start a timer in Clock | `"type": "clock.timer"` |
 | `Maps` | search in Maps | `"type": "maps.search"` |
 | `Music` | play a playlist or album in Music | `"type": "music.play"` |
+| `Stopwatch` | KeybowNotes' own stopwatch (a module) | `"type": "stopwatch"` |
 | `append` | add to a running note rather than make a new one | `"type": "notes.append"` |
 | `new`, `create` | make a new note | `"type": "notes.create"` |
 | `something.md` | a template (§8) | `"template": "something.md"` |
@@ -572,7 +573,7 @@ A reminder branch used as a timer — `[Reminders]` leaves with `due: +5m` —
 becomes a Clock timer by changing `Reminders` to `Timer`.
 
 Clock's **stopwatch** can't be started this way: neither Clock nor Shortcuts
-offers any automation for it.
+offers any automation for it. KeybowNotes has a stopwatch of its own instead.
 
 ### `maps.search` — search in Maps
 
@@ -609,6 +610,31 @@ time, macOS asks whether KeybowNotes may control Music.
    2. Party [shuffle: true]
    3. Kind of Blue [album: Kind of Blue, artist: Miles Davis]
 ```
+
+### `stopwatch` — KeybowNotes' own stopwatch
+
+| Field | |
+|---|---|
+| `do` | `toggle`, `start`, `stop`, `lap` or `reset`. Without it, the leaf's label decides — *Start*, *Stop*, *Pause*, *Lap*, *Split*, *Reset* — and anything else toggles. |
+
+```
+# row 3
+1. Stopwatch [Stopwatch]
+   1. Start
+   2. Stop
+   3. Lap
+   4. Reset
+```
+
+A lone `Stopwatch [Stopwatch]` key starts and stops it. While it has a time it
+shows at the foot of the overlay and in the menu bar; while it runs, the key
+that leads to it breathes. It keeps running through a restart. Its time is a
+value for any action: `{{stopwatch}}` (3:12), `{{stopwatch.seconds}}` (192) and
+`{{stopwatch.laps}}` (1:05, 2:07), so a note can log it:
+`Log [append, entry: "**{{datetime}}** — {{stopwatch}}"]`.
+
+The stopwatch is a **module** — see MODULES.md — so its keyword, field and
+values come from the module, not the core.
 
 ### `clipboard.copy` — put text on the clipboard
 
@@ -781,6 +807,7 @@ window instead of the file. Two of them feed into the language:
 
 **Outline words:** `Notes`, `Calendar`, `Reminders`, `Messages`, `Mail`, `Call`,
 `FaceTime`, `Link`, `Browser`, `Copy`, `Clipboard`, `Timer`, `Maps`, `Music`,
+`Stopwatch` (and any other module's keywords),
 `append`, `new`, `create`, `… alert`, `….md`, `@…`, and the app names the
 compiler knows.
 
@@ -792,10 +819,12 @@ action fields listed in §2.
 
 **Action types:** `notes.create`, `notes.append`, `calendar.createEvent`,
 `reminders.create`, `messages.compose`, `mail.compose`, `phone.call`, `app.open`,
-`url.open`, `clipboard.copy`, `clock.timer`, `maps.search`, `music.play`, `shortcut`.
+`url.open`, `clipboard.copy`, `clock.timer`, `maps.search`, `music.play`, `shortcut`,
+and from modules, `stopwatch`.
 
 **Computed values:** `leaf`, `parent`, `level1`–`level4`, `path`, `folderPath`,
-`parentPath`, `tree`, `contact.*`, `project.*`, `selection`, `clipboard`, `frontApp`, `date`,
+`parentPath`, `tree`, `contact.*`, `project.*`, `selection`, `clipboard`, `frontApp`,
+`stopwatch`, `stopwatch.*`, `date`,
 `time`, `datetime`, `weekday`, `isoWeek`, and `when` by convention.
 
 **Tree names:** `main`, `row2`, `row3`, `bottom`.

@@ -27,7 +27,7 @@ struct InspectorPane: View {
 
 /// The fields each action type uses, in the order they're shown.
 private struct FieldSpec {
-    enum Kind { case text, number, flag }
+    enum Kind { case text, number, flag, choice([String]) }
 
     let key: String
     let title: String
@@ -81,7 +81,26 @@ private let fieldsByType: [String: [FieldSpec]] = [
                        .init(key: "template", title: "Template")],
 ]
 
-private let typeNames: [(String?, String)] = [
+/// The built-in types, then any a module adds.
+private var typeNames: [(String?, String)] {
+    builtInTypeNames + ModuleRegistry.shared.actionTypes.map { ($0.type, $0.title) }
+}
+
+private func fields(for type: String) -> [FieldSpec]? {
+    if let builtIn = fieldsByType[type] { return builtIn }
+    return ModuleRegistry.shared.actionType(type)?.fields.map { field in
+        let kind: FieldSpec.Kind
+        switch field.kind {
+        case .text: kind = .text
+        case .number: kind = .number
+        case .flag: kind = .flag
+        case .choice(let words): kind = .choice(words)
+        }
+        return FieldSpec(key: field.key, title: field.title, kind: kind, hint: field.hint)
+    }
+}
+
+private let builtInTypeNames: [(String?, String)] = [
     (nil, "Inherit"), ("notes.create", "New note"), ("notes.append", "Add to a note"),
     ("calendar.createEvent", "Calendar event"), ("reminders.create", "Reminder"),
     ("messages.compose", "Message"), ("mail.compose", "Email"), ("phone.call", "Phone call"),
@@ -228,7 +247,7 @@ private struct NodeInspector: View {
                 }
                 .labelsHidden()
             }
-            if let type = action?.type, let fields = fieldsByType[type] {
+            if let type = action?.type, let fields = fields(for: type) {
                 ForEach(fields, id: \.key) { spec in
                     fieldRow(spec)
                 }
@@ -334,6 +353,25 @@ private struct NodeInspector: View {
                 }
                 .labelsHidden()
                 .fixedSize()
+            }
+        case .choice(let words):
+            InspectorRow(spec.title) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Picker(spec.title, selection: Binding(
+                        get: { own.map { $0.lowercased() } ?? "" },
+                        set: { choice in setField(spec.key, choice.isEmpty ? nil : choice) }
+                    )) {
+                        Text(effectiveValue(spec.key).isEmpty ? "Inherit" : "Inherit (\(effectiveValue(spec.key)))").tag("")
+                        ForEach(words, id: \.self) { Text($0.capitalized).tag($0) }
+                        // A value written by hand that isn't one of the choices.
+                        if let own, !words.contains(own.lowercased()) { Text(own).tag(own.lowercased()) }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    if !spec.hint.isEmpty {
+                        Text(spec.hint).font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
             }
         default:
             if spec.key == "app" {

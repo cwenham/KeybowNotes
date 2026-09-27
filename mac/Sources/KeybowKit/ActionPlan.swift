@@ -51,6 +51,8 @@ public enum ActionPlan: Equatable, Sendable {
     /// An album from the library, in disc and track order; `artist` narrows
     /// it down when two albums share a name.
     case playAlbum(String, artist: String)
+    /// An action for a module to carry out.
+    case module(ModuleRequest)
 }
 
 public struct PlannedAction: Equatable, Sendable {
@@ -71,6 +73,8 @@ public enum ActionPlanError: Error, Equatable, CustomStringConvertible {
     case notALink(String)
     case notALength(String)
     case timerTooLong(String)
+    /// A module's own reason.
+    case module(String)
 
     public var description: String {
         switch self {
@@ -86,6 +90,8 @@ public enum ActionPlanError: Error, Equatable, CustomStringConvertible {
             return "\"\(type)\" isn't an action I know how to run."
         case .nothingSelected(let app, let field):
             return "Nothing is selected\(app.isEmpty ? "" : " in \(app)"), and the \(field) needs it."
+        case .module(let reason):
+            return reason
         case .notALength(let text):
             return "“\(text)” isn't a length of time or a time of day."
         case .timerTooLong(let text):
@@ -300,8 +306,26 @@ private struct Planner {
             return .copyToClipboard(selection.labels.last ?? "")
 
         default:
-            throw ActionPlanError.unsupported(action.type)
+            guard let module = ModuleRegistry.shared.module(handling: action.type) else {
+                throw ActionPlanError.unsupported(action.type)
+            }
+            let request = moduleRequest()
+            if let problem = module.problem(with: request) { throw ActionPlanError.module(problem) }
+            return .module(request)
         }
+    }
+
+    /// Every text field, with its placeholders filled in.
+    private mutating func moduleRequest() -> ModuleRequest {
+        var fields: [String: String] = [:]
+        for (key, value) in action.fields {
+            if case .string = value {
+                fields[key] = optional(key)
+            } else if let text = value.stringValue {
+                fields[key] = text
+            }
+        }
+        return ModuleRequest(type: action.type, fields: fields, labels: selection.labels)
     }
 
     // MARK: - Values

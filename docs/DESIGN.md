@@ -32,6 +32,7 @@ editable config file, rather than something reflashed onto the device.
 | Transport | USB CDC serial, on the **data** port, with the console left free for debugging |
 | Mac app | Swift / SwiftUI, universal binary, minimum macOS 15 (Sequoia), menu-bar agent (`LSUIElement`) |
 | Config | JSON on disk, reloaded when it changes |
+| Modules | Auxiliary features — the stopwatch — as separate Swift targets behind one interface in KeybowKit; see [MODULES.md](MODULES.md) |
 
 Not sandboxed, and not distributed through the App Store: AppleScript automation
 makes sandboxing impractical.
@@ -273,9 +274,15 @@ Every text field in an action is expanded through the template system first.
 | `calendar.createEvent` | EventKit (AppleScript in dev runs) | Created, then opened for editing via `ical://ekevent/<id>?method=show&options=more`. Calendar by `calendarId` (stable), `calendar` (name), else your default calendar. `alertMinutes` for an alert. |
 | `messages.compose` | `sms:` URL | Opens a conversation with the text filled in. **Never sends.** |
 | `mail.compose` | AppleScript | Opens a real draft window, ready to edit. |
+| `phone.call` | `tel:` / `facetime-audio:` URL | Through the iPhone, or FaceTime audio. macOS asks before dialling. |
 | `app.open` | `NSWorkspace` | Opens an app (by `bundleId`, else `app` name), optionally with a file, folder or URL. |
-| `openURL` | `NSWorkspace` | For apps with URL schemes (Things, OmniFocus, Drafts, Obsidian, Bear…). |
+| `url.open` | `NSWorkspace` | Any link in its default app — web links in the browser, `things:`, `obsidian:`… — or a file. |
+| `clipboard.copy` | `NSPasteboard` | Text, a template, or the label. |
+| `clock.timer` | `shortcuts run` | Clock has no scripting; a helper shortcut runs Start Timer. |
+| `maps.search` | `maps:` URL | Opens Maps searching. |
+| `music.play` | AppleScript | A playlist, or an album in order through a playlist of KeybowNotes' own. |
 | `shortcut` | `shortcuts run` | Escape hatch for anything supporting Shortcuts. |
+| `stopwatch` | module | Built in as a module; see [MODULES.md](MODULES.md). |
 
 Deliberately excluded: an "arbitrary AppleScript" action. It would let a config
 file run any code; revisit only if a real need appears.

@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var settingsWindow: SettingsWindowController?
     private var editorWindow: EditorWindowController?
+    /// Keeps the menu bar's clock up to date while a module's clock runs.
+    private var moduleClock: Timer?
 
     private let connectionItem = NSMenuItem(title: "Keybow: looking…", action: nil, keyEquivalent: "")
     private let configItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
@@ -67,6 +69,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         watch(store)
         settings.onChange = { [weak self] change in self?.settingsChanged(change) }
+        Modules.host.onChange = { [weak self] in self?.refreshModules() }
+        refreshModules()
 
         Log.info("KeybowNotes \(versionDescription) running with \(store.url.path)\(dryRun ? " (dry run)" : "")")
         if let problem = store.problem {
@@ -155,6 +159,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func applyConfig() {
         driver?.replaceConfig(config)
         overlay?.config = config
+        refreshModules()
+    }
+
+    // MARK: - Modules
+
+    /// Shows what the modules are doing: on the overlay, in the menu bar, and
+    /// by pulsing the keys that lead to a busy module's actions.
+    private func refreshModules() {
+        let registry = ModuleRegistry.shared
+        let statuses = registry.statuses(now: Date())
+        overlay?.setModuleStatuses(statuses)
+
+        let busyTypes = Set(statuses.filter(\.lightsKeys)
+            .compactMap { registry.module(id: $0.moduleID) }
+            .flatMap { $0.manifest.actionTypes.map(\.type) })
+        driver?.setPulsingKeys(busyTypes.isEmpty ? [] : config.entryKeys(toActionTypes: busyTypes))
+        updateMenuBarClock(statuses.first)
+    }
+
+    private func updateMenuBarClock(_ status: ModuleStatus?) {
+        moduleClock?.invalidate()
+        moduleClock = nil
+        guard let item = statusItem, let button = item.button else { return }
+        guard let status else {
+            item.length = NSStatusItem.squareLength
+            button.title = ""
+            button.imagePosition = .imageOnly
+            button.toolTip = nil
+            return
+        }
+        item.length = NSStatusItem.variableLength
+        button.imagePosition = .imageLeading
+        button.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        button.toolTip = [status.title, status.detail].compactMap { $0 }.joined(separator: " — ")
+        button.title = " " + ModuleClock.text(for: status)
+        guard status.countingFrom != nil else { return }
+        let timer = Timer(timeInterval: 0.25, repeats: true) { _ in
+            MainActor.assumeIsolated {
+                let text = " " + ModuleClock.text(for: status)
+                if button.title != text { button.title = text }
+            }
+        }
+        // Common modes, so it keeps counting while the menu is open.
+        RunLoop.main.add(timer, forMode: .common)
+        moduleClock = timer
     }
 
     private func updateConfigStatus() {
@@ -277,7 +326,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// needed. This app never takes focus, so the frontmost app is whatever you
     /// were using when you pressed the key.
     private func environment() -> [String: String] {
-        var values: [String: String] = [:]
+        var values = ModuleRegistry.shared.values(now: Date())
         if let text = NSPasteboard.general.string(forType: .string) {
             values["clipboard"] = text.trimmingCharacters(in: .whitespacesAndNewlines)
         }

@@ -5,16 +5,21 @@ struct OverlayView: View {
     let model: OverlayModel
 
     var body: some View {
-        Group {
-            if let outcome = model.outcome {
-                OutcomeView(outcome: outcome)
-            } else if let notice = model.notice {
-                Label(notice.text, systemImage: notice.symbol)
-                    .font(.system(size: 15, weight: .medium))
-            } else if !model.snapshot.isIdle {
-                ChoosingView(snapshot: model.snapshot, pending: model.pendingSummary)
-            } else {
-                Color.clear.frame(height: 1)
+        VStack(alignment: .leading, spacing: 14) {
+            Group {
+                if let outcome = model.outcome {
+                    OutcomeView(outcome: outcome)
+                } else if let notice = model.notice {
+                    Label(notice.text, systemImage: notice.symbol)
+                        .font(.system(size: 15, weight: .medium))
+                } else if !model.snapshot.isIdle {
+                    ChoosingView(snapshot: model.snapshot, pending: model.pendingSummary)
+                } else {
+                    Color.clear.frame(height: 1)
+                }
+            }
+            ForEach(model.moduleStatuses, id: \.moduleID) { status in
+                ModuleStatusRow(status: status)
             }
         }
         .padding(20)
@@ -304,8 +309,40 @@ private struct ActionHeadline: View {
         case "clock.timer": return "timer"
         case "maps.search": return "map"
         case "music.play": return "music.note"
-        default: return "questionmark.circle"
+        default: return ModuleRegistry.shared.actionType(summary.type)?.symbol ?? "questionmark.circle"
         }
+    }
+}
+
+// MARK: - Modules
+
+/// A module at work in the background: "⏱ Stopwatch  3:12  Lap 2: 1:05".
+private struct ModuleStatusRow: View {
+    let status: ModuleStatus
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: status.symbol)
+                .foregroundStyle(.secondary)
+            Text(status.title)
+                .foregroundStyle(.secondary)
+            Group {
+                if let since = status.countingFrom {
+                    Text(since, style: .timer)
+                } else {
+                    Text(status.text)
+                }
+            }
+            .font(.system(size: 13, weight: .semibold).monospacedDigit())
+            if let detail = status.detail {
+                Text(detail).foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.system(size: 12, weight: .medium))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.white.opacity(0.07), in: Capsule())
     }
 }
 

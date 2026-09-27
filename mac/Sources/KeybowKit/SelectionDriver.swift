@@ -142,6 +142,15 @@ public final class SelectionDriver: @unchecked Sendable {
         }
     }
 
+    /// Idle keys to pulse: those leading to a module that's busy.
+    public func setPulsingKeys(_ keys: Set<Int>) {
+        queue.async { [self] in
+            guard lighting.pulsing != keys else { return }
+            lighting.pulsing = keys
+            refresh()
+        }
+    }
+
     /// Feeds a key event in as though it came from the device. The device's own
     /// events arrive this way too; the demo uses it to simulate presses.
     public func inject(_ message: DeviceMessage) {

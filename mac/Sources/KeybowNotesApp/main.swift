@@ -94,6 +94,7 @@ MainActor.assumeIsolated {
         Log.info(installed)
     }
 
+    Modules.registerAll()
     let delegate = AppDelegate(options: options)
     app.delegate = delegate
     app.run()

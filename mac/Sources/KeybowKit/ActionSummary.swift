@@ -21,7 +21,9 @@ public struct ActionSummary: Equatable, Sendable {
                 calendar: Calendar = .current, environment: [String: String] = [:]) {
         let action = selection.action ?? ActionSpec(type: "none", fields: [:])
         var missing: [String] = []
-        let params = Self.standIns.merging(environment) { _, fetched in fetched }
+        let params = Self.standIns
+            .merging(ModuleRegistry.shared.values(now: now)) { _, live in live }
+            .merging(environment) { _, fetched in fetched }
             .merging(selection.params) { _, fromTree in fromTree }
 
         func expand(_ text: String?) -> String {
@@ -145,7 +147,16 @@ public struct ActionSummary: Equatable, Sendable {
                 details.append("\u{201C}\(text.count > 60 ? String(text.prefix(60)) + "…" : text)\u{201D}")
             }
         default:
-            break
+            guard let module = ModuleRegistry.shared.module(handling: action.type) else { break }
+            var fields: [String: String] = [:]
+            for (key, value) in action.fields {
+                if case .string(let text) = value { fields[key] = expand(text) } else { fields[key] = value.stringValue }
+            }
+            let summary = module.summary(of: ModuleRequest(type: action.type, fields: fields, labels: selection.labels),
+                                         now: now)
+            verb = summary.verb
+            subject = summary.subject
+            details = summary.details
         }
 
         self.type = action.type

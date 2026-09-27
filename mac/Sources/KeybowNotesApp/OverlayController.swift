@@ -26,6 +26,8 @@ final class OverlayModel {
     /// How the last selection ended; shown briefly before fading.
     var outcome: Outcome?
     var notice: Notice?
+    /// What modules are doing in the background: a running stopwatch.
+    var moduleStatuses: [ModuleStatus] = []
 }
 
 /// Where the overlay appears.
@@ -183,6 +185,12 @@ final class OverlayController {
         model.notice = nil
         show()
         hide(after: duration)
+    }
+
+    func setModuleStatuses(_ statuses: [ModuleStatus]) {
+        guard statuses != model.moduleStatuses else { return }
+        model.moduleStatuses = statuses
+        if panel.isVisible { DispatchQueue.main.async { [weak self] in self?.fitAndPlace() } }
     }
 
     /// Something to show without a selection, e.g. from the menu.

@@ -7,6 +7,8 @@ import Foundation
 /// - the row in play shows its options dimmed
 /// - in a side tree, the main tree's top row glows faintly: pressing it escapes
 /// - rows that cannot be used yet stay dark
+/// - while idle, keys in `pulsing` breathe in their own colours: a module is
+///   busy behind them, like a running stopwatch
 public struct Lighting {
     public var chosenLevel: Double = 1.0
     public var optionLevel: Double = 0.35
@@ -14,10 +16,15 @@ public struct Lighting {
     public var invalidColour = KeyColour(red: 255, green: 0, blue: 0)
     /// Scales everything, the invalid-press flash included: 1 is full strength.
     public var brightness: Double = 1
+    /// Idle keys to pulse.
+    public var pulsing: Set<Int> = []
+    /// One breath, dim to bright and back.
+    public var pulsePeriod: TimeInterval = 2
 
     public init() {}
 
-    public func colours(for navigator: Navigator, config: KeybowConfig, flashing key: Int? = nil) -> [KeyColour] {
+    public func colours(for navigator: Navigator, config: KeybowConfig, flashing key: Int? = nil,
+                        now: Date = Date()) -> [KeyColour] {
         var colours = [KeyColour](repeating: .off, count: KeybowProtocol.keyCount)
 
         func paint(row: Int, nodes: [TreeNode?], level: Double) {
@@ -53,8 +60,16 @@ public struct Lighting {
                 paint(row: top, nodes: config.roots(.main), level: escapeLevel)
             }
         } else {
+            // Rising from the idle level to full and back, smoothly.
+            let phase = now.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: pulsePeriod) / pulsePeriod
+            let pulseLevel = optionLevel + (chosenLevel - optionLevel) * (0.5 - 0.5 * cos(2 * .pi * phase))
             for tree in TreeKind.allCases {
                 paint(row: tree.startRow, nodes: config.roots(tree), level: optionLevel)
+                for (column, node) in config.roots(tree).enumerated() {
+                    let key = KeybowProtocol.key(row: tree.startRow, column: column)
+                    guard let node, pulsing.contains(key) else { continue }
+                    colours[key] = scale(node.colour ?? config.defaultColour, by: pulseLevel)
+                }
             }
         }
 

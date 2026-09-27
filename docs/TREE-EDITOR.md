@@ -169,6 +169,9 @@ For the selected node:
   force and where it comes from; **Use Inherited** removes the node's own. Writes
   `colour: rrggbb`. Dragging in the colour panel is written once it settles, so
   it's one undo step.
+- **Module types** — a module's action types are in the Type menu with the
+  built-in ones, and its fields show like theirs; a field with a few set
+  values, like the stopwatch's *Do*, is a menu.
 - **Clock timer setup** — for *Clock timer*, if the helper shortcut doesn't
   exist yet, the steps to make it, with **Open Shortcuts**.
 - **Template** — when the action uses one, the file itself, editable in place

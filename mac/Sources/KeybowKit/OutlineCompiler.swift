@@ -81,6 +81,25 @@ public enum OutlineCompiler {
         "app", "bundleId", "open", "url", "target", "name", "input", "via", "text",
         "shortcut", "query", "playlist", "album", "artist", "shuffle",
     ]
+    /// A built-in action field, or one a module adds.
+    public static func isActionField(_ key: String) -> Bool {
+        actionFields.contains(key) || ModuleRegistry.shared.fields.contains { $0.key == key }
+    }
+
+    /// The type a keyword names, built in or from a module.
+    public static func actionType(forKeyword word: String) -> String? {
+        let lower = word.lowercased()
+        return actionTypeWords[lower] ?? ModuleRegistry.shared.keywords[lower]
+    }
+
+    static func isNumericField(_ key: String) -> Bool {
+        numericFields.contains(key) || ModuleRegistry.shared.fields.contains { $0.key == key && $0.kind == .number }
+    }
+
+    static func isBooleanField(_ key: String) -> Bool {
+        booleanFields.contains(key) || ModuleRegistry.shared.fields.contains { $0.key == key && $0.kind == .flag }
+    }
+
     static let numericFields: Set<String> = ["alertMinutes", "guards.maxBodyBytes"]
     static let booleanFields: Set<String> = ["createIfMissing", "show", "guards.refuseInlineImages", "shuffle"]
     static let numericDefaults: Set<String> = [
@@ -102,14 +121,14 @@ public enum OutlineCompiler {
             if lower.hasSuffix(".md") { return .template }
             if lower == "append" { return .noteMode("notes.append") }
             if lower == "new" || lower == "create" { return .noteMode("notes.create") }
-            if let type = actionTypeWords[lower] { return .actionType(type) }
+            if let type = actionType(forKeyword: lower) { return .actionType(type) }
             if let app = locateApp(word) { return .app(name: app.name, installed: app.installed) }
             if inheritedType == "app.open" { return .target }
             if word.first?.isUppercase == true { return .app(name: word, installed: false) }
             return .unknown
         case .pair(let key, let value):
             if key == "colour" || key == "color" { return .colour(valid: KeyColour(hex: value) != nil) }
-            if actionFields.contains(key) { return .field }
+            if isActionField(key) { return .field }
             return .parameter
         }
     }
@@ -297,9 +316,9 @@ private struct Compiler {
             case (.pair(let key, let value), .field):
                 if key == "type" {
                     declare(value)
-                } else if OutlineCompiler.numericFields.contains(key), let number = Double(value) {
+                } else if OutlineCompiler.isNumericField(key), let number = Double(value) {
                     set(key, .number(number))
-                } else if OutlineCompiler.booleanFields.contains(key) {
+                } else if OutlineCompiler.isBooleanField(key) {
                     set(key, .bool(["true", "yes", "on", "1"].contains(value.lowercased())))
                 } else {
                     set(key, .string(value))

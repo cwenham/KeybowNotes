@@ -1,5 +1,10 @@
 import Foundation
 import KeybowKit
+import KeybowModules
+
+// The same modules as the app, so their keywords compile. Nothing here needs
+// their state to outlive the run.
+BuiltInModules.registerAll(host: MemoryModuleHost())
 
 // A small command-line harness for the serial layer, so the device can be
 // exercised without a GUI. The real app will use KeybowKit the same way.

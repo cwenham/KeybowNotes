@@ -114,7 +114,7 @@ struct OutlinePane: NSViewRepresentable {
 @MainActor
 final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate, NSTextFieldDelegate {
     private enum AfterEdit {
-        case newSibling, indent, outdent, cancel, selectPrevious, selectNext
+        case newSibling, newChild, indent, outdent, cancel, selectPrevious, selectNext
     }
 
     let model: EditorModel
@@ -128,6 +128,9 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     /// A node just made with Return: left empty, it's removed again.
     private var justCreated: UUID?
     private var updatingSelection = false
+    /// The placeholder row the outline was last built with, for an empty key
+    /// that has no row of its own.
+    private var shownPending: OutlineLocation?
 
     private var highlighter: Highlighter { Highlighter(model: model) }
 
@@ -148,10 +151,21 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     // MARK: - Keeping up with the model
 
     func sync() {
-        if model.revision != lastRevision || model.tab != lastTab {
+        if model.revision != lastRevision || model.tab != lastTab || pendingPlaceholder != shownPending {
             reload()
         }
         selectRowForModel()
+    }
+
+    /// An empty key that's selected but has no row of its own — past the last
+    /// occupied key of its row, or under a node with no children yet — chosen
+    /// on the keypad or to start a first child. It gets a placeholder row for
+    /// as long as it's selected, so there's somewhere to type.
+    private var pendingPlaceholder: OutlineLocation? {
+        guard case .empty(let location)? = model.selection, location.container == model.container else { return nil }
+        let level = model.document.level(location.container, parent: location.parentPath)
+        let last = level.lastIndex(where: { $0 != nil }) ?? -1
+        return location.slot > last ? location : nil
     }
 
     func reload() {
@@ -159,6 +173,7 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         lastRevision = model.revision
         if lastTab != model.tab { collapsed = [] }
         lastTab = model.tab
+        shownPending = pendingPlaceholder
         rows = rows.filter { key, _ in
             if case .node(let id) = key { return model.document.location(of: id) != nil }
             return false
@@ -185,9 +200,13 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         case .node(let id): kind = .node(id)
         case .empty(let location): kind = .empty(location)
         }
-        guard let target = rows[kind] else { return }
         // Make sure it's visible: expand whatever it's inside.
-        if case .node(let id) = kind, let location = model.document.location(of: id) {
+        let location: OutlineLocation?
+        switch kind {
+        case .node(let id): location = model.document.location(of: id)
+        case .empty(let empty): location = empty
+        }
+        if let location {
             for depth in 1..<max(1, location.path.count) {
                 let ancestor = OutlineLocation(location.container, Array(location.path.prefix(depth)))
                 if let node = model.document.node(at: ancestor), let row = rows[.node(node.id)] {
@@ -195,6 +214,7 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
                 }
             }
         }
+        guard let target = rows[kind] else { return }
         let index = outline.row(forItem: target)
         guard index >= 0, outline.selectedRow != index else { return }
         updatingSelection = true
@@ -220,7 +240,11 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
             level = model.document.level(container, parent: [])
             path = []
         }
-        guard let last = level.lastIndex(where: { $0 != nil }) else {
+        var last = level.lastIndex(where: { $0 != nil })
+        if let pending = pendingPlaceholder, pending.parentPath == path {
+            last = max(last ?? pending.slot, pending.slot)
+        }
+        guard let last else {
             return item == nil ? [row(.empty(OutlineLocation(container, [0])))] : []
         }
         return (0...last).map { slot in
@@ -238,8 +262,12 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     }
 
     func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
-        guard let row = item as? OutlineRow, let id = row.nodeID, let node = model.node(id) else { return false }
-        return node.hasChildren && node.listReference == nil
+        guard let row = item as? OutlineRow, let id = row.nodeID, let node = model.node(id),
+              node.listReference == nil else { return false }
+        if node.hasChildren { return true }
+        // A first child being started.
+        guard let pending = pendingPlaceholder, let location = model.document.location(of: id) else { return false }
+        return pending.parentPath == location.path
     }
 
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
@@ -421,6 +449,48 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         return model.document.node(at: OutlineLocation(location.container, location.parentPath))?.id
     }
 
+    /// ⌘Return: start a child of the selected node — or of the one being
+    /// edited, once its edit is in.
+    func addChild() {
+        if editingRow != nil {
+            afterEdit = .newChild
+            endEditing()
+        } else if let id = selectedRow?.nodeID {
+            startChild(of: id)
+        } else {
+            model.flash("Select a node to add a child to.")
+        }
+    }
+
+    /// Selects the node's first free child key, with a placeholder row to type
+    /// into. Nothing is made until something's typed.
+    @discardableResult
+    private func startChild(of id: UUID) -> Bool {
+        guard let location = model.document.location(of: id), let node = model.document.node(at: location) else {
+            return false
+        }
+        if let list = node.listReference {
+            model.flash("“\(node.label)” takes its children from @\(list).")
+            return false
+        }
+        guard location.path.count < location.container.levels else {
+            model.flash("“\(node.label)” is on this tree's last row, so it can't have children.")
+            return false
+        }
+        guard let slot = node.children.firstIndex(where: { $0 == nil }) else {
+            model.flash("“\(node.label)” already has a node on every key below it.")
+            return false
+        }
+        collapsed.remove(id)
+        model.selection = .empty(OutlineLocation(location.container, location.path + [slot]))
+        reload()
+        guard let placeholder = rows[.empty(OutlineLocation(location.container, location.path + [slot]))] else {
+            return false
+        }
+        beginEditing(placeholder)
+        return true
+    }
+
     // MARK: - Editing a row
 
     func beginEditing(_ row: OutlineRow, replacingWith initial: String? = nil) {
@@ -532,12 +602,23 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
 
         switch action {
         case .newSibling?:
+            // With every key on the row taken, the next node can only go
+            // underneath: start a child instead of stopping at a warning.
+            if let location = model.document.location(of: id),
+               !model.document.level(location.container, parent: location.parentPath).contains(where: { $0 == nil }) {
+                if startChild(of: id), let label = model.node(id)?.label {
+                    model.flash("That row is full, so the next node goes under “\(label)”. Esc to leave it.")
+                }
+                return
+            }
             var newID: UUID?
             if model.edit("New Node", { newID = try $0.insertNode(after: id, in: model.container) }), let newID {
                 justCreated = newID
                 reload()
                 if let newRow = rows[.node(newID)] { beginEditing(newRow) }
             }
+        case .newChild?:
+            startChild(of: id)
         case .indent?:
             indent(id)
             if let moved = rows[.node(id)] { beginEditing(moved) }

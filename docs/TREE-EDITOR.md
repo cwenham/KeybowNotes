@@ -64,14 +64,17 @@ Each row is one node:
 **Empty keys** between occupied ones appear as faint placeholder rows — "key 3 —
 empty" — so that a node's position is never ambiguous and never shifts
 silently. Typing into a placeholder creates a node on that key. Empty keys after
-the last occupied one aren't shown; Return reaches them.
+the last occupied one aren't shown; Return reaches them. An empty key chosen on
+the keypad — below a node with no children, say — gets a placeholder row for as
+long as it's selected, so typing always has somewhere to go.
 
 ### Keys
 
 | Key | Not editing | Editing a row |
 |---|---|---|
 | typing | starts editing the selected row, replacing its text with what's typed | edits |
-| Return | edits the selected row | ends the edit; starts a **new node on the next free key** of the same row and edits it |
+| Return | edits the selected row | ends the edit; starts a **new node on the next free key** of the same row and edits it — or, when every key on the row is taken, the node's **first child** |
+| ⌘Return | starts a **child** of the selected node, on its first free key | ends the edit, then the same |
 | Return on an empty new node | — | removes it again |
 | Tab | **indent**: the node becomes a child of the node above it | ends the edit, indents, carries on editing |
 | Shift-Tab | **outdent**: the node moves up a level, after its parent | ends the edit, outdents, carries on editing |
@@ -82,6 +85,11 @@ the last occupied one aren't shown; Return reaches them.
 | Esc | — | abandon the edit |
 | ⌘Z / ⇧⌘Z | undo / redo | the same, for the text |
 | ⌘S | save | end the edit and save |
+
+A new node isn't made until something is typed: Esc, or Return on the empty
+row, leaves nothing behind. So Return on a full row can offer a child without
+risk, which is how a branch's fourth node gets children — the Return, Tab way
+needs a free key beside it first. *Add Child* is in the Edit menu too.
 
 ⌃⌘↑/↓ follows OmniOutliner. Shift with the arrows would be the obvious choice,
 but it already extends a text selection while editing. ⇧⌘↑/↓ works too: ⌃ and

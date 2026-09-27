@@ -130,9 +130,18 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.window === self.window, let offset = MoveKeys.offset(for: event) else { return event }
-            self.coordinator.move(by: offset)
-            return nil
+            guard let self, event.window === self.window else { return event }
+            if let offset = MoveKeys.offset(for: event) {
+                self.coordinator.move(by: offset)
+                return nil
+            }
+            // ⌘Return: a child of this node, editing or not.
+            let flags = event.modifierFlags.intersection([.control, .option, .shift, .command])
+            if [36, 76].contains(event.keyCode), flags == .command {
+                self.coordinator.addChild()
+                return nil
+            }
+            return event
         }
     }
 
@@ -150,6 +159,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     /// ⌃⌘↑ / ⌃⌘↓ from the menu — a second route for the same keys.
     @objc func moveNodeUp(_ sender: Any?) { coordinator.move(by: -1) }
     @objc func moveNodeDown(_ sender: Any?) { coordinator.move(by: 1) }
+    /// ⌘Return from the menu.
+    @objc func addChildNode(_ sender: Any?) { coordinator.addChild() }
 
     private func updateTitle() {
         window?.isDocumentEdited = model.isDirty

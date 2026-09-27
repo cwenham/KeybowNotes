@@ -159,6 +159,11 @@ For the selected node:
   replaces the app word in the brackets (`[Rider]` → `[VSCode]`); a bundle ID is
   written only if the name alone wouldn't find the app. **Open** has its own
   **Choose…** for the file or folder.
+- **Shortcut** — for *Run a shortcut*, a combo box of the shortcuts in the
+  Shortcuts app (from `shortcuts list`, read again whenever the editor comes
+  back to the front), with completion as you type. A name that matches no
+  shortcut is flagged. **Edit…** opens the shortcut in Shortcuts, or **Open
+  Shortcuts** to make one.
 - **Template** — when the action uses one, the file itself, editable in place
   with `{{placeholders}}` and headings highlighted, with **Save Template**,
   **Revert** and **Open in TextEdit**. If the file doesn't exist yet, **Create

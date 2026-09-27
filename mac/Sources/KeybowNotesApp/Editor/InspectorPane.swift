@@ -67,7 +67,8 @@ private let fieldsByType: [String: [FieldSpec]] = [
         .init(key: "app", title: "App"), .init(key: "bundleId", title: "Bundle ID"),
         .init(key: "open", title: "Open", hint: "a path or a link"), .init(key: "target", title: "Target"),
     ],
-    "shortcut": [.init(key: "name", title: "Shortcut"), .init(key: "input", title: "Input")],
+    "shortcut": [.init(key: "name", title: "Shortcut"),
+                 .init(key: "input", title: "Input", hint: "text passed to it — {{selection}}, {{clipboard}}…")],
     "url.open": [.init(key: "url", title: "Link", hint: "https://…?q={{selection}}, or a path")],
     "clipboard.copy": [.init(key: "text", title: "Text", hint: "empty copies the label"),
                        .init(key: "template", title: "Template")],
@@ -326,6 +327,10 @@ private struct NodeInspector: View {
                 AppField(own: own, placeholder: effectiveValue("app"), note: source(of: "app")) { name, bundle in
                     setApp(name, bundle)
                 }
+            } else if spec.key == "name", action?.type == "shortcut" {
+                ShortcutField(own: own, placeholder: effectiveValue("name"), note: source(of: "name")) { name in
+                    setField("name", name)
+                }
             } else {
                 HStack(alignment: .firstTextBaseline) {
                     DraftField(title: spec.title, value: own ?? "", placeholder: effectiveValue(spec.key),
@@ -579,7 +584,7 @@ private struct AppField: View {
         InspectorRow("App") {
             VStack(alignment: .trailing, spacing: 2) {
                 HStack(alignment: .firstTextBaseline) {
-                    AppComboBox(value: own ?? "", placeholder: placeholder) { name in
+                    NameComboBox(items: AppCatalog.all.map(\.name), value: own ?? "", placeholder: placeholder) { name in
                         let trimmed = name.trimmingCharacters(in: .whitespaces)
                         guard !trimmed.isEmpty else { return set(nil, nil) }
                         set(trimmed, AppCatalog.named(trimmed)?.bundleIdentifier)
@@ -603,7 +608,73 @@ private struct AppField: View {
     }
 }
 
-private struct AppComboBox: NSViewRepresentable {
+/// The shortcut to run: type a name, with completion from the Shortcuts app,
+/// or pick one from the list. Warns when no shortcut has that name.
+private struct ShortcutField: View {
+    let own: String?
+    let placeholder: String
+    let note: String
+    let set: (String?) -> Void
+
+    @State private var names: [String] = []
+    @State private var loaded = false
+
+    /// The name in force here, set or inherited.
+    private var current: String { own ?? placeholder }
+
+    private var isMissing: Bool {
+        loaded && !current.isEmpty && !current.contains("{{") && !names.contains(current)
+    }
+
+    var body: some View {
+        InspectorRow("Shortcut") {
+            VStack(alignment: .trailing, spacing: 2) {
+                HStack(alignment: .firstTextBaseline) {
+                    NameComboBox(items: names, value: own ?? "", placeholder: placeholder) { name in
+                        let trimmed = name.trimmingCharacters(in: .whitespaces)
+                        set(trimmed.isEmpty ? nil : trimmed)
+                    }
+                    Button(current.isEmpty || isMissing ? "Open Shortcuts" : "Edit…", action: open)
+                        .controlSize(.small)
+                }
+                HStack(alignment: .firstTextBaseline) {
+                    if isMissing {
+                        Text("There's no shortcut called “\(current)”.")
+                            .font(.caption2).foregroundStyle(.orange)
+                    }
+                    Spacer(minLength: 0)
+                    if !note.isEmpty {
+                        Text(note).font(.caption2).foregroundStyle(note == "set here" ? Color.accentColor : .secondary)
+                    }
+                }
+            }
+        }
+        .task { await reload() }
+        // Back from the Shortcuts app, perhaps with a new one.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await reload() }
+        }
+    }
+
+    private func reload() async {
+        names = await ShortcutCatalog.names()
+        loaded = true
+    }
+
+    /// Opens the shortcut for editing, or the app when there isn't one yet.
+    private func open() {
+        var link = "shortcuts://"
+        if !current.isEmpty, !isMissing, let name = current.addingPercentEncoding(withAllowedCharacters: .alphanumerics) {
+            link = "shortcuts://open-shortcut?name=\(name)"
+        }
+        if let url = URL(string: link) { NSWorkspace.shared.open(url) }
+    }
+}
+
+/// A text field with a list to choose from, completing as you type: apps,
+/// shortcuts. Commits on choosing or on leaving the field.
+private struct NameComboBox: NSViewRepresentable {
+    let items: [String]
     let value: String
     let placeholder: String
     let commit: (String) -> Void
@@ -614,7 +685,7 @@ private struct AppComboBox: NSViewRepresentable {
         let box = NSComboBox()
         box.completes = true
         box.numberOfVisibleItems = 16
-        box.addItems(withObjectValues: AppCatalog.all.map(\.name))
+        box.addItems(withObjectValues: items)
         box.delegate = context.coordinator
         box.stringValue = value
         box.placeholderString = placeholder
@@ -623,6 +694,11 @@ private struct AppComboBox: NSViewRepresentable {
 
     func updateNSView(_ box: NSComboBox, context: Context) {
         context.coordinator.commit = commit
+        // The list can arrive after the field does.
+        if (box.objectValues as? [String]) != items {
+            box.removeAllItems()
+            box.addItems(withObjectValues: items)
+        }
         if box.currentEditor() == nil, box.stringValue != value { box.stringValue = value }
         box.placeholderString = placeholder
     }

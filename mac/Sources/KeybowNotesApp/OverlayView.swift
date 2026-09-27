@@ -301,6 +301,9 @@ private struct ActionHeadline: View {
         case "shortcut": return "bolt.fill"
         case "url.open": return "link"
         case "clipboard.copy": return "doc.on.clipboard"
+        case "clock.timer": return "timer"
+        case "maps.search": return "map"
+        case "music.play": return "music.note"
         default: return "questionmark.circle"
         }
     }

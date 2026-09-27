@@ -87,6 +87,58 @@ public enum DateExpression {
         return nil
     }
 
+    /// How long a timer should run: a length — "5 min", "1h 30m", "90 seconds",
+    /// "+25m" — or, like `due:`, a time to run until: "16:30", "today at 16:15",
+    /// "tomorrow 9:00". A time alone that has passed today means tomorrow's.
+    public static func timerLength(_ text: String, now: Date, rules: DateRules = DateRules(),
+                                   calendar: Calendar = .current) -> TimeInterval? {
+        if let length = length(text) { return length }
+        guard var date = resolve(text, now: now, rules: rules, calendar: calendar) else { return nil }
+        if date <= now, parseClock(text.lowercased().trimmingCharacters(in: .whitespaces)) != nil,
+           let tomorrow = calendar.date(byAdding: .day, value: 1, to: date) {
+            date = tomorrow
+        }
+        let seconds = date.timeIntervalSince(now)
+        return seconds > 0 ? seconds : nil
+    }
+
+    /// "5 min", "1h 30m", "1 hour and 30 minutes", "90s", "+25m" → seconds.
+    static func length(_ text: String) -> TimeInterval? {
+        var rest = Substring(text.lowercased()
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: ",", with: "")
+            .replacingOccurrences(of: "and", with: ""))
+        if rest.hasPrefix("+") { rest = rest.dropFirst() }
+        var total: TimeInterval = 0
+        var parts = 0
+        while !rest.isEmpty {
+            let digits = rest.prefix { $0.isNumber || $0 == "." }
+            guard !digits.isEmpty, let value = Double(digits) else { return nil }
+            rest = rest.dropFirst(digits.count)
+            let unit = rest.prefix { $0.isLetter }
+            rest = rest.dropFirst(unit.count)
+            switch unit {
+            case "s", "sec", "secs", "second", "seconds": total += value
+            case "m", "min", "mins", "minute", "minutes": total += value * 60
+            case "h", "hr", "hrs", "hour", "hours": total += value * 3600
+            default: return nil
+            }
+            parts += 1
+        }
+        return parts > 0 && total > 0 ? total : nil
+    }
+
+    /// 300 → "5 min", 5400 → "1 h 30 min", 45 → "45 s".
+    public static func describe(seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded())
+        let (hours, minutes, secs) = (total / 3600, total % 3600 / 60, total % 60)
+        var parts: [String] = []
+        if hours > 0 { parts.append("\(hours) h") }
+        if minutes > 0 { parts.append("\(minutes) min") }
+        if secs > 0 || parts.isEmpty { parts.append("\(secs) s") }
+        return parts.joined(separator: " ")
+    }
+
     /// "+30m", "30 min", "1h", "2 hours", "+1d" → seconds.
     public static func duration(_ text: String) -> TimeInterval? {
         let trimmed = text.lowercased().replacingOccurrences(of: " ", with: "")

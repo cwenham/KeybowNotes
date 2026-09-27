@@ -164,6 +164,13 @@ For the selected node:
   back to the front), with completion as you type. A name that matches no
   shortcut is flagged. **Edit…** opens the shortcut in Shortcuts, or **Open
   Shortcuts** to make one.
+- **Key colour** — the key's light: a colour well that opens the colour panel,
+  and swatches that read well on the keys, one click each. Shows the colour in
+  force and where it comes from; **Use Inherited** removes the node's own. Writes
+  `colour: rrggbb`. Dragging in the colour panel is written once it settles, so
+  it's one undo step.
+- **Clock timer setup** — for *Clock timer*, if the helper shortcut doesn't
+  exist yet, the steps to make it, with **Open Shortcuts**.
 - **Template** — when the action uses one, the file itself, editable in place
   with `{{placeholders}}` and headings highlighted, with **Save Template**,
   **Revert** and **Open in TextEdit**. If the file doesn't exist yet, **Create

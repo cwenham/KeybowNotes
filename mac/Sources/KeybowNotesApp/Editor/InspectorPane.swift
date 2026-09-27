@@ -70,6 +70,13 @@ private let fieldsByType: [String: [FieldSpec]] = [
     "shortcut": [.init(key: "name", title: "Shortcut"),
                  .init(key: "input", title: "Input", hint: "text passed to it — {{selection}}, {{clipboard}}…")],
     "url.open": [.init(key: "url", title: "Link", hint: "https://…?q={{selection}}, or a path")],
+    "clock.timer": [.init(key: "duration", title: "Length", hint: "5 min, 1h 30m, 16:30 — else the label"),
+                    .init(key: "shortcut", title: "Shortcut", hint: ActionPlanner.timerShortcut)],
+    "maps.search": [.init(key: "query", title: "Search for", hint: "the label, if empty — {{selection}} works")],
+    "music.play": [.init(key: "playlist", title: "Playlist", hint: "the label, if empty"),
+                   .init(key: "album", title: "Album", hint: "plays this instead of a playlist"),
+                   .init(key: "artist", title: "Artist", hint: "when two albums share a name"),
+                   .init(key: "shuffle", title: "Shuffle", kind: .flag)],
     "clipboard.copy": [.init(key: "text", title: "Text", hint: "empty copies the label"),
                        .init(key: "template", title: "Template")],
 ]
@@ -79,6 +86,7 @@ private let typeNames: [(String?, String)] = [
     ("calendar.createEvent", "Calendar event"), ("reminders.create", "Reminder"),
     ("messages.compose", "Message"), ("mail.compose", "Email"), ("phone.call", "Phone call"),
     ("app.open", "Open an app"), ("url.open", "Open a link"), ("clipboard.copy", "Copy to clipboard"),
+    ("clock.timer", "Clock timer"), ("maps.search", "Search Maps"), ("music.play", "Play music"),
     ("shortcut", "Run a shortcut"),
 ]
 
@@ -147,6 +155,7 @@ private struct NodeInspector: View {
             DraftField(title: "Label", value: node.label) { label in
                 model.edit("Rename") { try $0.setLabel(id, label) }
             }
+            colourSection
             actionSection
             valuesSection
             entrySection
@@ -223,6 +232,10 @@ private struct NodeInspector: View {
                 ForEach(fields, id: \.key) { spec in
                     fieldRow(spec)
                 }
+            }
+            if action?.type == "clock.timer" {
+                let shortcut = effectiveValue("shortcut")
+                TimerSetup(shortcut: shortcut.isEmpty ? ActionPlanner.timerShortcut : shortcut)
             }
             let template = effectiveValue("template")
             if !template.isEmpty {
@@ -397,6 +410,107 @@ private struct NodeInspector: View {
             }
         }
         return result
+    }
+
+    // MARK: - Colour
+
+    /// Colours that read well on the keys, to pick with one click.
+    private static let swatches = ["0060ff", "00c060", "ff8c00", "b060ff", "ff3030", "ffd000", "00c8ff", "ff60c0", "ffffff"]
+
+    /// While the colour panel is being dragged: shown at once, written once it settles.
+    @State private var draftColour: Color?
+    @State private var colourCommit: Task<Void, Never>?
+
+    /// The colour in force: this node's own, or inherited.
+    private var keyColour: KeyColour? {
+        guard let tree, let config else { return nil }
+        return config.resolve(tree: tree, path: location.path)?.node.colour
+    }
+
+    private var ownColour: String? {
+        node.annotations.first { $0.key == "colour" || $0.key == "color" }.flatMap {
+            if case .pair(_, let value) = $0 { return value }
+            return nil
+        }
+    }
+
+    private var colourSource: String {
+        if ownColour != nil { return "set here" }
+        for ancestor in chain.dropLast().reversed()
+        where ancestor.annotations.contains(where: { $0.key == "colour" || $0.key == "color" }) {
+            return "from \(ancestor.label)"
+        }
+        return keyColour == nil ? "" : "default"
+    }
+
+    private var colourSection: some View {
+        InspectorRow("Key colour") {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    ColorPicker("Key colour", selection: Binding(
+                        get: { draftColour ?? keyColour?.swatch ?? .gray },
+                        set: { colour in
+                            draftColour = colour
+                            colourCommit?.cancel()
+                            colourCommit = Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(350))
+                                guard !Task.isCancelled, let hex = Self.hex(colour) else { return }
+                                setColour(hex)
+                            }
+                        }
+                    ), supportsOpacity: false)
+                    .labelsHidden()
+                    ForEach(Self.swatches, id: \.self) { hex in
+                        let chosen = keyColour?.hex == hex
+                        Button {
+                            colourCommit?.cancel()
+                            draftColour = nil
+                            setColour(hex)
+                        } label: {
+                            Circle()
+                                .fill(KeyColour(hex: hex)?.swatch ?? .gray)
+                                .frame(width: 16, height: 16)
+                                .overlay(Circle().strokeBorder(chosen ? Color.primary : Color.secondary.opacity(0.5),
+                                                               lineWidth: chosen ? 2 : 0.5))
+                        }
+                        .buttonStyle(.plain)
+                        .help("#\(hex)")
+                    }
+                }
+                // Level with the label: the row has no text of its own.
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
+                HStack(alignment: .firstTextBaseline) {
+                    if let keyColour {
+                        Text("#\(keyColour.hex)").font(.caption.monospaced()).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    if ownColour != nil {
+                        Button("Use Inherited") {
+                            colourCommit?.cancel()
+                            draftColour = nil
+                            setColour(nil)
+                        }
+                        .controlSize(.small)
+                    }
+                    Text(colourSource).font(.caption2)
+                        .foregroundStyle(colourSource == "set here" ? Color.accentColor : .secondary)
+                }
+            }
+        }
+    }
+
+    /// Written as `colour:`, replacing a `color:` spelling if there is one.
+    private func setColour(_ hex: String?) {
+        model.edit(hex == nil ? "Use Inherited Colour" : "Set Colour") { document in
+            try document.setPair(id, key: "color", value: nil)
+            try document.setPair(id, key: "colour", value: hex)
+        }
+    }
+
+    private static func hex(_ colour: Color) -> String? {
+        guard let rgb = NSColor(colour).usingColorSpace(.sRGB) else { return nil }
+        func byte(_ component: CGFloat) -> UInt8 { UInt8((min(max(component, 0), 1) * 255).rounded()) }
+        return KeyColour(red: byte(rgb.redComponent), green: byte(rgb.greenComponent), blue: byte(rgb.blueComponent)).hex
     }
 
     @State private var newKey = ""
@@ -605,6 +719,46 @@ private struct AppField: View {
         panel.message = "Choose the app to open."
         guard panel.runModal() == .OK, let url = panel.url else { return }
         set(url.deletingPathExtension().lastPathComponent, Bundle(url: url)?.bundleIdentifier)
+    }
+}
+
+/// Clock timers are started by a helper shortcut, which only the person can
+/// make. Says how when it's missing.
+private struct TimerSetup: View {
+    let shortcut: String
+    @State private var exists: Bool?
+
+    var body: some View {
+        Group {
+            if exists == false {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Clock timers need a shortcut called “\(shortcut)”.", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    // One literal, so the ** are read as Markdown.
+                    Text("Clock can't be scripted, but Shortcuts can start its timers. In Shortcuts, make a new shortcut called “\(shortcut)” with one action, **Start Timer**. Click its duration, choose **Shortcut Input**, and set the unit to **seconds**.")
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Open Shortcuts") {
+                        if let url = URL(string: "shortcuts://create-shortcut") { NSWorkspace.shared.open(url) }
+                    }
+                    .controlSize(.small)
+                }
+                .font(.callout)
+                .padding(10)
+                .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            } else {
+                // Something to hang the check on: an empty view never appears.
+                Color.clear.frame(height: 0)
+            }
+        }
+        .task(id: shortcut) { await check() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await check() }
+        }
+    }
+
+    private func check() async {
+        exists = await ShortcutCatalog.names().contains(shortcut)
     }
 }
 

@@ -290,6 +290,9 @@ extension OutlineDocument {
         "phone.call": "Call",
         "url.open": "Link",
         "clipboard.copy": "Copy",
+        "clock.timer": "Timer",
+        "maps.search": "Maps",
+        "music.play": "Music",
     ]
 
     /// Sets this node's own action type, replacing any it named — or, with nil,

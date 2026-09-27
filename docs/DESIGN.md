@@ -425,13 +425,16 @@ should explain a refusal rather than failing silently.
 |---|---|
 | Automation → Notes | `notes.create`, `notes.append` |
 | Automation → Mail | `mail.compose` |
+| Automation → Music | `music.play` |
 | Calendars (write) | `calendar.createEvent` |
 | Reminders | `reminders.create` |
 | Contacts | The tree editor's *Look Up in Contacts*; asked for when first used |
 | Accessibility | `{{selection}}`: reading the selected text, and sending ⌘C to apps that won't share it. Asked for when first needed, or from Settings → Selected Text |
 
-`url.open` and `clipboard.copy` need nothing; `phone.call` needs the Mac set up
-for iPhone calls, and macOS confirms each call.
+`url.open`, `clipboard.copy` and `maps.search` need nothing. `clock.timer` needs
+a helper shortcut, *KeybowNotes Timer*, that the person makes once in Shortcuts:
+Clock has no scripting, and only Shortcuts can call its timer intent.
+`phone.call` needs the Mac set up for iPhone calls, and macOS confirms each call.
 
 The app is not sandboxed, and needs the Apple Events entitlement under the
 hardened runtime. Values are passed to fixed, pre-written scripts as arguments —

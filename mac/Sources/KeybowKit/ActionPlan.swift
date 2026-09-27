@@ -42,6 +42,15 @@ public enum ActionPlan: Equatable, Sendable {
     /// handles it, or a file in its default app.
     case openLink(URL)
     case copyToClipboard(String)
+    /// A timer in Clock, started by a helper shortcut: Clock can't be
+    /// scripted, but Shortcuts' Start Timer action reaches it.
+    case startTimer(seconds: Int, shortcut: String)
+    case searchMaps(String)
+    /// Nil leaves Music's shuffle setting as it is.
+    case playPlaylist(String, shuffle: Bool?)
+    /// An album from the library, in disc and track order; `artist` narrows
+    /// it down when two albums share a name.
+    case playAlbum(String, artist: String)
 }
 
 public struct PlannedAction: Equatable, Sendable {
@@ -60,6 +69,8 @@ public enum ActionPlanError: Error, Equatable, CustomStringConvertible {
     /// `{{selection}}` was needed but nothing was selected in the named app.
     case nothingSelected(app: String, for: String)
     case notALink(String)
+    case notALength(String)
+    case timerTooLong(String)
 
     public var description: String {
         switch self {
@@ -75,6 +86,10 @@ public enum ActionPlanError: Error, Equatable, CustomStringConvertible {
             return "\"\(type)\" isn't an action I know how to run."
         case .nothingSelected(let app, let field):
             return "Nothing is selected\(app.isEmpty ? "" : " in \(app)"), and the \(field) needs it."
+        case .notALength(let text):
+            return "“\(text)” isn't a length of time or a time of day."
+        case .timerTooLong(let text):
+            return "“\(text)” is more than 24 hours away; Clock's timers stop at 24 hours."
         case .notALink(let text):
             return "“\(text.count > 60 ? String(text.prefix(60)) + "…" : text)” isn't a link."
         }
@@ -115,6 +130,9 @@ public enum ActionPlanner {
         let plan = try planner.make()
         return PlannedAction(plan: plan, warnings: planner.warnings)
     }
+
+    /// The shortcut that starts a Clock timer, unless an action names another.
+    public static let timerShortcut = "KeybowNotes Timer"
 
     /// Every placeholder the selection's action could use — in its fields and
     /// its template file — so values that are costly to fetch, like the
@@ -238,6 +256,36 @@ private struct Planner {
         case "url.open":
             let text = try required(action.string("url"), for: "link", encode: linkEncoding(for: action.string("url")))
             return .openLink(try link(text))
+
+        case "clock.timer":
+            // The same phrases as a reminder's due: a length, or a time to run until.
+            // A reminder branch keeps working when it switches to Timer.
+            var phrase = optional("duration")
+            if phrase.isEmpty { phrase = optional("due") }
+            if phrase.isEmpty { phrase = selection.labels.last ?? "" }
+            guard let seconds = DateExpression.timerLength(phrase, now: context.now, rules: config.dateRules,
+                                                           calendar: context.calendar) else {
+                throw ActionPlanError.notALength(phrase)
+            }
+            guard seconds <= 24 * 3600 else { throw ActionPlanError.timerTooLong(phrase) }
+            var shortcut = optional("shortcut")
+            if shortcut.isEmpty { shortcut = ActionPlanner.timerShortcut }
+            return .startTimer(seconds: Int(seconds.rounded()), shortcut: shortcut)
+
+        case "maps.search":
+            var query = action.string("query") ?? "{{leaf}}"
+            if query.isEmpty { query = "{{leaf}}" }
+            return .searchMaps(try required(query, for: "place to search for"))
+
+        case "music.play":
+            let album = optional("album")
+            if !album.isEmpty { return .playAlbum(album, artist: optional("artist")) }
+            var playlist = optional("playlist")
+            if playlist.isEmpty { playlist = selection.labels.last ?? "" }
+            guard !playlist.isEmpty else { throw ActionPlanError.empty("playlist") }
+            var shuffle: Bool?
+            if case .bool(let value)? = action.fields["shuffle"] { shuffle = value }
+            return .playPlaylist(playlist, shuffle: shuffle)
 
         case "clipboard.copy":
             // A template, then the text field, then the label itself: a list of

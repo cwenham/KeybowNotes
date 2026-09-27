@@ -137,6 +137,9 @@ An annotation is either a **word** or a **pair**.
 | `FaceTime` | a FaceTime audio call | `"type": "phone.call", "via": "facetime"` |
 | `Link`, `Browser` | open a link: web links in the default browser | `"type": "url.open"` |
 | `Copy`, `Clipboard` | put text on the clipboard | `"type": "clipboard.copy"` |
+| `Timer` | start a timer in Clock | `"type": "clock.timer"` |
+| `Maps` | search in Maps | `"type": "maps.search"` |
+| `Music` | play a playlist or album in Music | `"type": "music.play"` |
 | `append` | add to a running note rather than make a new one | `"type": "notes.append"` |
 | `new`, `create` | make a new note | `"type": "notes.create"` |
 | `something.md` | a template (§8) | `"template": "something.md"` |
@@ -177,13 +180,14 @@ An annotation is either a **word** or a **pair**.
   `account`, `entry`, `createIfMissing`, `find.byName`, `guards.maxBodyBytes`,
   `guards.refuseInlineImages`, `start`, `duration`, `alertMinutes`, `calendar`,
   `calendarId`, `notes`, `show`, `due`, `list`, `to`, `body`, `subject`, `app`,
-  `bundleId`, `open`, `url`, `target`, `name`, `input`, `via`, `text`. A dotted key sets a field
+  `bundleId`, `open`, `url`, `target`, `name`, `input`, `via`, `text`, `shortcut`,
+  `query`, `playlist`, `album`, `artist`, `shuffle`. A dotted key sets a field
   inside another: `find.byName: Journal`.
 - **Anything else** is a value for templates (§6), inherited by everything
   beneath: `area: work`, `when: tomorrow`, `contact: Rudy Rudolph`.
 
-`alertMinutes` and `guards.maxBodyBytes` are numbers; `createIfMissing`, `show`
-and `guards.refuseInlineImages` are `true` or `false`; everything else is text,
+`alertMinutes` and `guards.maxBodyBytes` are numbers; `createIfMissing`, `show`,
+`shuffle` and `guards.refuseInlineImages` are `true` or `false`; everything else is text,
 placeholders included: `title: Standup — {{date:d MMM}}`. The value runs to the
 next comma; **put it in double quotes** if it contains a comma, a square
 bracket or a quote (written `\"`), or starts or ends with a space. Inside
@@ -541,6 +545,71 @@ nothing there, fails with a message saying so.
 To open a link in a particular browser, use its app instead:
 `Safari [Safari, url: …]`.
 
+### `clock.timer` — a timer in Clock
+
+| Field | |
+|---|---|
+| `duration` | How long: `5 min`, `1h 30m`, `90 seconds`, `+25m` — or, as for a reminder's `due`, a time to run until: `16:30`, `today at 16:15`, `tomorrow 9:00`. A time of day that has passed means tomorrow's. With no `duration`, a `due` is used, then the leaf's label, so *5 Minutes* needs nothing more. |
+| `shortcut` | The helper shortcut; `KeybowNotes Timer` if empty. |
+
+Clock can't be scripted, but Shortcuts' **Start Timer** action reaches it, so
+timers go through a shortcut you make once: in Shortcuts, a new shortcut called
+**KeybowNotes Timer** with one action, *Start Timer*, whose duration is
+*Shortcut Input* in *seconds*. KeybowNotes runs it with the length in seconds.
+Until it exists, the action stops with a message saying how to make it, and the
+tree editor shows the same steps. Clock's timers stop at 24 hours; longer is
+refused.
+
+```
+1. Timer [Timer]
+   1. 5 Minutes
+   2. 25 Minutes
+   3. Tea [duration: 4 min]
+   4. Until the call [duration: 15:55]
+```
+
+A reminder branch used as a timer — `[Reminders]` leaves with `due: +5m` —
+becomes a Clock timer by changing `Reminders` to `Timer`.
+
+Clock's **stopwatch** can't be started this way: neither Clock nor Shortcuts
+offers any automation for it.
+
+### `maps.search` — search in Maps
+
+| Field | |
+|---|---|
+| `query` | What to search for; the leaf's label if empty. `{{selection}}` searches for the selected text. |
+
+Opens Maps with the search, through a `maps:` link.
+
+```
+1. Places [Maps]
+   1. Coffee
+   2. Petrol station
+   3. Look up [query: "{{selection}}"]
+```
+
+### `music.play` — play a playlist or album
+
+| Field | |
+|---|---|
+| `playlist` | A playlist by name; the leaf's label if neither this nor `album` is set. |
+| `album` | An album in your library, played in disc and track order. Wins over `playlist`. |
+| `artist` | Narrows an album down when two share a name. Matches the artist or album artist. |
+| `shuffle` | `true` or `false` for a playlist; empty leaves Music's setting alone. Albums play in order. |
+
+Music only plays a playlist in order, so an album is copied into a playlist of
+KeybowNotes' own, **KeybowNotes Album**, remade each time — deleting a playlist
+never deletes its songs. Only music in your library can be played. The first
+time, macOS asks whether KeybowNotes may control Music.
+
+```
+1. Music [Music]
+   1. Focus
+   2. Party [shuffle: true]
+   3. Kind of Blue [album: Kind of Blue, artist: Miles Davis]
+```
+
 ### `clipboard.copy` — put text on the clipboard
 
 | Field | |
@@ -574,6 +643,9 @@ Any text in an action, and every template, can use placeholders:
 | `{{project.path\|}}` | an empty fallback: missing is fine |
 | `{{date:yyyy-MM-dd}}` | a date built-in with a format |
 | `{{selection}}` | the text selected in the app in front when the key was pressed |
+
+A fallback in quotes is taken without them: `{{selection|"5 minute timer"}}`
+gives *5 minute timer*.
 
 A missing value with no fallback becomes empty, and is reported (§5). With
 nothing selected, `{{selection}}` in a required field stops the action —
@@ -708,7 +780,7 @@ window instead of the file. Two of them feed into the language:
 ## 10. Reserved words
 
 **Outline words:** `Notes`, `Calendar`, `Reminders`, `Messages`, `Mail`, `Call`,
-`FaceTime`, `Link`, `Browser`, `Copy`, `Clipboard`,
+`FaceTime`, `Link`, `Browser`, `Copy`, `Clipboard`, `Timer`, `Maps`, `Music`,
 `append`, `new`, `create`, `… alert`, `….md`, `@…`, and the app names the
 compiler knows.
 
@@ -720,7 +792,7 @@ action fields listed in §2.
 
 **Action types:** `notes.create`, `notes.append`, `calendar.createEvent`,
 `reminders.create`, `messages.compose`, `mail.compose`, `phone.call`, `app.open`,
-`url.open`, `clipboard.copy`, `shortcut`.
+`url.open`, `clipboard.copy`, `clock.timer`, `maps.search`, `music.play`, `shortcut`.
 
 **Computed values:** `leaf`, `parent`, `level1`–`level4`, `path`, `folderPath`,
 `parentPath`, `tree`, `contact.*`, `project.*`, `selection`, `clipboard`, `frontApp`, `date`,

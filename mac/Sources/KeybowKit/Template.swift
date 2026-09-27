@@ -102,7 +102,13 @@ public enum Template {
             return builtIn
         }
         if let fallback {
-            return fallback.trimmingCharacters(in: .whitespaces)
+            // A quoted fallback, {{x|"five minutes"}}, means the words, not the quotes.
+            var text = fallback.trimmingCharacters(in: .whitespaces)
+            if text.count >= 2, let first = text.first, let last = text.last,
+               (first == "\"" && last == "\"") || (first == "\u{201C}" && last == "\u{201D}") {
+                text = String(text.dropFirst().dropLast())
+            }
+            return text
         }
         if !missing.contains(name) { missing.append(name) }
         return ""

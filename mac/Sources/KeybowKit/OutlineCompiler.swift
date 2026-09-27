@@ -67,6 +67,9 @@ public enum OutlineCompiler {
         "browser": "url.open",
         "copy": "clipboard.copy",
         "clipboard": "clipboard.copy",
+        "timer": "clock.timer",
+        "maps": "maps.search",
+        "music": "music.play",
     ]
 
     /// `key: value` pairs that set an action field rather than a template value.
@@ -76,9 +79,10 @@ public enum OutlineCompiler {
         "start", "duration", "alertMinutes", "calendar", "calendarId", "notes", "show",
         "due", "list", "to", "body", "subject",
         "app", "bundleId", "open", "url", "target", "name", "input", "via", "text",
+        "shortcut", "query", "playlist", "album", "artist", "shuffle",
     ]
     static let numericFields: Set<String> = ["alertMinutes", "guards.maxBodyBytes"]
-    static let booleanFields: Set<String> = ["createIfMissing", "show", "guards.refuseInlineImages"]
+    static let booleanFields: Set<String> = ["createIfMissing", "show", "guards.refuseInlineImages", "shuffle"]
     static let numericDefaults: Set<String> = [
         "commitDelayMs", "idleTimeoutMs", "longPressCancelMs", "dates.todayOffsetMinutes", "dates.roundToMinutes",
     ]

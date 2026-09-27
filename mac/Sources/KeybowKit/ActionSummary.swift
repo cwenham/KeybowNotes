@@ -108,6 +108,34 @@ public struct ActionSummary: Equatable, Sendable {
             verb = "Open link"
             let url = field("url")
             if !url.isEmpty && url != subject { details.append(url) }
+        case "clock.timer":
+            verb = "Start timer"
+            var phrase = field("duration")
+            if phrase.isEmpty { phrase = field("due") }
+            if phrase.isEmpty { phrase = selection.labels.last ?? "" }
+            if let seconds = DateExpression.timerLength(phrase, now: now, rules: config.dateRules, calendar: calendar) {
+                subject = DateExpression.describe(seconds: seconds)
+                details.append(seconds > 24 * 3600 ? "too long: Clock's timers stop at 24 hours" : "in Clock")
+            } else {
+                details.append("“\(phrase)” isn't a length of time")
+            }
+        case "maps.search":
+            verb = "Search Maps"
+            let query = field("query")
+            subject = query.isEmpty ? (selection.labels.last ?? "") : query
+        case "music.play":
+            verb = "Play"
+            let album = field("album")
+            if !album.isEmpty {
+                subject = album
+                let artist = field("artist")
+                details.append(artist.isEmpty ? "album" : "album by \(artist)")
+            } else {
+                let playlist = field("playlist")
+                subject = playlist.isEmpty ? (selection.labels.last ?? "") : playlist
+                details.append("playlist")
+                if case .bool(let shuffle)? = action.fields["shuffle"] { details.append(shuffle ? "shuffled" : "in order") }
+            }
         case "clipboard.copy":
             verb = "Copy"
             if let template = action.string("template") {

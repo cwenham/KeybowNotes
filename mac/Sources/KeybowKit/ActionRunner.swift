@@ -130,21 +130,34 @@ public enum ActionRunner {
             return try await openApp(name: name, bundleID: bundleID, open: open)
 
         case .runShortcut(let name, let input):
-            var arguments = ["run", name]
-            var inputFile: URL?
-            if !input.isEmpty {
-                let file = FileManager.default.temporaryDirectory.appendingPathComponent("keybow-\(UUID().uuidString).txt")
-                try input.write(to: file, atomically: true, encoding: .utf8)
-                arguments += ["--input-path", file.path]
-                inputFile = file
-            }
-            defer { inputFile.map { try? FileManager.default.removeItem(at: $0) } }
-            let result = try await execute("/usr/bin/shortcuts", arguments)
-            guard result.status == 0 else {
-                let reason = result.error.isEmpty ? "exit status \(result.status)" : result.error
-                throw RunError("Shortcut “\(name)” didn't run", reason)
-            }
+            try await runShortcut(name, input: input)
             return .success("Ran “\(name)”")
+
+        case .startTimer(let seconds, let shortcut):
+            guard try await shortcutNames().contains(shortcut) else {
+                throw RunError("Set up the “\(shortcut)” shortcut first",
+                               "In Shortcuts, make a shortcut called “\(shortcut)” with one action: Start Timer, "
+                               + "its duration set to Shortcut Input, in seconds.")
+            }
+            try await runShortcut(shortcut, input: String(seconds))
+            return .success("Timer: \(DateExpression.describe(seconds: TimeInterval(seconds)))", "Started in Clock")
+
+        case .searchMaps(let query):
+            guard let url = URL(string: "maps://?q=" + Template.linkEncoded(query)) else {
+                throw RunError("Couldn't make a Maps link for “\(query)”")
+            }
+            try await openURL(url)
+            return .success("Searching Maps for “\(query)”")
+
+        case .playPlaylist(let name, let shuffle):
+            _ = try await appleScript(Scripts.playPlaylist, app: "Music",
+                                      [name, shuffle.map { $0 ? "on" : "off" } ?? ""])
+            return .success("Playing “\(name)”", shuffle == true ? "Shuffled" : nil)
+
+        case .playAlbum(let name, let artist):
+            let reply = try await appleScript(Scripts.playAlbum, app: "Music", [name, artist, Scripts.albumQueue])
+            let count = reply.split(separator: ":").last.map(String.init) ?? ""
+            return .success("Playing “\(name)”", "\(count) tracks, from the “\(Scripts.albumQueue)” playlist")
 
         case .openLink(let url):
             if url.isFileURL {
@@ -175,6 +188,30 @@ public enum ActionRunner {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+    }
+
+    /// Runs a shortcut, handing it text as a file: the command line takes no
+    /// other kind of input.
+    private static func runShortcut(_ name: String, input: String) async throws {
+        var arguments = ["run", name]
+        var inputFile: URL?
+        if !input.isEmpty {
+            let file = FileManager.default.temporaryDirectory.appendingPathComponent("keybow-\(UUID().uuidString).txt")
+            try input.write(to: file, atomically: true, encoding: .utf8)
+            arguments += ["--input-path", file.path]
+            inputFile = file
+        }
+        defer { inputFile.map { try? FileManager.default.removeItem(at: $0) } }
+        let result = try await execute("/usr/bin/shortcuts", arguments)
+        guard result.status == 0 else {
+            let reason = result.error.isEmpty ? "exit status \(result.status)" : result.error
+            throw RunError("Shortcut “\(name)” didn't run", reason)
+        }
+    }
+
+    private static func shortcutNames() async throws -> Set<String> {
+        let result = try await execute("/usr/bin/shortcuts", ["list"])
+        return Set(result.output.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) })
     }
 
     private static func openApp(name: String, bundleID: String, open: String) async throws -> ActionOutcome {
@@ -263,7 +300,9 @@ public enum ActionRunner {
         if error.contains("-1728"), app == "Notes" {
             return RunError("Notes couldn't find that account or folder", error)
         }
-        for (marker, message) in [("NONOTE:", "There's no note called"), ("NOFOLDER:", "There's no folder called")] {
+        for (marker, message) in [("NONOTE:", "There's no note called"), ("NOFOLDER:", "There's no folder called"),
+                                  ("NOPLAYLIST:", "There's no playlist called"),
+                                  ("NOALBUM:", "There's no album in your library called")] {
             if let range = error.range(of: marker) {
                 let name = error[range.upperBound...].prefix { $0 != "\"" && $0 != "(" }
                     .trimmingCharacters(in: .whitespaces)
@@ -532,6 +571,91 @@ private enum Scripts {
     end run
 
     """ + dateFrom
+
+    static let playPlaylist = """
+    on run argv
+        set playlistName to item 1 of argv
+        set shuffleSetting to item 2 of argv
+        tell application "Music"
+            set found to (every playlist whose name is playlistName)
+            if (count of found) is 0 then error "NOPLAYLIST:" & playlistName
+            set thePlaylist to item 1 of found
+            if shuffleSetting is "on" then set shuffle enabled to true
+            if shuffleSetting is "off" then set shuffle enabled to false
+            play thePlaylist
+        end tell
+        return "OK"
+    end run
+    """
+
+    /// The playlist an album is played from. Music can only play a playlist in
+    /// order, so the album's tracks are put in one of KeybowNotes' own, made
+    /// afresh each time. Deleting a playlist never deletes its songs.
+    static let albumQueue = "KeybowNotes Album"
+
+    static let playAlbum = """
+    on run argv
+        set albumName to item 1 of argv
+        set artistName to item 2 of argv
+        set queueName to item 3 of argv
+        tell application "Music"
+            set albumTracks to (every track of library playlist 1 whose album is albumName)
+            if artistName is not "" then
+                set kept to {}
+                repeat with candidate in albumTracks
+                    set trackArtist to artist of candidate
+                    set trackAlbumArtist to album artist of candidate
+                    if trackArtist is artistName or trackAlbumArtist is artistName then set end of kept to contents of candidate
+                end repeat
+                set albumTracks to kept
+            end if
+            if (count of albumTracks) is 0 then error "NOALBUM:" & albumName
+            set keyed to {}
+            repeat with candidate in albumTracks
+                set discNumber to disc number of candidate
+                set trackNumber to track number of candidate
+                set end of keyed to {discNumber * 1000 + trackNumber, contents of candidate}
+            end repeat
+        end tell
+        set ordered to my sortByKey(keyed)
+        tell application "Music"
+            set oldQueues to (every user playlist whose name is queueName)
+            repeat with oldQueue in oldQueues
+                delete oldQueue
+            end repeat
+            set albumQueue to make new user playlist with properties {name:queueName}
+            repeat with pair in ordered
+                duplicate (item 2 of pair) to albumQueue
+            end repeat
+            set shuffle enabled to false
+            play albumQueue
+        end tell
+        return "OK:" & (count of ordered)
+    end run
+
+    -- Disc and track order: an insertion sort on each pair's first item.
+    on sortByKey(pairs)
+        set sorted to {}
+        repeat with pair in pairs
+            set thePair to contents of pair
+            set slot to (count of sorted) + 1
+            repeat with i from 1 to count of sorted
+                if item 1 of (item i of sorted) > item 1 of thePair then
+                    set slot to i
+                    exit repeat
+                end if
+            end repeat
+            if slot is 1 then
+                set sorted to {thePair} & sorted
+            else if slot > (count of sorted) then
+                set end of sorted to thePair
+            else
+                set sorted to (items 1 thru (slot - 1) of sorted) & {thePair} & (items slot thru -1 of sorted)
+            end if
+        end repeat
+        return sorted
+    end sortByKey
+    """
 
     static let composeMail = """
     on run argv

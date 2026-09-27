@@ -386,8 +386,10 @@ Placeholders are `{{…}}`:
 4. **Built-ins** — `{{date}}`, `{{time}}`, `{{datetime}}`, `{{weekday}}`,
    `{{isoWeek}}`, `{{clipboard}}`, `{{frontApp}}`.
 
-`{{selection}}` (the selected text in the frontmost app) is deferred: it needs
-Accessibility permission, so it would be opt-in if added.
+`{{selection}}` is the text selected in the frontmost app. It is read only when
+the action uses it, through the accessibility API; apps that don't answer
+(Chrome, Electron) are sent ⌘C, with the clipboard restored straight after. In
+a link, placed values are percent-encoded — see CONFIG-LANGUAGE.md §6.
 
 ### Date expressions
 
@@ -426,6 +428,10 @@ should explain a refusal rather than failing silently.
 | Calendars (write) | `calendar.createEvent` |
 | Reminders | `reminders.create` |
 | Contacts | The tree editor's *Look Up in Contacts*; asked for when first used |
+| Accessibility | `{{selection}}`: reading the selected text, and sending ⌘C to apps that won't share it. Asked for when first needed, or from Settings → Selected Text |
+
+`url.open` and `clipboard.copy` need nothing; `phone.call` needs the Mac set up
+for iPhone calls, and macOS confirms each call.
 
 The app is not sandboxed, and needs the Apple Events entitlement under the
 hardened runtime. Values are passed to fixed, pre-written scripts as arguments —

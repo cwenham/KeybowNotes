@@ -15,6 +15,7 @@ struct SettingsView: View {
             overlay
             timing
             calendarSection
+            selectionSection
             configSection
         }
         .formStyle(.grouped)
@@ -125,6 +126,33 @@ struct SettingsView: View {
                 Text("Used when a tree doesn't name a calendar or list itself.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var selectionSection: some View {
+        Section("Selected Text") {
+            HStack {
+                if settings.accessibilityAllowed {
+                    Label("{{selection}} can read the text selected in the app in front.", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("{{selection}} needs Accessibility access to read the text selected in other apps.")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Allow Access…") { SelectedText.requestAccess() }
+                }
+            }
+            Toggle(isOn: $settings.copySelection) {
+                Text("Copy with ⌘C when an app won't share its selection")
+                Text("Needed for Chrome and apps built like it. The clipboard is put back straight afterwards, though a clipboard manager may record the copy.")
+            }
+        }
+        .task {
+            // Access is granted in System Settings, which doesn't tell us.
+            while !Task.isCancelled {
+                settings.accessibilityAllowed = SelectedText.isAllowed
+                try? await Task.sleep(for: .seconds(2))
             }
         }
     }

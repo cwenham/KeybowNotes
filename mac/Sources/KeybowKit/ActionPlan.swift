@@ -38,6 +38,10 @@ public enum ActionPlan: Equatable, Sendable {
     /// `open` is a file path (already expanded) or a URL; empty just launches the app.
     case openApp(name: String, bundleID: String, open: String)
     case runShortcut(name: String, input: String)
+    /// A web link in the default browser, any other link in the app that
+    /// handles it, or a file in its default app.
+    case openLink(URL)
+    case copyToClipboard(String)
 }
 
 public struct PlannedAction: Equatable, Sendable {
@@ -53,6 +57,9 @@ public enum ActionPlanError: Error, Equatable, CustomStringConvertible {
     case unreadableDate(String)
     case templateNotFound(String)
     case unsupported(String)
+    /// `{{selection}}` was needed but nothing was selected in the named app.
+    case nothingSelected(app: String, for: String)
+    case notALink(String)
 
     public var description: String {
         switch self {
@@ -66,6 +73,10 @@ public enum ActionPlanError: Error, Equatable, CustomStringConvertible {
             return "No template at \(path)."
         case .unsupported(let type):
             return "\"\(type)\" isn't an action I know how to run."
+        case .nothingSelected(let app, let field):
+            return "Nothing is selected\(app.isEmpty ? "" : " in \(app)"), and the \(field) needs it."
+        case .notALink(let text):
+            return "“\(text.count > 60 ? String(text.prefix(60)) + "…" : text)” isn't a link."
         }
     }
 }
@@ -103,6 +114,29 @@ public enum ActionPlanner {
         var planner = Planner(action: action, selection: selection, config: config, context: context)
         let plan = try planner.make()
         return PlannedAction(plan: plan, warnings: planner.warnings)
+    }
+
+    /// Every placeholder the selection's action could use — in its fields and
+    /// its template file — so values that are costly to fetch, like the
+    /// selected text, are fetched only when something asks for them.
+    public static func placeholders(for selection: ResolvedSelection, context: ActionContext) -> Set<String> {
+        guard let action = selection.action else { return [] }
+        var names = Set<String>()
+        func collect(_ value: JSONValue) {
+            switch value {
+            case .string(let text): names.formUnion(Template.names(in: text))
+            case .array(let items): items.forEach(collect)
+            case .object(let fields): fields.values.forEach(collect)
+            default: break
+            }
+        }
+        action.fields.values.forEach(collect)
+        if let name = action.string("template"), !name.isEmpty,
+           let url = Planner.templateURL(name, in: context.templatesDirectory),
+           let text = try? String(contentsOf: url, encoding: .utf8) {
+            names.formUnion(Template.names(in: text))
+        }
+        return names
     }
 }
 
@@ -186,8 +220,8 @@ private struct Planner {
             let name = optional("app")
             let bundleID = optional("bundleId")
             guard !name.isEmpty || !bundleID.isEmpty else { throw ActionPlanError.empty("app to open") }
-            var open = optional("open")
-            if open.isEmpty { open = optional("url") }
+            var open = optional("open", encode: linkEncoding(for: action.string("open")))
+            if open.isEmpty { open = optional("url", encode: linkEncoding(for: action.string("url"))) }
             let target = optional("target")
             if open.isEmpty && !target.isEmpty {
                 warnings.append("No URL for \"\(target)\" yet, so just opening \(name.isEmpty ? "the app" : name).")
@@ -201,6 +235,22 @@ private struct Planner {
             let name = try required(action.string("name"), for: "shortcut name")
             return .runShortcut(name: name, input: optional("input"))
 
+        case "url.open":
+            let text = try required(action.string("url"), for: "link", encode: linkEncoding(for: action.string("url")))
+            return .openLink(try link(text))
+
+        case "clipboard.copy":
+            // A template, then the text field, then the label itself: a list of
+            // snippets can be copied by name alone.
+            if let text = try templateText() { return .copyToClipboard(text) }
+            if let text = action.string("text") {
+                let result = expand(text)
+                if !result.missing.isEmpty { throw missingError(result.missing, for: "text to copy") }
+                guard !result.text.isEmpty else { throw ActionPlanError.empty("text to copy") }
+                return .copyToClipboard(result.text)
+            }
+            return .copyToClipboard(selection.labels.last ?? "")
+
         default:
             throw ActionPlanError.unsupported(action.type)
         }
@@ -208,33 +258,79 @@ private struct Planner {
 
     // MARK: - Values
 
-    private func expand(_ text: String) -> Template.Result {
+    private func expand(_ text: String, encode: ((String) -> String)? = nil) -> Template.Result {
         let params = context.environment.merging(selection.params) { _, fromTree in fromTree }
-        return Template.expand(text, params: params, now: context.now, calendar: context.calendar)
+        return Template.expand(text, params: params, now: context.now, calendar: context.calendar, encode: encode)
     }
 
-    private mutating func expanded(_ text: String) -> String {
-        let result = expand(text)
-        if !result.missing.isEmpty {
-            warnings.append("No value for \(result.missing.joined(separator: ", ")).")
+    private mutating func expanded(_ text: String, encode: ((String) -> String)? = nil) -> String {
+        let result = expand(text, encode: encode)
+        var missing = result.missing
+        if missing.contains("selection") {
+            missing.removeAll { $0 == "selection" }
+            warnings.append("Nothing was selected\(frontApp.isEmpty ? "" : " in \(frontApp)"), so {{selection}} was left empty.")
+        }
+        if !missing.isEmpty {
+            warnings.append("No value for \(missing.joined(separator: ", ")).")
         }
         return result.text
     }
 
     /// An optional field: missing placeholders become a warning, not a failure.
-    private mutating func optional(_ key: String) -> String {
+    private mutating func optional(_ key: String, encode: ((String) -> String)? = nil) -> String {
         guard let text = action.string(key) else { return "" }
-        return expanded(text).trimmingCharacters(in: .whitespaces)
+        return expanded(text, encode: encode).trimmingCharacters(in: .whitespaces)
     }
 
     /// A field the action cannot do without.
-    private func required(_ text: String?, for purpose: String) throws -> String {
+    private func required(_ text: String?, for purpose: String, encode: ((String) -> String)? = nil) throws -> String {
         guard let text else { throw ActionPlanError.empty(purpose) }
-        let result = expand(text)
-        if !result.missing.isEmpty { throw ActionPlanError.missing(result.missing, for: purpose) }
-        let value = result.text.trimmingCharacters(in: .whitespaces)
+        let result = expand(text, encode: encode)
+        if !result.missing.isEmpty { throw missingError(result.missing, for: purpose) }
+        let value = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { throw ActionPlanError.empty(purpose) }
         return value
+    }
+
+    private var frontApp: String { context.environment["frontApp"] ?? "" }
+
+    private func missingError(_ names: [String], for purpose: String) -> ActionPlanError {
+        names.contains("selection") ? .nothingSelected(app: frontApp, for: purpose) : .missing(names, for: purpose)
+    }
+
+    // MARK: - Links
+
+    /// Values placed inside a link are percent-encoded, so a selected phrase
+    /// with spaces or an & becomes one search term. Not when the field is a
+    /// single placeholder — `{{selection}}` is then the link itself — and not
+    /// for a path, or anything that doesn't start with a scheme like https:.
+    private func linkEncoding(for text: String?) -> ((String) -> String)? {
+        guard let text = text?.trimmingCharacters(in: .whitespaces),
+              !Template.isSinglePlaceholder(text), Self.hasScheme(text) else { return nil }
+        return Template.linkEncoded
+    }
+
+    /// `https:`, `mailto:`, `things:` — a scheme written at the start.
+    static func hasScheme(_ text: String) -> Bool {
+        guard let colon = text.firstIndex(of: ":"), let first = text.first, first.isASCII, first.isLetter else { return false }
+        return text[..<colon].allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "+.-".contains($0)) }
+    }
+
+    /// A link, a path, or a bare address like "example.com/page".
+    private func link(_ text: String) throws -> URL {
+        if text.hasPrefix("/") || text.hasPrefix("~") {
+            return URL(fileURLWithPath: (text as NSString).expandingTildeInPath)
+        }
+        if Self.hasScheme(text), !text.contains(where: \.isWhitespace), let url = URL(string: text) {
+            return url
+        }
+        // Selected text like "apple.com/mac": a web address without its https.
+        let bare = text.split(separator: "/", maxSplits: 1).first.map(String.init) ?? ""
+        if !text.contains(where: \.isWhitespace), bare.contains("."), !bare.hasPrefix("."), !bare.hasSuffix("."),
+           let url = URL(string: "https://" + text) {
+            return url
+        }
+        throw ActionPlanError.notALink(text)
     }
 
     private func nested(_ key: String, _ inner: String) -> String? {
@@ -284,18 +380,21 @@ private struct Planner {
         let name = action.string("template") ?? ""
         guard !name.isEmpty else { return nil }
 
-        let url: URL
-        if name.hasPrefix("/") || name.hasPrefix("~") {
-            url = URL(fileURLWithPath: (name as NSString).expandingTildeInPath)
-        } else if let directory = context.templatesDirectory {
-            url = directory.appendingPathComponent(name)
-        } else {
+        guard let url = Self.templateURL(name, in: context.templatesDirectory) else {
             throw ActionPlanError.templateNotFound(name)
         }
         guard let text = try? String(contentsOf: url, encoding: .utf8) else {
             throw ActionPlanError.templateNotFound(url.path)
         }
         return expanded(text)
+    }
+
+    /// Relative names are found in the templates folder; nil without one.
+    static func templateURL(_ name: String, in directory: URL?) -> URL? {
+        if name.hasPrefix("/") || name.hasPrefix("~") {
+            return URL(fileURLWithPath: (name as NSString).expandingTildeInPath)
+        }
+        return directory?.appendingPathComponent(name)
     }
 
     /// Splits a template into a title — its first line, if a heading — and the rest.

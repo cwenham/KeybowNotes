@@ -299,6 +299,8 @@ private struct ActionHeadline: View {
         case "phone.call": return "phone"
         case "app.open": return "arrow.up.forward.app"
         case "shortcut": return "bolt.fill"
+        case "url.open": return "link"
+        case "clipboard.copy": return "doc.on.clipboard"
         default: return "questionmark.circle"
         }
     }

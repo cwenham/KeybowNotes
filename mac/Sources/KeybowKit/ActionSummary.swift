@@ -15,14 +15,18 @@ public struct ActionSummary: Equatable, Sendable {
     /// Values the action needs that the config does not supply yet.
     public let missing: [String]
 
+    /// `environment` holds values fetched when the key was pressed — the
+    /// selected text, the clipboard. Without them, stand-ins show where they'll go.
     public init(selection: ResolvedSelection, config: KeybowConfig, now: Date = Date(),
-                calendar: Calendar = .current) {
+                calendar: Calendar = .current, environment: [String: String] = [:]) {
         let action = selection.action ?? ActionSpec(type: "none", fields: [:])
         var missing: [String] = []
+        let params = Self.standIns.merging(environment) { _, fetched in fetched }
+            .merging(selection.params) { _, fromTree in fromTree }
 
         func expand(_ text: String?) -> String {
             guard let text else { return "" }
-            let result = Template.expand(text, params: selection.params, now: now, calendar: calendar)
+            let result = Template.expand(text, params: params, now: now, calendar: calendar)
             for name in result.missing where !missing.contains(name) { missing.append(name) }
             return result.text
         }
@@ -100,6 +104,18 @@ public struct ActionSummary: Equatable, Sendable {
         case "shortcut":
             verb = "Run shortcut"
             subject = field("name")
+        case "url.open":
+            verb = "Open link"
+            let url = field("url")
+            if !url.isEmpty && url != subject { details.append(url) }
+        case "clipboard.copy":
+            verb = "Copy"
+            if let template = action.string("template") {
+                details.append("from \(template)")
+            } else if action.string("text") != nil {
+                let text = field("text").replacingOccurrences(of: "\n", with: " ⏎ ")
+                details.append("\u{201C}\(text.count > 60 ? String(text.prefix(60)) + "…" : text)\u{201D}")
+            }
         default:
             break
         }
@@ -110,6 +126,10 @@ public struct ActionSummary: Equatable, Sendable {
         self.details = details
         self.missing = missing
     }
+
+    private static let standIns = [
+        "selection": "‹selected text›", "clipboard": "‹clipboard›", "frontApp": "‹front app›",
+    ]
 
     private static func dateFormatter(_ calendar: Calendar) -> DateFormatter {
         let formatter = DateFormatter()

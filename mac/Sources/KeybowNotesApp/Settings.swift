@@ -28,11 +28,15 @@ final class AppSettings {
     /// 0.05 to 1.
     var brightness: Double { didSet { save(); onChange?(.brightness) } }
     var dryRun: Bool { didSet { save(); onChange?(.dryRun) } }
+    /// For {{selection}} in apps that won't share it: send ⌘C and put the
+    /// clipboard back afterwards.
+    var copySelection: Bool { didSet { save(); onChange?(.defaults) } }
 
     // MARK: Live status, shown in the window but not saved
 
     var keybowStatus = "Looking for the Keybow…"
     var openAtLogin = false
+    var accessibilityAllowed = false
     /// Why Open at Login isn't simply on or off, when it isn't.
     var openAtLoginNote: String?
     var configProblem: String?
@@ -53,6 +57,7 @@ final class AppSettings {
         defaultReminderListID = store.string(forKey: Keys.defaultReminderList) ?? ""
         brightness = store.object(forKey: Keys.brightness) as? Double ?? 1
         dryRun = store.bool(forKey: Keys.dryRun)
+        copySelection = store.object(forKey: Keys.copySelection) as? Bool ?? true
     }
 
     var configURL: URL {
@@ -85,6 +90,7 @@ final class AppSettings {
         static let defaultReminderList = "defaultReminderListID"
         static let brightness = "keyBrightness"
         static let dryRun = "dryRun"
+        static let copySelection = "copySelectionWithCommandC"
     }
 
     private func save() {
@@ -98,6 +104,7 @@ final class AppSettings {
         store.set(defaultReminderListID, forKey: Keys.defaultReminderList)
         store.set(brightness, forKey: Keys.brightness)
         store.set(dryRun, forKey: Keys.dryRun)
+        store.set(copySelection, forKey: Keys.copySelection)
     }
 }
 

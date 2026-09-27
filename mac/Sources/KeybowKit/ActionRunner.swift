@@ -145,7 +145,36 @@ public enum ActionRunner {
                 throw RunError("Shortcut “\(name)” didn't run", reason)
             }
             return .success("Ran “\(name)”")
+
+        case .openLink(let url):
+            if url.isFileURL {
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    throw RunError("Nothing at \((url.path as NSString).abbreviatingWithTildeInPath)")
+                }
+                try await openURL(url)
+                return .success("Opened \(url.lastPathComponent)")
+            }
+            do {
+                try await openURL(url)
+            } catch {
+                throw RunError("Couldn't open the link", "No app opens \(url.scheme ?? "these"): links here.")
+            }
+            return .success("Opened \(url.host ?? url.scheme ?? "the link")", url.absoluteString)
+
+        case .copyToClipboard(let text):
+            await copy(text)
+            let flat = text.replacingOccurrences(of: "\n", with: " ")
+            let lines = text.split(separator: "\n", omittingEmptySubsequences: false).count
+            return .success("Copied “\(flat.count > 50 ? String(flat.prefix(50)) + "…" : flat)”",
+                            lines > 1 ? "\(lines) lines, ready to paste" : "Ready to paste")
         }
+    }
+
+    @MainActor
+    private static func copy(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
     }
 
     private static func openApp(name: String, bundleID: String, open: String) async throws -> ActionOutcome {

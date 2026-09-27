@@ -135,12 +135,15 @@ An annotation is either a **word** or a **pair**.
 | `Mail` | an email draft | `"type": "mail.compose"` |
 | `Call` | a phone call through your iPhone | `"type": "phone.call"` |
 | `FaceTime` | a FaceTime audio call | `"type": "phone.call", "via": "facetime"` |
+| `Link`, `Browser` | open a link: web links in the default browser | `"type": "url.open"` |
+| `Copy`, `Clipboard` | put text on the clipboard | `"type": "clipboard.copy"` |
 | `append` | add to a running note rather than make a new one | `"type": "notes.append"` |
 | `new`, `create` | make a new note | `"type": "notes.create"` |
 | `something.md` | a template (§8) | `"template": "something.md"` |
 | `N min alert`, `N hour alert` | an alert before an event | `"alertMinutes": N` |
 | `@name` | take this branch's children from `# list name` | `"children": "@name"` |
 | an app — `Rider`, `VSCode`… | open the leaf in that app | `"type": "app.open", "app": …, "bundleId": …` |
+| a link — `https://example.com/page` | the link to open; with no type in force, opens it | `"url": …`, and `"type": "url.open"` if nothing names a type |
 | any other word, under an app | a channel or place in that app | `"target": …` |
 
 - **Case doesn't matter** for the keywords. `min`/`mins`/`minute(s)` and
@@ -157,6 +160,11 @@ An annotation is either a **word** or a **pair**.
   warning that it isn't installed, and **an unknown lowercase word is kept** as a
   `note` value, with a warning.
 - A branch can't both take `@list` children and have its own.
+- **A link as a word needs `://`** — `https://…`, `things:///add…`. Anything
+  else with a colon reads as a pair, so write `url: mailto:someone@example.com`.
+  A link containing a comma or square bracket must be a quoted `url: "…"` too.
+  Under an app, a link opens in that app: `Safari [Safari]` with a child
+  `Docs [https://developer.apple.com]`.
 
 #### Pairs
 
@@ -169,7 +177,7 @@ An annotation is either a **word** or a **pair**.
   `account`, `entry`, `createIfMissing`, `find.byName`, `guards.maxBodyBytes`,
   `guards.refuseInlineImages`, `start`, `duration`, `alertMinutes`, `calendar`,
   `calendarId`, `notes`, `show`, `due`, `list`, `to`, `body`, `subject`, `app`,
-  `bundleId`, `open`, `url`, `target`, `name`, `input`, `via`. A dotted key sets a field
+  `bundleId`, `open`, `url`, `target`, `name`, `input`, `via`, `text`. A dotted key sets a field
   inside another: `find.byName: Journal`.
 - **Anything else** is a value for templates (§6), inherited by everything
   beneath: `area: work`, `when: tomorrow`, `contact: Rudy Rudolph`.
@@ -210,6 +218,7 @@ A leaf with no annotations still means something, depending on what it inherits:
 | a Call branch | `Rudy Rudolph` | the same contact, needing a phone number |
 | an app that opens files | `Project A` | a project needing a path |
 | an app that is a service (Discord, Claude…) | `Channel1` | a target needing a URL — add `open: …` |
+| nothing, with a link on the leaf | `Docs [https://…]` or `Search [url: …]` | opens the link (`url.open`) |
 | nothing | `Inventions` | the default action: a new note (§4) |
 
 In a `# list`, a leaf that reads as a date gets a `when` value whatever uses the
@@ -511,6 +520,47 @@ A path that doesn't exist fails with a message saying so.
 
 A shortcut that doesn't exist fails with Shortcuts' own message.
 
+### `url.open` — open a link
+
+| Field | |
+|---|---|
+| `url` | **Required.** A web link opens in the default browser; any other link (`mailto:`, `things:`, `obsidian:`…) in the app that handles it; a path (`~` allowed) in its default app. |
+
+Values placed into a link are encoded (§6, *Inside links*). A value that is the
+whole link — `url: "{{selection}}"` — is used as it stands, and a bare address
+like `apple.com/mac` gets `https://`. Text that isn't a link, or a path with
+nothing there, fails with a message saying so.
+
+```
+1. Web [Browser]
+   1. Search [url: "https://duckduckgo.com/?q={{selection}}"]
+   2. Open selected [url: "{{selection}}"]
+   3. Apple docs [https://developer.apple.com/documentation]
+```
+
+To open a link in a particular browser, use its app instead:
+`Safari [Safari, url: …]`.
+
+### `clipboard.copy` — put text on the clipboard
+
+| Field | |
+|---|---|
+| `text` | The text, placeholders and `\n` new lines included; kept exactly, spaces and all. |
+| `template` | A file whose text is copied instead. |
+
+With neither, the leaf's label is copied, so a list of snippets needs only
+labels. A value that `text` needs but can't find stops the action rather than
+copying something incomplete.
+
+```
+1. Snippets [Copy]
+   1. Kind regards
+   2. Address [text: "1 High Street\nSmalltown"]
+   3. Signature [signature.md]
+2. Numbers [Copy, text: "{{contact.phone}}"]
+   1. Rudy Rudolph
+```
+
 ---
 
 ## 6. Values: `{{placeholders}}`
@@ -523,8 +573,24 @@ Any text in an action, and every template, can use placeholders:
 | `{{contact.phone\|none}}` | with a fallback, used when the value is missing or empty |
 | `{{project.path\|}}` | an empty fallback: missing is fine |
 | `{{date:yyyy-MM-dd}}` | a date built-in with a format |
+| `{{selection}}` | the text selected in the app in front when the key was pressed |
 
-A missing value with no fallback becomes empty, and is reported (§5).
+A missing value with no fallback becomes empty, and is reported (§5). With
+nothing selected, `{{selection}}` in a required field stops the action —
+"Nothing is selected in Safari, and the link needs it." — and in an optional
+one leaves a gap and a warning. `{{selection|}}` makes an empty selection fine.
+
+### Inside links
+
+In a field that starts with a scheme — `https:`, `mailto:`, `things:` — the
+**values placed into it are percent-encoded**, so a selected "swift & rust"
+becomes one search term, `swift%20%26%20rust`, not two broken ones. `/` and `:`
+are left alone, so `https://github.com/{{repo}}` with `repo: owner/name` still
+works. This applies to `url` and to `open` (§5).
+
+A field that is **only a placeholder** — `url: "{{selection}}"`,
+`open: "{{project.url}}"` — is taken as the whole link and isn't encoded, and
+neither is a path: `open: "~/Downloads/{{selection}}"` gets the text as it is.
 
 ### Where values come from
 
@@ -548,8 +614,16 @@ Highest priority first:
    In `folderPath` and `parentPath`, a `/` inside a label becomes `-`, since `/`
    separates folders.
 
-4. **What you were doing:** `{{clipboard}}` (its text, trimmed) and `{{frontApp}}`
-   (the app in front when the key was pressed — KeybowNotes never takes focus).
+4. **What you were doing:** `{{selection}}` (the selected text, trimmed),
+   `{{clipboard}}` (its text, trimmed) and `{{frontApp}}` (the app in front when
+   the key was pressed — KeybowNotes never takes focus).
+
+   The selection is read only when the action uses it, through the
+   accessibility API, which needs **Accessibility access** (Privacy & Security).
+   Apps that don't answer — Chrome, Electron apps like VS Code and Slack — are
+   sent ⌘C instead, and the clipboard is put back straight after; that can be
+   turned off in Settings. Neither the selection nor the clipboard is written to
+   the system log.
 5. **Built-ins:**
 
    | Name | Default format | Example |
@@ -634,7 +708,7 @@ window instead of the file. Two of them feed into the language:
 ## 10. Reserved words
 
 **Outline words:** `Notes`, `Calendar`, `Reminders`, `Messages`, `Mail`, `Call`,
-`FaceTime`,
+`FaceTime`, `Link`, `Browser`, `Copy`, `Clipboard`,
 `append`, `new`, `create`, `… alert`, `….md`, `@…`, and the app names the
 compiler knows.
 
@@ -646,10 +720,10 @@ action fields listed in §2.
 
 **Action types:** `notes.create`, `notes.append`, `calendar.createEvent`,
 `reminders.create`, `messages.compose`, `mail.compose`, `phone.call`, `app.open`,
-`shortcut`.
+`url.open`, `clipboard.copy`, `shortcut`.
 
 **Computed values:** `leaf`, `parent`, `level1`–`level4`, `path`, `folderPath`,
-`parentPath`, `tree`, `contact.*`, `project.*`, `clipboard`, `frontApp`, `date`,
+`parentPath`, `tree`, `contact.*`, `project.*`, `selection`, `clipboard`, `frontApp`, `date`,
 `time`, `datetime`, `weekday`, `isoWeek`, and `when` by convention.
 
 **Tree names:** `main`, `row2`, `row3`, `bottom`.

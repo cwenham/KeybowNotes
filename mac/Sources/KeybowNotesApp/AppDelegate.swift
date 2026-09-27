@@ -190,37 +190,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func fire(_ selection: ResolvedSelection) {
         guard let overlay else { return }
-        let summary = ActionSummary(selection: selection, config: config)
         let path = selection.pathDescription
 
         if dryRun {
-            overlay.showPreview(summary, path: path)
+            overlay.showPreview(ActionSummary(selection: selection, config: config), path: path)
             return
         }
+
+        var context = ActionContext(
+            templatesDirectory: store.templatesDirectory,
+            environment: environment(),
+            defaultCalendarID: settings.defaultCalendarID,
+            defaultReminderListID: settings.defaultReminderListID)
+        guard ActionPlanner.placeholders(for: selection, context: context).contains("selection") else {
+            run(selection, context: context)
+            return
+        }
+        // Read only when asked for: it can mean sending the app ⌘C.
+        Task { @MainActor in
+            switch await SelectedText.read(copyIfNeeded: settings.copySelection) {
+            case .text(let text):
+                context.environment["selection"] = text
+            case .nothingSelected:
+                break
+            case .notAllowed:
+                Log.info("  can't run: no Accessibility access for {{selection}}")
+                overlay.showRefused("KeybowNotes needs Accessibility access to read the selected text. "
+                                    + "Allow it in System Settings, then press again.",
+                                    summary: ActionSummary(selection: selection, config: config))
+                SelectedText.requestAccess()
+                return
+            }
+            run(selection, context: context)
+        }
+    }
+
+    private func run(_ selection: ResolvedSelection, context: ActionContext) {
+        guard let overlay else { return }
+        let summary = ActionSummary(selection: selection, config: config, environment: context.environment)
+        let path = selection.pathDescription
+
+        // The system log is kept on disk and readable by any admin, so the
+        // selected text, the clipboard and anything copied stay out of it.
+        var isPrivate = !ActionPlanner.placeholders(for: selection, context: context)
+            .isDisjoint(with: ["selection", "clipboard"])
 
         let planned: PlannedAction
         do {
-            planned = try ActionPlanner.plan(selection, config: config, context: ActionContext(
-                templatesDirectory: store.templatesDirectory,
-                environment: environment(),
-                defaultCalendarID: settings.defaultCalendarID,
-                defaultReminderListID: settings.defaultReminderListID))
+            planned = try ActionPlanner.plan(selection, config: config, context: context)
         } catch {
-            Log.info("  can't run: \(error)")
+            Log.info("  can't run: \(isPrivate ? "(details not logged)" : "\(error)")")
             overlay.showRefused("\(error)", summary: summary)
             return
         }
+        if case .copyToClipboard = planned.plan { isPrivate = true }
 
         bringPermissionPromptsForward(for: planned.plan)
         overlay.showRunning(summary, path: path)
-        Task { @MainActor in
+        Task { @MainActor [isPrivate] in
             let started = Date()
             let outcome = await ActionRunner.run(planned.plan)
             let seconds = String(format: "%.1fs", Date().timeIntervalSince(started))
-            let line = "  \(outcome.succeeded ? "done" : "FAILED") in \(seconds): \(outcome.message)"
-                + (outcome.detail.map { " — \($0)" } ?? "")
+            let line = "  \(outcome.succeeded ? "done" : "FAILED") in \(seconds)"
+                + (isPrivate ? " (details not logged)" : ": \(outcome.message)" + (outcome.detail.map { " — \($0)" } ?? ""))
             outcome.succeeded ? Log.info(line) : Log.error(line)
-            for warning in planned.warnings { Log.info("  warning: \(warning)") }
+            for warning in planned.warnings where !isPrivate { Log.info("  warning: \(warning)") }
             overlay.showFinished(outcome, summary: summary, warnings: planned.warnings)
         }
     }
@@ -239,8 +273,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if EventKitService.status(for: type) == .notDetermined { NSApp.activate() }
     }
 
-    /// {{clipboard}} and {{frontApp}}. This app never takes focus, so the
-    /// frontmost app is whatever you were using when you pressed the key.
+    /// {{clipboard}} and {{frontApp}}; {{selection}} is added by `fire` when
+    /// needed. This app never takes focus, so the frontmost app is whatever you
+    /// were using when you pressed the key.
     private func environment() -> [String: String] {
         var values: [String: String] = [:]
         if let text = NSPasteboard.general.string(forType: .string) {

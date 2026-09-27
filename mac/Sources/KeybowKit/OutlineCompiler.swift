@@ -9,6 +9,8 @@ public enum AnnotationRole: Equatable, Sendable {
     case template
     case alert(minutes: Int)
     case app(name: String, installed: Bool)
+    /// `https://…` written as a word: the link to open.
+    case link
     /// A channel or place inside the app being opened.
     case target
     case listReference(exists: Bool)
@@ -61,6 +63,10 @@ public enum OutlineCompiler {
         "mail": "mail.compose",
         "call": "phone.call",
         "facetime": "phone.call",
+        "link": "url.open",
+        "browser": "url.open",
+        "copy": "clipboard.copy",
+        "clipboard": "clipboard.copy",
     ]
 
     /// `key: value` pairs that set an action field rather than a template value.
@@ -69,7 +75,7 @@ public enum OutlineCompiler {
         "find.byName", "guards.maxBodyBytes", "guards.refuseInlineImages",
         "start", "duration", "alertMinutes", "calendar", "calendarId", "notes", "show",
         "due", "list", "to", "body", "subject",
-        "app", "bundleId", "open", "url", "target", "name", "input", "via",
+        "app", "bundleId", "open", "url", "target", "name", "input", "via", "text",
     ]
     static let numericFields: Set<String> = ["alertMinutes", "guards.maxBodyBytes"]
     static let booleanFields: Set<String> = ["createIfMissing", "show", "guards.refuseInlineImages"]
@@ -88,6 +94,7 @@ public enum OutlineCompiler {
             let lower = word.lowercased()
             if word.hasPrefix("@") { return .listReference(exists: listNames.contains(String(word.dropFirst()))) }
             if let minutes = alertMinutes(lower) { return .alert(minutes: minutes) }
+            if word.contains("://") { return .link }
             if lower.hasSuffix(".md") { return .template }
             if lower == "append" { return .noteMode("notes.append") }
             if lower == "new" || lower == "create" { return .noteMode("notes.create") }
@@ -275,6 +282,8 @@ private struct Compiler {
                 }
             case (.word(let word), .target):
                 set("target", .string(word))
+            case (.word(let word), .link):
+                set("url", .string(word))
             case (.word(let word), .unknown):
                 params.append(("note", .string(word)))
                 note(.warning, "Didn't understand “\(word)”; kept as a note.")
@@ -302,6 +311,8 @@ private struct Compiler {
                 break
             }
         }
+        // A link with nothing else to open it: open it in the browser.
+        if context.type == nil, action.contains(where: { $0.0 == "url" }) { declare("url.open") }
         for (name, fields) in nested { set(name, .object(fields)) }
         if let declaredType { action.removeAll { $0.0 == "type" }; action.insert(("type", .string(declaredType)), at: 0) }
 

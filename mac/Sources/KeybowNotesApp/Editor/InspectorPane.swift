@@ -68,13 +68,16 @@ private let fieldsByType: [String: [FieldSpec]] = [
         .init(key: "open", title: "Open", hint: "a path or a link"), .init(key: "target", title: "Target"),
     ],
     "shortcut": [.init(key: "name", title: "Shortcut"), .init(key: "input", title: "Input")],
+    "url.open": [.init(key: "url", title: "Link", hint: "https://…?q={{selection}}, or a path")],
+    "clipboard.copy": [.init(key: "text", title: "Text", hint: "empty copies the label"),
+                       .init(key: "template", title: "Template")],
 ]
 
 private let typeNames: [(String?, String)] = [
     (nil, "Inherit"), ("notes.create", "New note"), ("notes.append", "Add to a note"),
     ("calendar.createEvent", "Calendar event"), ("reminders.create", "Reminder"),
     ("messages.compose", "Message"), ("mail.compose", "Email"), ("phone.call", "Phone call"),
-    ("app.open", "Open an app"),
+    ("app.open", "Open an app"), ("url.open", "Open a link"), ("clipboard.copy", "Copy to clipboard"),
     ("shortcut", "Run a shortcut"),
 ]
 
@@ -121,10 +124,18 @@ private struct NodeInspector: View {
             case (_, .actionType(let type)), (_, .noteMode(let type)): return type
             case (_, .app): return "app.open"
             case (.pair("type", let value), _): return value
+            // A link opens itself when nothing above says what to do with it.
+            case (_, .link) where parentType == nil: return "url.open"
             default: continue
             }
         }
         return nil
+    }
+
+    /// The type the outline gives this node's parent — not the config's
+    /// default action, which applies only where nothing names a type.
+    private var parentType: String? {
+        chain.dropLast().last.flatMap { model.info($0.id)?.actionType }
     }
 
     var body: some View {
@@ -229,7 +240,7 @@ private struct NodeInspector: View {
         for (annotation, role) in annotated {
             guard case .word(let word) = annotation else { continue }
             switch (role, key) {
-            case (.app, "app"), (.template, "template"), (.target, "target"): return word
+            case (.app, "app"), (.template, "template"), (.target, "target"), (.link, "url"), (.link, "open"): return word
             case (.alert(let minutes), "alertMinutes"): return String(minutes)
             default: continue
             }
@@ -276,7 +287,8 @@ private struct NodeInspector: View {
             for (annotation, role) in zip(node.annotations, roles) {
                 if annotation.key == key { return true }
                 switch (role, key) {
-                case (.alert, "alertMinutes"), (.template, "template"), (.app, "app"), (.target, "target"): return true
+                case (.alert, "alertMinutes"), (.template, "template"), (.app, "app"), (.target, "target"),
+                     (.link, "url"), (.link, "open"): return true
                 default: continue
                 }
             }
@@ -315,7 +327,7 @@ private struct NodeInspector: View {
                 HStack(alignment: .top) {
                     DraftField(title: spec.title, value: own ?? "", placeholder: effectiveValue(spec.key),
                                note: source(of: spec.key), hint: spec.hint,
-                               multiline: ["body", "entry", "notes"].contains(spec.key)) { value in
+                               multiline: ["body", "entry", "notes", "text"].contains(spec.key)) { value in
                         setField(spec.key, value.isEmpty ? nil : value)
                     }
                     if spec.key == "open" {
@@ -335,15 +347,20 @@ private struct NodeInspector: View {
         setField("open", (url.path as NSString).abbreviatingWithTildeInPath)
     }
 
-    /// Writes a field as a pair. Alerts and templates can also be written as
-    /// words (`5 min alert`, `worklog.md`); setting the pair replaces those.
+    /// Writes a field as a pair. Alerts, templates and links can also be
+    /// written as words (`5 min alert`, `worklog.md`, `https://…`); setting the
+    /// pair replaces those.
     private func setField(_ key: String, _ value: String?) {
         model.edit("Set \(key)") { document in
-            if key == "alertMinutes" || key == "template", var current = document.node(id) {
+            if ["alertMinutes", "template", "url", "open"].contains(key), var current = document.node(id) {
                 current.annotations.removeAll { annotation in
                     guard case .word(let word) = annotation else { return false }
                     let lower = word.lowercased()
-                    return key == "template" ? lower.hasSuffix(".md") : OutlineCompiler.alertMinutes(lower) != nil
+                    switch key {
+                    case "template": return lower.hasSuffix(".md")
+                    case "url", "open": return word.contains("://")
+                    default: return OutlineCompiler.alertMinutes(lower) != nil
+                    }
                 }
                 try document.setText(id, current.text)
             }

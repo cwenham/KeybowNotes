@@ -85,6 +85,9 @@ struct Highlighter {
             } else {
                 colour(.systemRed, valueRange)
             }
+        case .link:
+            colour(.linkColor)
+            underline(.linkColor, .single)
         case .target:
             colour(.labelColor)
             underline(.secondaryLabelColor, [.single, .patternDot])

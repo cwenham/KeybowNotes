@@ -162,8 +162,10 @@ For the selected node:
   **Revert** and **Open in TextEdit**. If the file doesn't exist yet, **Create
   It**. A template is shared by every node that uses it; saving writes the file
   straight away, outside the outline's undo.
-- **Fields that are set by words** — `[Rider]`, `[worklog.md]`, `[5 min alert]`
-  — show as set here, just as their `key: value` forms do.
+- **Fields that are set by words** — `[Rider]`, `[worklog.md]`, `[5 min alert]`,
+  `[https://…]` — show as set here, just as their `key: value` forms do.
+  Editing one writes the pair in place of the word. Links are underlined in the
+  outline, in the link colour.
 - **Problems** — everything the compiler said about this node.
 
 Edits in the inspector change the node's annotations in place: an existing pair

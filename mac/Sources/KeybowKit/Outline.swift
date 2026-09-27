@@ -48,12 +48,14 @@ public enum Annotation: Equatable, Hashable, Sendable {
         }
     }
 
-    /// Reads one bracket item. A pair is `identifier: value`; anything else is a word.
+    /// Reads one bracket item. A pair is `identifier: value`; anything else is
+    /// a word — including a link like `https://example.com`, whose scheme
+    /// would otherwise read as a key.
     public init(parsing text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         if let colon = trimmed.firstIndex(of: ":") {
             let key = String(trimmed[..<colon])
-            if Self.isKey(key) {
+            if Self.isKey(key), !trimmed[trimmed.index(after: colon)...].hasPrefix("//") {
                 var value = trimmed[trimmed.index(after: colon)...].trimmingCharacters(in: .whitespaces)
                 if value.count >= 2, value.hasPrefix("\""), value.hasSuffix("\"") {
                     value = Self.unquoted(String(value.dropFirst().dropLast()))

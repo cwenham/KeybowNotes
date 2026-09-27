@@ -288,6 +288,8 @@ extension OutlineDocument {
         "messages.compose": "Messages",
         "mail.compose": "Mail",
         "phone.call": "Call",
+        "url.open": "Link",
+        "clipboard.copy": "Copy",
     ]
 
     /// Sets this node's own action type, replacing any it named — or, with nil,

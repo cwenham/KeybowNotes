@@ -53,7 +53,9 @@ struct KeypadPane: View {
                     .strokeBorder(key.selected ? Color.primary : Color.secondary.opacity(key.colour == nil ? 0.35 : 0.15),
                                   style: StrokeStyle(lineWidth: key.selected ? 2 : 1, dash: key.colour == nil ? [3, 3] : []))
                 Text(key.label)
-                    .font(.system(size: 9, weight: key.selected ? .bold : .regular))
+                    .font(.system(size: LabelFit.size(for: key.label, base: 9, weight: key.selected ? .bold : .regular,
+                                                      width: 56, smallest: 6.5),
+                                  weight: key.selected ? .bold : .regular))
                     .foregroundStyle(key.level > 0.6 ? Color.white : Color.primary)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)

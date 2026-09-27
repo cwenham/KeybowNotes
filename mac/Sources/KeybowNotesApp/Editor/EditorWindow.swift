@@ -125,24 +125,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         runDebugScript()
     }
 
-    /// ⌃⌘↑ and ⌃⌘↓ move a node, whether or not its row is being edited — the
-    /// field editor would otherwise take them.
+    /// ⌃⌘↑ and ⌃⌘↓ (or ⇧⌘) move a node, whether or not its row is being
+    /// edited — the field editor would otherwise take them.
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self else { return event }
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            // Logged so a key that doesn't arrive as expected can be diagnosed.
-            if [125, 126].contains(event.keyCode), !flags.isDisjoint(with: [.control, .command]) {
-                Log.info("editor key: \(event.keyCode == 126 ? "up" : "down") flags=\(flags.rawValue) " +
-                         "ourWindow=\(event.window === self.window)")
-            }
-            guard event.window === self.window, flags.contains([.control, .command]) else { return event }
-            switch event.keyCode {
-            case 126: self.coordinator.move(by: -1); return nil      // ↑
-            case 125: self.coordinator.move(by: 1); return nil       // ↓
-            default: return event
-            }
+            guard let self, event.window === self.window, let offset = MoveKeys.offset(for: event) else { return event }
+            self.coordinator.move(by: offset)
+            return nil
         }
     }
 

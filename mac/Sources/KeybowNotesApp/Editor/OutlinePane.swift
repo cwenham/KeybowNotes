@@ -357,8 +357,8 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
             if let id = selectedRow?.nodeID { delete(id) }
             return true
         case 125, 126:                                          // ⌃⌘↓, ⌃⌘↑; plain arrows select
-            guard flags.contains([.control, .command]) else { return false }
-            move(by: event.keyCode == 126 ? -1 : 1)
+            guard let offset = MoveKeys.offset(for: event) else { return false }
+            move(by: offset)
             return true
         default:
             break
@@ -552,6 +552,21 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
             }
         default:
             break
+        }
+    }
+}
+
+/// The keys that move a node up or down its row: ⌃⌘↑/↓, as in OmniOutliner,
+/// and ⇧⌘↑/↓, since ⌃ and ⇧ are easily mistaken for each other and neither
+/// does anything else here.
+enum MoveKeys {
+    static func offset(for event: NSEvent) -> Int? {
+        let flags = event.modifierFlags.intersection([.control, .option, .shift, .command])
+        guard flags == [.control, .command] || flags == [.shift, .command] else { return nil }
+        switch event.keyCode {
+        case 126: return -1
+        case 125: return 1
+        default: return nil
         }
     }
 }

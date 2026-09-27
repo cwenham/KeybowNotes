@@ -24,7 +24,7 @@ struct TemplateSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(alignment: .firstTextBaseline) {
                 Text("Template: \(name)").font(.subheadline.weight(.semibold))
                 Spacer()
                 Text(source).font(.caption2).foregroundStyle(.secondary)

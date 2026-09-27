@@ -206,14 +206,17 @@ private struct NodeInspector: View {
     private var actionSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Action").font(.subheadline.weight(.semibold))
-            Picker("Type", selection: Binding(
-                get: { ownType },
-                set: { type in model.edit("Set Type") { try $0.setType(id, type) } }
-            )) {
-                ForEach(Array(typeNames.enumerated()), id: \.offset) { _, entry in
-                let (type, name) = entry
-                    Text(type == nil ? "Inherit (\(typeName(inheritedTypeAbove)))" : name).tag(type)
+            InspectorRow("Type") {
+                Picker("Type", selection: Binding(
+                    get: { ownType },
+                    set: { type in model.edit("Set Type") { try $0.setType(id, type) } }
+                )) {
+                    ForEach(Array(typeNames.enumerated()), id: \.offset) { _, entry in
+                        let (type, name) = entry
+                        Text(type == nil ? "Inherit (\(typeName(inheritedTypeAbove)))" : name).tag(type)
+                    }
                 }
+                .labelsHidden()
             }
             if let type = action?.type, let fields = fieldsByType[type] {
                 ForEach(fields, id: \.key) { spec in
@@ -306,8 +309,8 @@ private struct NodeInspector: View {
         let own = ownValue(spec.key)
         switch spec.kind {
         case .flag:
-            LabeledContent(spec.title) {
-                Picker("", selection: Binding(
+            InspectorRow(spec.title) {
+                Picker(spec.title, selection: Binding(
                     get: { own.map { ["true", "yes", "on", "1"].contains($0.lowercased()) ? "on" : "off" } ?? "inherit" },
                     set: { choice in setField(spec.key, choice == "inherit" ? nil : (choice == "on" ? "true" : "false")) }
                 )) {
@@ -324,7 +327,7 @@ private struct NodeInspector: View {
                     setApp(name, bundle)
                 }
             } else {
-                HStack(alignment: .top) {
+                HStack(alignment: .firstTextBaseline) {
                     DraftField(title: spec.title, value: own ?? "", placeholder: effectiveValue(spec.key),
                                note: source(of: spec.key), hint: spec.hint,
                                multiline: ["body", "entry", "notes", "text"].contains(spec.key)) { value in
@@ -398,7 +401,7 @@ private struct NodeInspector: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Values").font(.subheadline.weight(.semibold))
             ForEach(ownParameters, id: \.0) { key, value in
-                HStack {
+                HStack(alignment: .firstTextBaseline) {
                     DraftField(title: key, value: value, note: "set here") { updated in
                         model.edit("Set \(key)") { try $0.setPair(id, key: key, value: updated) }
                     }
@@ -411,12 +414,12 @@ private struct NodeInspector: View {
                 }
             }
             ForEach(inheritedParameters, id: \.key) { item in
-                LabeledContent(item.key) {
+                InspectorRow(item.key) {
                     Text("\(item.value) — from \(item.from)").foregroundStyle(.secondary)
                 }
             }
-            HStack {
-                TextField("name", text: $newKey).frame(width: 90)
+            HStack(spacing: InspectorLayout.spacing) {
+                TextField("name", text: $newKey).frame(width: InspectorLayout.labelWidth)
                 TextField("value", text: $newValue)
                 Button("Add") {
                     let key = newKey.trimmingCharacters(in: .whitespaces)
@@ -492,6 +495,36 @@ func treeName(_ tree: TreeKind) -> String {
     }
 }
 
+/// One labelled row of the inspector. Labels sit in a right-aligned column
+/// so the controls line up, and each label is level with the first line of
+/// text in its control — not centred on the control and whatever note or
+/// extra lines sit beneath it.
+enum InspectorLayout {
+    static let labelWidth: CGFloat = 104
+    static let spacing: CGFloat = 8
+}
+
+struct InspectorRow<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: InspectorLayout.spacing) {
+            Text(title)
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: InspectorLayout.labelWidth, alignment: .trailing)
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
 /// A text field that commits on Return or on leaving it, rather than on every
 /// keystroke — one edit, one undo step.
 struct DraftField: View {
@@ -508,7 +541,7 @@ struct DraftField: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        LabeledContent {
+        InspectorRow(title) {
             VStack(alignment: .trailing, spacing: 2) {
                 TextField(placeholder.isEmpty ? hint : placeholder, text: $draft, axis: multiline ? .vertical : .horizontal)
                     .lineLimit(multiline ? 1...6 : 1...1)
@@ -521,8 +554,6 @@ struct DraftField: View {
                         .foregroundStyle(note == "set here" ? Color.accentColor : .secondary)
                 }
             }
-        } label: {
-            Text(title)
         }
         .onAppear { draft = value }
         .onChange(of: value) { _, newValue in if !focused { draft = newValue } }
@@ -545,9 +576,9 @@ private struct AppField: View {
     let set: (String?, String?) -> Void
 
     var body: some View {
-        LabeledContent("App") {
+        InspectorRow("App") {
             VStack(alignment: .trailing, spacing: 2) {
-                HStack {
+                HStack(alignment: .firstTextBaseline) {
                     AppComboBox(value: own ?? "", placeholder: placeholder) { name in
                         let trimmed = name.trimmingCharacters(in: .whitespaces)
                         guard !trimmed.isEmpty else { return set(nil, nil) }

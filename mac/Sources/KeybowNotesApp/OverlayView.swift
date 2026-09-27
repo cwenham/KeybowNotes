@@ -129,9 +129,9 @@ private struct OptionTile: View {
                 .fill(option.colour.swatch)
                 .frame(width: 8, height: 8)
             Text(option.label)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: LabelFit.size(for: option.label, base: 13, weight: .medium, width: 64, smallest: 9),
+                              weight: .medium))
                 .lineLimit(2)
-                .minimumScaleFactor(0.85)
             Spacer(minLength: 0)
             if !option.isLeaf {
                 Image(systemName: "chevron.right")

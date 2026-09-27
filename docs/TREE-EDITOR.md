@@ -75,7 +75,7 @@ the last occupied one aren't shown; Return reaches them.
 | Return on an empty new node | — | removes it again |
 | Tab | **indent**: the node becomes a child of the node above it | ends the edit, indents, carries on editing |
 | Shift-Tab | **outdent**: the node moves up a level, after its parent | ends the edit, outdents, carries on editing |
-| ⌃⌘↑ / ⌃⌘↓ | **move** the node to the key before / after, swapping with what's there or moving into an empty key | the same, ending the edit |
+| ⌃⌘↑ / ⌃⌘↓, or ⇧⌘↑ / ⇧⌘↓ | **move** the node to the key before / after, swapping with what's there or moving into an empty key | the same, ending the edit |
 | ↑ / ↓ | select the previous / next row | end the edit and select |
 | ← / → | collapse / expand | move the cursor |
 | Delete | delete the node and everything under it | edits |
@@ -84,7 +84,9 @@ the last occupied one aren't shown; Return reaches them.
 | ⌘S | save | end the edit and save |
 
 ⌃⌘↑/↓ follows OmniOutliner. Shift with the arrows would be the obvious choice,
-but it already extends a text selection while editing.
+but it already extends a text selection while editing. ⇧⌘↑/↓ works too: ⌃ and
+⇧ are easily mistaken for each other, and in a one-line field ⇧⌘↑/↓ only
+duplicates ⇧⌘←/→.
 
 ### The rules it keeps
 

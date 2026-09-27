@@ -24,6 +24,10 @@ usage: keybow <command>
   convert <outline> [-o config.json]
                      turn a numbered outline into a config, listing what it
                      guessed and what still needs filling in
+  upgrade-outline <outline>
+                     rewrite an older outline in the current syntax: [brackets]
+                     instead of (parentheses), plus # contacts and # projects
+                     sections to fill in. Keeps a .bak copy.
 
 The config defaults to ~/Library/Application Support/KeybowNotes/config.json,
 falling back to ./config.example.json.
@@ -281,6 +285,33 @@ case "convert":
     report("Still to fill in", result.todo)
     report("Warnings", result.warnings)
     if let output { FileHandle.standardError.write(Data("\nWrote \(output)\n".utf8)) }
+    exit(0)
+
+case "upgrade-outline":
+    guard let input = arguments.dropFirst().first else { fail("usage: keybow upgrade-outline <outline>") }
+    let url = URL(fileURLWithPath: (input as NSString).expandingTildeInPath)
+    guard let original = try? String(contentsOf: url, encoding: .utf8) else { fail("cannot read \(url.path)") }
+
+    let (bracketed, changed) = OutlineMigration.bracketize(original)
+    var (document, diagnostics) = OutlineParser.parse(bracketed)
+    if let error = diagnostics.first(where: { $0.severity == .error }) {
+        fail("line \(error.line): \(error.message) — nothing was changed")
+    }
+    let before = (document.contacts.count, document.projects.count)
+    OutlineMigration.addMissingEntries(to: &document, from: OutlineCompiler.compile(document))
+    let upgraded = OutlineWriter.text(document)
+
+    let backup = url.appendingPathExtension("bak")
+    do {
+        try? FileManager.default.removeItem(at: backup)
+        try FileManager.default.copyItem(at: url, to: backup)
+        try upgraded.write(to: url, atomically: true, encoding: .utf8)
+    } catch {
+        fail("cannot write \(url.path): \(error.localizedDescription)")
+    }
+    print("Rewrote \(changed) annotation\(changed == 1 ? "" : "s") in brackets.")
+    print("Added \(document.contacts.count - before.0) contacts and \(document.projects.count - before.1) projects to fill in.")
+    print("Kept the original as \(backup.lastPathComponent).")
     exit(0)
 
 case "run":

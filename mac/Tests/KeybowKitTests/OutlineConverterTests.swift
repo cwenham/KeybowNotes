@@ -24,26 +24,26 @@ final class OutlineConverterTests: XCTestCase {
     1. Work
        1. Immediate task
           1. Programming
-             1. Project A (Rider)
-             2. Project B (VSCode)
-          3. Messaging (Messages)
+             1. Project A [Rider]
+             2. Project B [VSCode]
+          3. Messaging [Messages]
              1. Alex Example
-          4. Mail (Mail)
+          4. Mail [Mail]
              1. Alex Example
        2. General Tasks
-          1. Meeting (Calendar, 5 min alert)
+          1. Meeting [Calendar, 5 min alert]
              1. Today
              2. Tomorrow
-          3. Project Documentation (AppendProjectDocs.md)
-             1. New Project (NewProjectDocs.md)
+          3. Project Documentation [AppendProjectDocs.md]
+             1. New Project [NewProjectDocs.md]
              2. Project B
        3.
        4. Notes
-          1. Work log (worklog.md)
+          1. Work log [worklog.md]
     2. Personal
        4. Social
-          2. Discord (Discord)
-             1. Server1 (offtopic)
+          2. Discord [Discord]
+             1. Server1 [offtopic]
     4. Ideas
        3. Inventions
     """
@@ -65,8 +65,8 @@ final class OutlineConverterTests: XCTestCase {
         XCTAssertEqual(action.type, "app.open")
         XCTAssertEqual(action.string("app"), "Rider")
         XCTAssertEqual(action.string("bundleId"), "com.jetbrains.rider")
-        XCTAssertTrue(result.todo.contains { $0.contains("\"Project A\"") }, "project paths are left to fill in")
-        XCTAssertTrue(result.inferences.contains { $0.contains("\"VSCode\" opens Visual Studio Code") })
+        XCTAssertTrue(result.todo.contains { $0.contains("Project A") && $0.contains("path") }, "project paths are left to fill in")
+        XCTAssertTrue(result.inferences.contains { $0.contains("“VSCode” opens Visual Studio Code") })
     }
 
     func testCalendarBranchWithDatesAndAlert() throws {
@@ -110,7 +110,7 @@ final class OutlineConverterTests: XCTestCase {
         XCTAssertEqual(action.type, "app.open")
         XCTAssertEqual(action.string("app"), "Discord")
         XCTAssertEqual(action.string("target"), "offtopic")
-        XCTAssertTrue(result.todo.contains { $0.contains("Server1 (offtopic)") })
+        XCTAssertTrue(result.todo.contains { $0.contains("Server1") && $0.contains("URL") })
     }
 
     func testBareLeafBecomesADefaultNote() throws {
@@ -143,13 +143,13 @@ final class OutlineConverterTests: XCTestCase {
     }
 
     func testMissingAppIsAWarningNotAFailure() throws {
-        let (result, config) = try convert("1. Board (KiCad)")
+        let (result, config) = try convert("1. Board [KiCad]")
         XCTAssertEqual(config.resolve(path: [0])?.action?.string("app"), "KiCad")
-        XCTAssertTrue(result.warnings.contains { $0.contains("KiCad is not in /Applications") })
+        XCTAssertTrue(result.warnings.contains { $0.contains("KiCad isn't installed") })
     }
 
     func testUnknownLowercaseAnnotationIsKept() throws {
-        let (result, config) = try convert("1. Thing (whatever)")
+        let (result, config) = try convert("1. Thing [whatever]")
         XCTAssertEqual(config.resolve(path: [0])?.params["note"], "whatever")
         XCTAssertFalse(result.warnings.isEmpty)
     }
@@ -165,9 +165,16 @@ final class OutlineConverterTests: XCTestCase {
     }
 
     func testSplitAnnotations() {
-        XCTAssertEqual(OutlineConverter.splitAnnotations("Meeting (Calendar, 5 min alert)").0, "Meeting")
-        XCTAssertEqual(OutlineConverter.splitAnnotations("Meeting (Calendar, 5 min alert)").1, ["Calendar", "5 min alert"])
-        XCTAssertEqual(OutlineConverter.splitAnnotations("Pat O’Neill").0, "Pat O’Neill")
-        XCTAssertEqual(OutlineConverter.splitAnnotations("Pat O’Neill").1, [])
+        XCTAssertEqual(OutlineNode.split("Meeting [Calendar, 5 min alert]").label, "Meeting")
+        XCTAssertEqual(OutlineNode.split("Meeting [Calendar, 5 min alert]").annotations,
+                       [.word("Calendar"), .word("5 min alert")])
+        XCTAssertEqual(OutlineNode.split("Pat O’Neill").label, "Pat O’Neill")
+        XCTAssertEqual(OutlineNode.split("Pat O’Neill").annotations, [])
+    }
+
+    func testParenthesesAreNowJustText() throws {
+        let (_, config) = try convert("1. Project (old) [Notes]")
+        XCTAssertEqual(config.tree[0]?.label, "Project (old)")
+        XCTAssertEqual(config.resolve(path: [0])?.action?.type, "notes.create")
     }
 }

@@ -1,24 +1,23 @@
 # The KeybowNotes configuration language
 
-**Version 2**, as understood by KeybowNotes 0.1. This describes what the parser,
-the outline converter and the action planner do today; where behaviour is a
-default rather than a rule, it says so.
+**Version 3**, as understood by KeybowNotes 0.1. This describes what the parser,
+the compiler and the action planner do today; where behaviour is a default
+rather than a rule, it says so.
 
 A configuration says what each key on the keypad means: which choices are
-offered on each row, what the final choice does, and with what values. It has
-two forms:
+offered on each row, what the final choice does, and with what values.
 
-- an **outline** — a numbered list, the way you'd sketch a tree by hand, with
-  keywords in brackets. This is the form meant for writing.
-- **JSON** — what the app reads. The outline converts to it; it can also be
-  edited directly, and says some things the outline can't yet.
+**The outline is the configuration.** It is a numbered list, the way you'd
+sketch a tree by hand, with keywords and settings in square brackets — written
+by hand or in the tree editor. The app runs a JSON file **compiled** from it;
+the JSON is never edited, and says nothing the outline can't.
 
 ```bash
 keybow convert tree.md -o ~/Library/Application\ Support/KeybowNotes/config.json
 ```
 
-The running app notices the file has changed and reloads it within a couple of
-seconds.
+The running app notices the JSON has changed and reloads it within a couple of
+seconds. The tree editor compiles on every save.
 
 ---
 
@@ -52,58 +51,82 @@ it; the leaf's label, and anything else along the path, fills in the details.
 ## 2. The outline
 
 ```
-KeybowNotes template hierarchy          ← not a numbered item: ignored
+KeybowNotes template hierarchy              ← before the first item: kept as written
 
-1. Work
+1. Work [colour: 0060ff]
    2. General Tasks
-      1. Meeting (Calendar, 5 min alert)
+      1. Meeting [Calendar, 5 min alert, duration: 1h]
          1. Today
          2. Tomorrow
-      3.                                 ← key 3 left empty
-      4. Notes
-         1. Work log (worklog.md)
+      4. Notes                              ← key 3 is empty: the numbers say so
+         1. Work log [worklog.md]
 2. Personal
-   3. Reminder (Reminders)
+   3. Reminder [Reminders]
       1. Grocery basics
          1. Milk
 
-# bottom                                 ← the rest goes in the bottom tree
-1. Home
+# row 2                                     ← a side tree
+1. Check-in [append, find.byName: "Check-ins, {{date:MMMM yyyy}}"]
+   1. Mood [@rating]
+
+# list rating                               ← nodes to reuse
+1. Great
+2. Meh
+
+# contacts
+- Rudy Rudolph [phone: +15550100, email: rudy@example.com]
+
+# projects
+- Project A [path: ~/Code/project-a]
+
+# defaults
+- commitDelayMs: 800
 ```
 
 ### Items
 
-- **`N. Label (annotations)`** — `N` is the key position, 1 to 4. Numbers need
-  not be consecutive: a missing or empty number leaves that key unused.
+- **`N. Label [annotations]`** — `N` is the key position, 1 to 4. A missing
+  number leaves that key unused; `3.` with nothing after it says so explicitly
+  and is otherwise ignored.
 - **Indentation is nesting.** An item belongs to the nearest item above it that
   is indented less. Tabs count as four spaces.
-- **Anything that isn't a numbered item is ignored**, so a title or notes between
-  items are fine.
-- A key number outside 1–4, or used twice at one level, is an error that names
-  the line.
+- **Mistakes don't stop the reading.** A key number outside 1–4, a number used
+  twice at one level, or an item deeper than its tree allows is reported with
+  its line, and skipped along with everything beneath it. `keybow convert`
+  refuses to write a config while any remain; the editor shows them in place.
 
-### Trees
+### Sections
 
-A heading switches tree for everything below it until the next one:
+A heading starts a section, which lasts until the next one:
 
-| Heading | Tree |
+| Heading | Holds |
 |---|---|
-| `# main`, `# top`, `# row 1` | main |
-| `# row 2` | row2 |
-| `# row 3` | row3 |
-| `# bottom`, `# row 4`, `# bottom up` | bottom |
+| none — items before any heading | the main tree |
+| `# main`, `# top`, `# row 1` | the main tree |
+| `# row 2` | the row 2 tree |
+| `# row 3` | the row 3 tree |
+| `# bottom`, `# row 4`, `# bottom up` | the bottom tree |
+| `# list <name>` | nodes reused with `[@name]` |
+| `# contacts` | people: `- Name [field: value, …]` |
+| `# projects` | projects: `- Name [path: …, …]` |
+| `# defaults` | settings: `- key: value` |
 
-The word "tree" is ignored (`# Row 2 tree`), as are case, spaces and hyphens.
-A heading that names no tree is treated as a title. Items before any heading go
-in the main tree.
+The word "tree", case, spaces and hyphens don't matter in tree headings. A
+heading before the first item that names no section is part of the preamble —
+a title. Other lines between items are ignored, and aren't kept when the
+outline is written back out.
 
-### Annotations
+### Brackets
 
-Brackets at the end of a label hold **annotations**, separated by commas:
-`Meeting (Calendar, 5 min alert)`. An annotation on a branch applies to
-everything beneath it, until something deeper says otherwise.
+A **final** group in square brackets holds the item's annotations, separated by
+commas. Parentheses are just text: `Project (old) [Notes]` is labelled
+"Project (old)". To put a square bracket in a label, write `\[` or `\]`.
 
-| Annotation | Meaning | JSON it becomes |
+An annotation is either a **word** or a **pair**.
+
+#### Words
+
+| Word | Meaning | Compiles to |
 |---|---|---|
 | `Notes` | a new note | `"type": "notes.create"` |
 | `Calendar` | a calendar event | `"type": "calendar.createEvent"` |
@@ -112,59 +135,117 @@ everything beneath it, until something deeper says otherwise.
 | `Mail` | an email draft | `"type": "mail.compose"` |
 | `append` | add to a running note rather than make a new one | `"type": "notes.append"` |
 | `new`, `create` | make a new note | `"type": "notes.create"` |
-| `something.md` | a template (see §8) | `"template": "something.md"` |
+| `something.md` | a template (§8) | `"template": "something.md"` |
 | `N min alert`, `N hour alert` | an alert before an event | `"alertMinutes": N` |
+| `@name` | take this branch's children from `# list name` | `"children": "@name"` |
 | an app — `Rider`, `VSCode`… | open the leaf in that app | `"type": "app.open", "app": …, "bundleId": …` |
-| anything else, under an app | a channel or target in that app | `"target": …` |
-
-Details:
+| any other word, under an app | a channel or place in that app | `"target": …` |
 
 - **Case doesn't matter** for the keywords. `min`/`mins`/`minute(s)` and
   `h`/`hr`/`hour(s)` are all accepted in alerts.
 - **Template names can imply append or create.** A template whose name begins
-  `Append…` makes the node append; one beginning `New…` makes it create. This
-  only applies if no other annotation on that node has already chosen, and the
-  converter reports it as a guess.
+  `Append…` makes the node append; one beginning `New…` makes it create — unless
+  another annotation on the node has already chosen. Reported as a guess.
 - **Apps are recognised by the names people use** — `VSCode` is Visual Studio
   Code, `Prusa Slicer` is PrusaSlicer, `Fusion` is Autodesk Fusion, `Mastodon`
   is whichever Mastodon client is installed — and looked for in `/Applications`,
   `/System/Applications` and `~/Applications`, including one folder down. The
-  app's bundle ID is recorded, so it is found wherever it lives at run time.
-- **Under an app, any other word is a target** in it — `Server1 (offtopic)`.
+  bundle ID is recorded, so the app is found wherever it lives at run time.
 - **Elsewhere, an unknown capitalised word is assumed to be an app**, with a
-  warning that it isn't installed, and **an unknown lowercase word is kept** as
-  `params.note`, with a warning.
+  warning that it isn't installed, and **an unknown lowercase word is kept** as a
+  `note` value, with a warning.
+- A branch can't both take `@list` children and have its own.
 
-### What the converter infers for leaves
+#### Pairs
+
+`key: value` sets something. The key decides where it goes:
+
+- **`colour`** (or `color`): the key's light, `rrggbb`.
+- **`type`**: the action type by its full name, for types without a keyword:
+  `type: shortcut`.
+- **An action field** (§5) sets that field: `folder`, `title`, `template`,
+  `account`, `entry`, `createIfMissing`, `find.byName`, `guards.maxBodyBytes`,
+  `guards.refuseInlineImages`, `start`, `duration`, `alertMinutes`, `calendar`,
+  `calendarId`, `notes`, `show`, `due`, `list`, `to`, `body`, `subject`, `app`,
+  `bundleId`, `open`, `url`, `target`, `name`, `input`. A dotted key sets a field
+  inside another: `find.byName: Journal`.
+- **Anything else** is a value for templates (§6), inherited by everything
+  beneath: `area: work`, `when: tomorrow`, `contact: Rudy Rudolph`.
+
+`alertMinutes` and `guards.maxBodyBytes` are numbers; `createIfMissing`, `show`
+and `guards.refuseInlineImages` are `true` or `false`; everything else is text,
+placeholders included: `title: Standup — {{date:d MMM}}`. The value runs to the
+next comma; **put it in double quotes** if it contains a comma, a square
+bracket or a quote (written `\"`), or starts or ends with a space. `key:` with
+nothing after it is an empty value.
+
+#### Contacts, projects and defaults
+
+Contacts and projects are bulleted names with pairs: any fields, used as
+`{{contact.phone}}` or `{{project.path}}` (§3). Defaults are bulleted pairs,
+with dots for grouped settings:
+
+```
+# defaults
+- colour: 202020
+- commitDelayMs: 800
+- dates.defaultTime: 08:30
+- notes.account: iCloud
+- action.type: notes.append
+- types.calendar.createEvent.duration: 1h
+```
+
+### What the compiler infers for leaves
 
 A leaf with no annotations still means something, depending on what it inherits:
 
 | Under | A leaf like | Becomes |
 |---|---|---|
 | a calendar branch | `Today`, `Next week`, `friday` | a `when` value, if it reads as a date (§7) |
-| a Messages branch | `Rudy Rudolph` | a contact, with a phone number to fill in |
-| a Mail branch | `Rudy Rudolph` | the same contact, with an email to fill in |
-| an app that opens files | `Project A` | a project, with a path to fill in |
-| an app that is a service (Discord, Claude…) | `Channel1` | a target needing a URL |
+| a Messages branch | `Rudy Rudolph` | a contact needing a phone number |
+| a Mail branch | `Rudy Rudolph` | the same contact, needing an email address |
+| an app that opens files | `Project A` | a project needing a path |
+| an app that is a service (Discord, Claude…) | `Channel1` | a target needing a URL — add `open: …` |
 | nothing | `Inventions` | the default action: a new note (§4) |
 
-### The converter's report
+In a `# list`, a leaf that reads as a date gets a `when` value whatever uses the
+list. An explicit `when:`, `start:`, `to:`, `contact:` or `open:` is left alone.
 
-Alongside the JSON, the converter lists three things, on stderr:
+A person or project the tree refers to but `# contacts` or `# projects`
+doesn't define still gets an entry in the compiled JSON, with empty fields, and
+is reported.
+
+### The compiler's report
+
+`keybow convert` lists, on stderr:
 
 - **Guessed — check these:** an app it substituted, or append/create read from a
   template's name.
 - **Still to fill in:** phone numbers, email addresses, project paths, channel
-  URLs.
-- **Warnings:** an app that isn't installed, an annotation it didn't understand.
+  URLs, events with no date.
+- **Warnings:** an app that isn't installed, a word it didn't understand.
 
-It also gives each top-level branch of a tree its own colour, which the branch's
-children inherit. Before writing, it loads its own output to make sure the app
-will accept it.
+Each top-level node without a `colour` gets one from a small palette, which its
+children inherit. Before writing, the compiled JSON is loaded exactly as the
+app would load it.
+
+### Writing it back out
+
+The tree editor, and `keybow upgrade-outline`, write the outline in one
+consistent form: three spaces per level, numbers as key positions, empty keys
+omitted, and sections in the order main tree, side trees, lists, contacts,
+projects, defaults. The preamble is kept as written.
+
+### Upgrading an older outline
+
+Version 2 put annotations in parentheses. `keybow upgrade-outline tree.md`
+rewrites a trailing `(…)` on each item as `[…]`, adds `# contacts` and
+`# projects` entries — with empty fields — for everyone and everything the tree
+refers to, and keeps the original as `tree.md.bak`.
 
 ---
 
-## 3. The JSON form
+## 3. The compiled form
 
 ```jsonc
 {
@@ -182,8 +263,11 @@ will accept it.
 }
 ```
 
-Every section is optional. A version 1 file, with a single `"tree": [ … ]`,
-loads as the main tree.
+This is what the outline compiles to, and what the app loads. It's described
+here because it is what every rule below is expressed in, and because the
+compiler's output is readable when something needs checking. Every section is
+optional. A version 1 file, with a single `"tree": [ … ]`, loads as the main
+tree.
 
 ### Nodes
 
@@ -255,14 +339,14 @@ the path and combines them, in increasing priority:
 
 **A node naming a different type from the one it inherits starts afresh.**
 Fields meant for the other kind of action are dropped rather than leaking in.
-That is how *Project Documentation (append)* can hold a *New Project (create)*
+That is how *Project Documentation [append]* can hold a *New Project [create]*
 leaf without it inheriting the append settings.
 
 **Built-in defaults:**
 
 | Type | Default fields |
 |---|---|
-| `notes.create` — also the default action, so a note is filed alike whether marked `(Notes)` or bare | `folder: {{folderPath}}`, `title: {{leaf}} — {{date:d MMM yyyy}}` |
+| `notes.create` — also the default action, so a note is filed alike whether marked `[Notes]` or bare | `folder: {{folderPath}}`, `title: {{leaf}} — {{date:d MMM yyyy}}` |
 | `notes.append` | `folder: {{parentPath}}`, `find.byName: {{leaf}}`, `createIfMissing: true` |
 | `calendar.createEvent` | `title: {{parent}}`, `start: {{when}}`, `duration: +30m`, `show: true` |
 | `reminders.create` | `title: {{leaf}}` |
@@ -530,9 +614,15 @@ window instead of the file. Two of them feed into the language:
 
 ## 10. Reserved words
 
-**Outline annotations:** `Notes`, `Calendar`, `Reminders`, `Messages`, `Mail`,
-`append`, `new`, `create`, `… alert`, `….md`, and the app names the converter
-knows.
+**Outline words:** `Notes`, `Calendar`, `Reminders`, `Messages`, `Mail`,
+`append`, `new`, `create`, `… alert`, `….md`, `@…`, and the app names the
+compiler knows.
+
+**Outline pairs with a meaning of their own:** `colour`/`color`, `type`, and the
+action fields listed in §2.
+
+**Section headings:** `main`, `row 2`, `row 3`, `bottom` (and their variants),
+`list …`, `contacts`, `projects`, `defaults`.
 
 **Action types:** `notes.create`, `notes.append`, `calendar.createEvent`,
 `reminders.create`, `messages.compose`, `mail.compose`, `app.open`, `shortcut`.
@@ -550,8 +640,6 @@ knows.
 - **Asking for a value** before acting — a text field in the overlay. Reserved
   syntax: `{{?Label}}`.
 - **More than one action** per leaf — a note *and* a reminder pointing to it.
-- **Channel URLs** for apps like Discord and Meshtastic, which the converter can
+- **Channel URLs** for apps like Discord and Meshtastic, which the compiler can
   only list as needing one.
-- **Outline syntax for everything JSON can say** — `params`, `find`, `guards`,
-  lists, contacts and projects still need the JSON.
-- **An editor** for the tree, beyond the outline.
+- **Comments** between items, which the outline's writer doesn't keep yet.

@@ -140,52 +140,50 @@ The full language — outline syntax, keywords, JSON fields, inheritance, every
 action's fields, placeholders and dates — is in
 [CONFIG-LANGUAGE.md](CONFIG-LANGUAGE.md). This section gives the design.
 
-JSON, reloaded on change. Location: `~/Library/Application Support/KeybowNotes/config.json`.
-[`mac/config.example.json`](../mac/config.example.json) shows every feature. **The
-real config is never committed**: it holds personal categories, names, phone
-numbers and paths, and the repository is public.
+**The outline is the configuration**: `tree.md`, written by hand or in the tree
+editor ([TREE-EDITOR.md](TREE-EDITOR.md)). The app runs JSON compiled from it,
+`config.json`, reloaded on change; nothing edits the JSON directly. Both live in
+`~/Library/Application Support/KeybowNotes/`. **The real configuration is never
+committed**: it holds personal categories, names, phone numbers and paths, and
+the repository is public. [`mac/config.example.json`](../mac/config.example.json)
+shows the compiled form.
 
 ### Writing it as an outline
-
-Trees are easier to sketch as a numbered outline than as JSON, so the outline is
-the intended way to write one:
 
 ```
 1. Work
    2. General Tasks
-      1. Meeting (Calendar, 5 min alert)
+      1. Meeting [Calendar, 5 min alert, duration: 1h]
          1. Today
          2. Tomorrow
-      3.
       4. Notes
-         1. Work log (worklog.md)
+         1. Work log [worklog.md]
+
+# contacts
+- Rudy Rudolph [phone: +15550100]
 ```
 
 ```bash
 keybow convert tree.md -o ~/Library/Application\ Support/KeybowNotes/config.json
 ```
 
-- **Numbers are key positions**, 1-4 left to right; indentation is nesting.
-  `3.` with nothing after it leaves that key empty.
-- **Headings name side trees**: `# row 2`, `# row 3`, `# bottom`. Other headings,
-  and any line that is not a numbered item, are ignored — so a title is fine.
-- **Brackets hold annotations**, comma-separated, applying to everything beneath
-  until overridden:
+- **Numbers are key positions**, 1–4 left to right; indentation is nesting.
+- **Headings start sections**: side trees (`# row 2`, `# row 3`, `# bottom`),
+  reusable lists (`# list when`), `# contacts`, `# projects` and `# defaults`.
+- **A final `[…]` holds annotations**, applying to everything beneath until
+  overridden. Words name things — an action type, `append`, a template, an alert,
+  an app, `@list`. Pairs set things — `duration: 1h` sets an action field,
+  anything unrecognised becomes a template value. Parentheses are ordinary text.
+  Square brackets were chosen over parentheses (version 2) so that labels can
+  contain parentheses.
 
-| Annotation | Means |
-|---|---|
-| `Notes`, `Calendar`, `Reminders`, `Messages`, `Mail` | the action type |
-| an app name — `Rider`, `VSCode`, `KiCad`… | open the leaf in that app |
-| `something.md` | a template; `Append…` / `New…` names choose append or create |
-| `append`, `new` | append to a note / create a new one |
-| `5 min alert`, `1 hour alert` | an alert before an event |
-| anything else, under an app | a channel or target inside it |
-
-The converter reports what it **guessed** (an app it substituted, append-or-create
+The compiler reports what it **guessed** (an app it substituted, append-or-create
 from a template name), what is **still to fill in** (paths, phone numbers,
-channel URLs), and **warnings** (an app not installed). Apps are recorded with
-their bundle ID, so they are found wherever they are installed. The output is
-checked by loading it before it is written.
+channel URLs), and **warnings** (an app not installed), and records, for every
+node, what each annotation means and what's wrong with it — which is what the
+tree editor highlights. Apps are recorded with their bundle ID, so they are
+found wherever they are installed. The output is checked by loading it before
+it is written.
 
 ### Shape
 
@@ -239,7 +237,7 @@ action is decided higher up. So actions are inherited, in increasing priority:
 
 A node naming a *different* type from the one it inherited starts afresh: fields
 meant for another kind of action are dropped instead of leaking in. That is how
-"Project Documentation (append)" can hold a "New Project (create)" leaf.
+"Project Documentation [append]" can hold a "New Project [create]" leaf.
 
 Built-in per-type defaults:
 
@@ -444,7 +442,7 @@ from template values.
    `{{?Label}}` is reserved for it. **Not in the first version.**
 2. **Multiple actions per leaf** — e.g. create a note *and* a reminder linking to
    it. Plausible later; one action per leaf for now.
-3. **Tree editor UI**, deferred: the outline and its converter serve for now.
+3. ~~Tree editor UI~~ — specified in [TREE-EDITOR.md](TREE-EDITOR.md) and being built.
 4. **Per-node Notes account**, once more than one account is in play.
 
 ## 9. Build order
@@ -459,3 +457,5 @@ from template values.
 8. ✅ Packaging: signed universal KeybowNotes.app, config reloading, Open at Login.
 9. ✅ EventKit for Calendar and Reminders.
 10. ✅ Settings window: overlay screen, timings, key brightness, default calendar and list, config file, open at login.
+11. ✅ Outline language version 3: square brackets, `key: value` pairs, sections; the outline becomes the source of truth.
+12. The tree editor, in the phases set out in [TREE-EDITOR.md](TREE-EDITOR.md).

@@ -1,0 +1,234 @@
+# The tree editor
+
+**Status:** specification, being built in phases (see the end). The outline
+language it edits is described in [CONFIG-LANGUAGE.md](CONFIG-LANGUAGE.md).
+
+A guided outliner for the KeybowNotes outline, in the style of OmniOutliner:
+typing edits a node, Tab and Shift-Tab change its level, Return starts the next
+one. "Guided" because it understands what it's editing — which keys are free,
+how deep each tree may go, what each bracketed word means — and shows it as you
+type. A pane beside the outline shows the selected node's settings, and changes
+made there are written back into the outline as syntax. A diagram of the keypad
+shows where the node sits and what the keys will look like.
+
+**The outline stays the single source of truth.** The editor reads `tree.md`,
+changes it, and writes it back; `config.json` is compiled from it on save. Nothing
+the editor knows is kept anywhere but the outline.
+
+---
+
+## Layout
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Main ↓   Row 2 ↓   Row 3 ↓   Bottom ↑                   ● Edited   Save │
+├──────────────────────────────────────┬───────────────────────────────────┤
+│ 1 ▾ Work                             │ Work › General Tasks › Meeting    │
+│   1 ▸ Immediate task                 │ Main tree · row 3 · key 1         │
+│   2 ▾ General Tasks                  │                                   │
+│     1 ▾ Meeting [Calendar, 5 min …]  │ Pressing a key under this:        │
+│       1   Today                      │   New event · Meeting ·           │
+│       2   Tomorrow                   │   Sun 27 Sep, 09:00 · alert 5 min │
+│     2 ▸ Deployment [Calendar, …]     │                                   │
+│     3   ·· key 3 — empty ··          │ Label   [Meeting            ]     │
+│     4 ▸ Reminder [Reminders]         │ Action  Calendar event  set here  │
+│   4 ▸ Notes                          │ Alert   [5] min         set here  │
+│ 2 ▸ Personal                         │ Duration [30 min]  from default   │
+│                                      │ Values  area: work   from Work    │
+│                                      ├───────────────────────────────────┤
+│                                      │   ▣ ▢ ▢ ▢                         │
+│                                      │   ▢ ▣ ▢ ▢     keypad, focused     │
+│                                      │   ▣ ▣ ▢ ▣     on this level       │
+│                                      │   ▢ ▢ ▢ ▢                         │
+└──────────────────────────────────────┴───────────────────────────────────┘
+```
+
+- **Tabs** switch between the four trees. Each shows its direction; a dot marks a
+  tree with problems.
+- **Outline** on the left; **inspector** at top right; **keypad** at bottom right.
+- The window opens from the menu bar: **Edit Tree…** (⌘E).
+
+---
+
+## The outline pane
+
+Each row is one node:
+
+- its **key number** (1–4) in a small badge — its position on the keypad row;
+- a disclosure triangle for branches;
+- the **label**, then the **brackets** with each annotation coloured by what it
+  means (below);
+- a **problem marker** when the node has one, with the message as a tooltip and
+  in the inspector.
+
+**Empty keys** between occupied ones appear as faint placeholder rows — "key 3 —
+empty" — so that a node's position is never ambiguous and never shifts
+silently. Typing into a placeholder creates a node on that key. Empty keys after
+the last occupied one aren't shown; Return reaches them.
+
+### Keys
+
+| Key | Not editing | Editing a row |
+|---|---|---|
+| typing | starts editing the selected row, replacing its text with what's typed | edits |
+| Return | edits the selected row | ends the edit; starts a **new node on the next free key** of the same row and edits it |
+| Return on an empty new node | — | removes it again |
+| Tab | **indent**: the node becomes a child of the node above it | ends the edit, indents, carries on editing |
+| Shift-Tab | **outdent**: the node moves up a level, after its parent | ends the edit, outdents, carries on editing |
+| ⌃⌘↑ / ⌃⌘↓ | **move** the node to the key before / after, swapping with what's there or moving into an empty key | the same, ending the edit |
+| ↑ / ↓ | select the previous / next row | end the edit and select |
+| ← / → | collapse / expand | move the cursor |
+| Delete | delete the node and everything under it | edits |
+| Esc | — | abandon the edit |
+| ⌘Z / ⇧⌘Z | undo / redo | the same, for the text |
+| ⌘S | save | end the edit and save |
+
+⌃⌘↑/↓ follows OmniOutliner. Shift with the arrows would be the obvious choice,
+but it already extends a text selection while editing.
+
+### The rules it keeps
+
+Refusals are shown briefly in place — "Row full: four keys are taken" — rather
+than as alerts.
+
+- **Four keys per row.** A new node goes on the first free key after the
+  current one, then any free key before it; with none free, it's refused.
+- **Depth.** Each tab has a limit — 4, 3, 2 and 4 levels. Indenting past it is
+  refused, as is indenting a branch whose children would end up too deep.
+- **Indent** makes the node a child of the nearest node above it on the same
+  row, on its first free key. Refused if that node's row is full or it takes its
+  children from a `@list`.
+- **Outdent** puts the node on its parent's row, on the first free key after the
+  parent. Refused if that row is full.
+- **Move** swaps with the neighbouring key, occupied or empty; it stops at key 1
+  and key 4.
+
+Everything is undoable, including edits made in the inspector.
+
+### Highlighting
+
+The text in brackets is coloured by the role the compiler gives it, which
+depends on what the node inherits — `offtopic` is a channel under Discord and an
+unknown word elsewhere. While typing, the same classification runs on the text
+in the field.
+
+| Role | Examples | Shown as |
+|---|---|---|
+| action type | `Calendar`, `Notes`, `append`, `new` | bold, accent colour |
+| app | `Rider`, `VSCode` | purple; struck through if not installed |
+| template | `worklog.md` | teal; red if the file isn't in the templates folder |
+| alert | `5 min alert` | orange |
+| list reference | `@when` | green; red if there's no such list |
+| action field | `duration: 1h` | key dimmed, value plain |
+| template value | `area: work` | key italic, value plain |
+| colour | `colour: 0060ff` | a swatch of the colour beside it |
+| target | `offtopic` | plain, underlined dotted until it has a URL |
+| unknown | `whatever` | red wavy underline |
+
+The label itself is plain text.
+
+---
+
+## The inspector
+
+For the selected node:
+
+- **Where it is:** the path, the tree, and the row and key it occupies.
+- **What pressing does** — for a leaf, the action with its values filled in, as
+  the overlay would show it: "New event · Meeting · Sun 27 Sep, 09:00 · alert 5
+  min before". For a branch, what its leaves will do by default. Missing values
+  are shown in orange: "needs contact.phone".
+- **Label** — a text field.
+- **Action** — the type, and the fields that type uses, each showing its value
+  and **where it comes from**: *set here*, *from Meeting* (an ancestor), or *from
+  the defaults*. Setting a field writes a pair into this node's brackets;
+  clearing one removes the pair, so the inherited value shows through again.
+  The type is a menu: *inherit*, or a type — which writes the keyword.
+- **Values** — template values set here, editable as key and value; and those
+  inherited from above, read-only, with where each comes from.
+- **Contact / project** — when the node's label names a contact or project, its
+  fields, editable here; they're written to `# contacts` or `# projects`.
+- **Problems** — everything the compiler said about this node.
+
+Edits in the inspector change the node's annotations in place: an existing pair
+is updated where it stands; a new one is added at the end; bare words are kept.
+The row in the outline updates as you type, and the preview line with it.
+
+---
+
+## The keypad
+
+A 4×4 drawing of the keys, lit as the Keybow would be with the selected node
+chosen:
+
+- the node's **ancestors** lit on their rows;
+- the node's **own row** showing all its siblings, the selected one brightest;
+- its **children** dimmed on the next row, if it's a branch;
+- **empty keys** as outlines.
+
+Rows follow the tab's direction: in the bottom tree, the root row is at the
+bottom and the tree climbs.
+
+**Clicking a key** selects the node on it: an ancestor or one of its siblings, a
+sibling of the selected node, or one of its children. Clicking an empty key on
+the selected node's row selects that placeholder, ready to type into.
+
+### Mirroring on the Keybow
+
+While the editor is the front window, the Keybow itself shows the same lights,
+and pressing a key on it moves the selection exactly as clicking the drawing
+does. Switching away from the editor puts the Keybow back to normal. Building a
+tree then becomes something you can feel as well as see.
+
+---
+
+## Files
+
+- The editor opens **`tree.md`** beside the config the app is using.
+- **Save** writes `tree.md` in the outline's standard form, then compiles it. If
+  it compiles without errors, `config.json` is replaced and the running app
+  reloads it. If not, the outline is still saved — it is the source — but
+  `config.json` is left as it was, and the editor says the app is still running
+  the previous version until the errors are fixed.
+- An **edited** marker shows unsaved changes; closing the window with unsaved
+  changes asks whether to save.
+- If `tree.md` changes on disk while it's open — edited by hand — the editor
+  offers to reload it.
+- Lines between items that aren't items (comments) aren't kept when the outline
+  is written back. The editor says so the first time it opens a file that has
+  any.
+
+---
+
+## How it's built
+
+**KeybowKit** (pure, tested):
+
+- `Outline.swift` — the document model, parser and writer. Nodes have stable
+  identities so the selection can follow them as they move.
+- `OutlineCompiler.swift` — the compiler, with its per-node analysis: each
+  annotation's role, each node's problems, and the action type in force.
+- `OutlineEditing.swift` — the edit operations and their rules: insert, indent,
+  outdent, move, delete, set the text, set or remove a pair. Each returns the new
+  document or the reason it's refused.
+
+**The app:**
+
+- `EditorModel` — the document, the selection, the latest compilation, undo.
+  Every edit replaces the document through an operation, registers the previous
+  one for undo, and recompiles (a few milliseconds for hundreds of nodes).
+- `EditorWindowController` — the window, the tabs in its toolbar, save and close.
+- `OutlineController` — an `NSOutlineView`, with its own field editor for
+  highlighting as you type and for the keys above.
+- `InspectorView` and `KeypadView` — SwiftUI, bound to the model.
+
+## Phases
+
+1. ✅ **The language, version 3**: square brackets, pairs, sections, lossless
+   reading and writing; `keybow upgrade-outline`.
+2. **The outline pane**: the window, the tabs, keyboard editing with its rules,
+   highlighting, problem markers, undo, save and compile.
+3. **The inspector**, editing in both directions.
+4. **The keypad drawing**, with click to jump.
+5. **Mirroring on the Keybow**; completion inside brackets (keywords, installed
+   apps, templates, lists, field names); panes for lists, contacts and projects.

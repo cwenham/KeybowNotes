@@ -351,6 +351,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item("Copy", #selector(NSText.copy(_:)), "c"),
             item("Paste", #selector(NSText.paste(_:)), "v"),
             item("Select All", #selector(NSText.selectAll(_:)), "a"),
+            .separator(),
+            item("Move Node Up", #selector(EditorWindowController.moveNodeUp(_:)),
+                 String(UnicodeScalar(NSUpArrowFunctionKey)!), [.control, .command]),
+            item("Move Node Down", #selector(EditorWindowController.moveNodeDown(_:)),
+                 String(UnicodeScalar(NSDownArrowFunctionKey)!), [.control, .command]),
         ])
         NSApp.mainMenu = main
     }

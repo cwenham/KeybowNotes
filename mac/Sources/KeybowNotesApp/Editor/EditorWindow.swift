@@ -31,6 +31,74 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         preselectForDebugging()
     }
 
+    /// KEYBOW_EDITOR_SCRIPT="wait:1;type:Bob;key:return;key:ctrl+cmd+up;dump:/tmp/out.md"
+    /// replays keystrokes through the normal event path, then writes the outline
+    /// and selection to a file — for reproducing keyboard behaviour without a
+    /// person at the keyboard. Nothing is saved.
+    func runDebugScript() {
+        guard let script = ProcessInfo.processInfo.environment["KEYBOW_EDITOR_SCRIPT"], let window else { return }
+        let codes: [String: UInt16] = ["return": 36, "tab": 48, "esc": 53, "delete": 51,
+                                       "up": 126, "down": 125, "left": 123, "right": 124]
+        func post(_ characters: String, code: UInt16, flags: NSEvent.ModifierFlags) {
+            for type in [NSEvent.EventType.keyDown, .keyUp] {
+                if let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: flags,
+                                                timestamp: ProcessInfo.processInfo.systemUptime,
+                                                windowNumber: window.windowNumber, context: nil,
+                                                characters: characters, charactersIgnoringModifiers: characters,
+                                                isARepeat: false, keyCode: code) {
+                    NSApp.postEvent(event, atStart: false)
+                }
+            }
+        }
+        Task { @MainActor in
+            for step in script.split(separator: ";").map(String.init) {
+                let parts = step.split(separator: ":", maxSplits: 1).map(String.init)
+                let argument = parts.count > 1 ? parts[1] : ""
+                switch parts[0] {
+                case "wait":
+                    try? await Task.sleep(for: .seconds(Double(argument) ?? 0.5))
+                case "type":
+                    for character in argument {
+                        post(String(character), code: 0, flags: [])
+                        try? await Task.sleep(for: .milliseconds(60))
+                    }
+                case "key":
+                    var flags: NSEvent.ModifierFlags = []
+                    var name = argument
+                    for (prefix, flag) in [("ctrl+", NSEvent.ModifierFlags.control), ("cmd+", .command),
+                                           ("shift+", .shift), ("alt+", .option)] {
+                        while name.hasPrefix(prefix) { flags.insert(flag); name.removeFirst(prefix.count) }
+                    }
+                    if ["up", "down", "left", "right"].contains(name) { flags.formUnion([.function, .numericPad]) }
+                    let code = codes[name] ?? 0
+                    let characters: String
+                    switch name {
+                    case "return": characters = "\r"
+                    case "tab": characters = flags.contains(.shift) ? "\u{19}" : "\t"
+                    case "esc": characters = "\u{1b}"
+                    case "delete": characters = "\u{7f}"
+                    case "up": characters = String(UnicodeScalar(NSUpArrowFunctionKey)!)
+                    case "down": characters = String(UnicodeScalar(NSDownArrowFunctionKey)!)
+                    case "left": characters = String(UnicodeScalar(NSLeftArrowFunctionKey)!)
+                    case "right": characters = String(UnicodeScalar(NSRightArrowFunctionKey)!)
+                    default: characters = name
+                    }
+                    post(characters, code: code, flags: flags)
+                    try? await Task.sleep(for: .milliseconds(300))
+                case "dump":
+                    var text = OutlineWriter.text(model.document)
+                    if case .node(let id)? = model.selection, let node = model.node(id) {
+                        text += "\nSELECTED: \(node.label)"
+                    }
+                    if let message = model.message { text += "\nMESSAGE: \(message)" }
+                    try? text.write(toFile: argument, atomically: true, encoding: .utf8)
+                default:
+                    break
+                }
+            }
+        }
+    }
+
     /// KEYBOW_EDITOR_SELECT="bottom:0.1.0" opens with that node selected — for
     /// checking the inspector and keypad without clicking.
     private func preselectForDebugging() {
@@ -54,6 +122,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         installKeyMonitor()
+        runDebugScript()
     }
 
     /// ⌃⌘↑ and ⌃⌘↓ move a node, whether or not its row is being edited — the
@@ -61,9 +130,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.window === self.window else { return event }
+            guard let self else { return event }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            guard flags.contains([.control, .command]) else { return event }
+            // Logged so a key that doesn't arrive as expected can be diagnosed.
+            if [125, 126].contains(event.keyCode), !flags.isDisjoint(with: [.control, .command]) {
+                Log.info("editor key: \(event.keyCode == 126 ? "up" : "down") flags=\(flags.rawValue) " +
+                         "ourWindow=\(event.window === self.window)")
+            }
+            guard event.window === self.window, flags.contains([.control, .command]) else { return event }
             switch event.keyCode {
             case 126: self.coordinator.move(by: -1); return nil      // ↑
             case 125: self.coordinator.move(by: 1); return nil       // ↓
@@ -82,6 +156,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
 
     /// ⌘S from the menu.
     @objc func saveDocument(_ sender: Any?) { saveTree() }
+
+    /// ⌃⌘↑ / ⌃⌘↓ from the menu — a second route for the same keys.
+    @objc func moveNodeUp(_ sender: Any?) { coordinator.move(by: -1) }
+    @objc func moveNodeDown(_ sender: Any?) { coordinator.move(by: 1) }
 
     private func updateTitle() {
         window?.isDocumentEdited = model.isDirty

@@ -356,6 +356,9 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         case 51, 117:                                           // Delete, forward delete
             if let id = selectedRow?.nodeID { delete(id) }
             return true
+        case 125, 126 where flags.contains([.control, .command]):   // ⌃⌘↓, ⌃⌘↑
+            move(by: event.keyCode == 126 ? -1 : 1)
+            return true
         default:
             break
         }
@@ -426,7 +429,7 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         guard index >= 0 else { return }
         editingRow = row
         outline.editColumn(0, row: index, with: nil, select: initial == nil)
-        guard let editor = outline.currentEditor() as? NSTextView else { return }
+        guard let editor = fieldEditor(row: index) else { return }
         if let initial {
             editor.string = initial
             editor.setSelectedRange(NSRange(location: (initial as NSString).length, length: 0))
@@ -435,6 +438,14 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
             editor.selectAll(nil)
         }
         rehighlight(editor)
+    }
+
+    /// The field editor for a row being edited. In a view-based outline it
+    /// belongs to the cell's text field; the outline's own `currentEditor()` is nil.
+    private func fieldEditor(row index: Int) -> NSTextView? {
+        if let editor = outline?.currentEditor() as? NSTextView { return editor }
+        let cell = outline?.view(atColumn: 0, row: index, makeIfNecessary: false) as? NSTableCellView
+        return cell?.textField?.currentEditor() as? NSTextView
     }
 
     private func endEditing() {

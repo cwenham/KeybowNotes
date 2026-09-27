@@ -76,10 +76,12 @@ public enum Annotation: Equatable, Hashable, Sendable {
     /// an item, and surrounding spaces would be trimmed.
     static func quoted(_ value: String) -> String {
         let needsQuotes = value.contains(",") || value.contains("[") || value.contains("]")
-            || value.contains("\"") || value != value.trimmingCharacters(in: .whitespaces)
+            || value.contains("\"") || value.contains("\n") || value != value.trimmingCharacters(in: .whitespaces)
         guard needsQuotes else { return value }
+        // The outline is one node per line, so a newline is written \n.
         return "\"" + value.replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"") + "\""
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n") + "\""
     }
 
     static func unquoted(_ value: String) -> String {
@@ -87,7 +89,7 @@ public enum Annotation: Equatable, Hashable, Sendable {
         var escaping = false
         for character in value {
             if escaping {
-                result.append(character)
+                result.append(character == "n" ? "\n" : character)
                 escaping = false
             } else if character == "\\" {
                 escaping = true

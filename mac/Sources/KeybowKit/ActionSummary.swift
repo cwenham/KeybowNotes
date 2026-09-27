@@ -77,6 +77,11 @@ public struct ActionSummary: Equatable, Sendable {
             if !to.isEmpty { details.append(to) }
             let body = field("body")
             if !body.isEmpty { details.append("\u{201C}\(body)\u{201D}") }
+        case "phone.call":
+            verb = field("via").lowercased() == "facetime" ? "FaceTime" : "Call"
+            subject = selection.params["contact.name"] ?? selection.labels.last ?? ""
+            let to = field("to")
+            if !to.isEmpty { details.append(to) }
         case "mail.compose":
             verb = "Email"
             subject = selection.params["contact.name"] ?? selection.labels.last ?? ""

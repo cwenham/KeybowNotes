@@ -32,6 +32,8 @@ public enum ActionPlan: Equatable, Sendable {
     case createEvent(title: String, start: Date, duration: TimeInterval, alertMinutes: Int?,
                      calendarID: String, calendarName: String, notes: String, show: Bool)
     case composeMessage(to: String, body: String)
+    /// A call through the paired iPhone, or FaceTime audio. macOS asks first.
+    case placeCall(to: String, faceTime: Bool)
     case composeMail(to: String, subject: String, body: String)
     /// `open` is a file path (already expanded) or a URL; empty just launches the app.
     case openApp(name: String, bundleID: String, open: String)
@@ -169,12 +171,16 @@ private struct Planner {
 
         case "messages.compose":
             let to = try required(action.string("to"), for: "message recipient")
-            return .composeMessage(to: to, body: optional("body"))
+            return .composeMessage(to: to, body: try templateText() ?? optional("body"))
 
         case "mail.compose":
             let to = optional("to")
             if to.isEmpty { warnings.append("No address for \(selection.labels.last ?? "the recipient"); the draft has no recipient.") }
-            return .composeMail(to: to, subject: optional("subject"), body: optional("body"))
+            return .composeMail(to: to, subject: optional("subject"), body: try templateText() ?? optional("body"))
+
+        case "phone.call":
+            let to = try required(action.string("to"), for: "number to call")
+            return .placeCall(to: to, faceTime: optional("via").lowercased() == "facetime")
 
         case "app.open":
             let name = optional("app")

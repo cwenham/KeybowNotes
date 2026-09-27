@@ -425,7 +425,7 @@ should explain a refusal rather than failing silently.
 | Automation → Mail | `mail.compose` |
 | Calendars (write) | `calendar.createEvent` |
 | Reminders | `reminders.create` |
-| Contacts | Only if recipients are chosen by name rather than handle |
+| Contacts | The tree editor's *Look Up in Contacts*; asked for when first used |
 
 The app is not sandboxed, and needs the Apple Events entitlement under the
 hardened runtime. Values are passed to fixed, pre-written scripts as arguments —

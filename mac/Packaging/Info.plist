@@ -41,6 +41,8 @@
 	<string>KeybowNotes creates notes, reminders, events and email drafts when you choose them on the Keybow.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>KeybowNotes adds the events you choose on the Keybow, and opens them for editing.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>KeybowNotes looks people up in Contacts when you add them to a tree, to fill in their number or address.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>KeybowNotes adds the reminders and timers you choose on the Keybow.</string>
 </dict>

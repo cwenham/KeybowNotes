@@ -296,6 +296,7 @@ private struct ActionHeadline: View {
         case "reminders.create": return "checklist"
         case "messages.compose": return "message"
         case "mail.compose": return "envelope"
+        case "phone.call": return "phone"
         case "app.open": return "arrow.up.forward.app"
         case "shortcut": return "bolt.fill"
         default: return "questionmark.circle"

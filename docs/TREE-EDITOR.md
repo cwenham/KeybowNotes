@@ -147,7 +147,23 @@ For the selected node:
 - **Values** — template values set here, editable as key and value; and those
   inherited from above, read-only, with where each comes from.
 - **Contact / project** — when the node's label names a contact or project, its
-  fields, editable here; they're written to `# contacts` or `# projects`.
+  fields, editable here; they're written to `# contacts` or `# projects`. For a
+  contact, **Look Up in Contacts** searches the Contacts app for the name and
+  lists each match's numbers and addresses; clicking one fills it in. (It asks
+  for Contacts access once, and works in KeybowNotes.app only.)
+- **App** — for *Open an app*, a combo box of every app in `/Applications`,
+  `/System/Applications` and `~/Applications` (and their folders), with
+  completion as you type, and **Choose…** to pick one in a file browser. Picking
+  replaces the app word in the brackets (`[Rider]` → `[VSCode]`); a bundle ID is
+  written only if the name alone wouldn't find the app. **Open** has its own
+  **Choose…** for the file or folder.
+- **Template** — when the action uses one, the file itself, editable in place
+  with `{{placeholders}}` and headings highlighted, with **Save Template**,
+  **Revert** and **Open in TextEdit**. If the file doesn't exist yet, **Create
+  It**. A template is shared by every node that uses it; saving writes the file
+  straight away, outside the outline's undo.
+- **Fields that are set by words** — `[Rider]`, `[worklog.md]`, `[5 min alert]`
+  — show as set here, just as their `key: value` forms do.
 - **Problems** — everything the compiler said about this node.
 
 Edits in the inspector change the node's annotations in place: an existing pair

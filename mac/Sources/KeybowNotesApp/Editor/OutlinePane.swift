@@ -356,7 +356,8 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         case 51, 117:                                           // Delete, forward delete
             if let id = selectedRow?.nodeID { delete(id) }
             return true
-        case 125, 126 where flags.contains([.control, .command]):   // ⌃⌘↓, ⌃⌘↑
+        case 125, 126:                                          // ⌃⌘↓, ⌃⌘↑; plain arrows select
+            guard flags.contains([.control, .command]) else { return false }
             move(by: event.keyCode == 126 ? -1 : 1)
             return true
         default:

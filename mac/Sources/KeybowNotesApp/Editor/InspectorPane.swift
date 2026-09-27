@@ -58,8 +58,11 @@ private let fieldsByType: [String: [FieldSpec]] = [
         .init(key: "title", title: "Title"), .init(key: "due", title: "Due", hint: "+25m, tomorrow…"),
         .init(key: "list", title: "List"), .init(key: "notes", title: "Notes"),
     ],
-    "messages.compose": [.init(key: "to", title: "To"), .init(key: "body", title: "Message")],
-    "mail.compose": [.init(key: "to", title: "To"), .init(key: "subject", title: "Subject"), .init(key: "body", title: "Body")],
+    "messages.compose": [.init(key: "to", title: "To"), .init(key: "body", title: "Message"),
+                         .init(key: "template", title: "Template")],
+    "mail.compose": [.init(key: "to", title: "To"), .init(key: "subject", title: "Subject"), .init(key: "body", title: "Body"),
+                     .init(key: "template", title: "Template")],
+    "phone.call": [.init(key: "to", title: "Number"), .init(key: "via", title: "Via", hint: "empty for iPhone, or facetime")],
     "app.open": [
         .init(key: "app", title: "App"), .init(key: "bundleId", title: "Bundle ID"),
         .init(key: "open", title: "Open", hint: "a path or a link"), .init(key: "target", title: "Target"),
@@ -70,7 +73,8 @@ private let fieldsByType: [String: [FieldSpec]] = [
 private let typeNames: [(String?, String)] = [
     (nil, "Inherit"), ("notes.create", "New note"), ("notes.append", "Add to a note"),
     ("calendar.createEvent", "Calendar event"), ("reminders.create", "Reminder"),
-    ("messages.compose", "Message"), ("mail.compose", "Email"), ("app.open", "Open an app"),
+    ("messages.compose", "Message"), ("mail.compose", "Email"), ("phone.call", "Phone call"),
+    ("app.open", "Open an app"),
     ("shortcut", "Run a shortcut"),
 ]
 
@@ -105,18 +109,19 @@ private struct NodeInspector: View {
         return config?.inheritedAction(tree: tree, path: location.path)
     }
 
+    /// The annotations with what the compiler made of each.
+    private var annotated: [(Annotation, AnnotationRole)] {
+        Array(zip(node.annotations, model.info(id)?.roles ?? []))
+    }
+
+    /// The type this node sets itself — by keyword, by naming an app, or `type:`.
     private var ownType: String? {
-        for annotation in node.annotations {
-            switch annotation {
-            case .word(let word):
-                let lower = word.lowercased()
-                if let type = OutlineCompiler.actionTypeWords[lower] { return type }
-                if lower == "append" { return "notes.append" }
-                if lower == "new" || lower == "create" { return "notes.create" }
-            case .pair("type", let value):
-                return value
-            default:
-                break
+        for (annotation, role) in annotated {
+            switch (annotation, role) {
+            case (_, .actionType(let type)), (_, .noteMode(let type)): return type
+            case (_, .app): return "app.open"
+            case (.pair("type", let value), _): return value
+            default: continue
             }
         }
         return nil
@@ -194,7 +199,8 @@ private struct NodeInspector: View {
                 get: { ownType },
                 set: { type in model.edit("Set Type") { try $0.setType(id, type) } }
             )) {
-                ForEach(typeNames, id: \.1) { type, name in
+                ForEach(Array(typeNames.enumerated()), id: \.offset) { _, entry in
+                let (type, name) = entry
                     Text(type == nil ? "Inherit (\(typeName(inheritedTypeAbove)))" : name).tag(type)
                 }
             }
@@ -202,6 +208,11 @@ private struct NodeInspector: View {
                 ForEach(fields, id: \.key) { spec in
                     fieldRow(spec)
                 }
+            }
+            let template = effectiveValue("template")
+            if !template.isEmpty {
+                TemplateSection(model: model, name: template, source: source(of: "template"))
+                    .padding(.top, 6)
             }
         }
     }
@@ -211,9 +222,41 @@ private struct NodeInspector: View {
         return config?.inheritedAction(tree: tree, path: Array(location.path.dropLast()))?.type
     }
 
+    /// A field set here, by a pair or by a word: `[Rider]` sets the app,
+    /// `[worklog.md]` the template, `[5 min alert]` the alert.
     private func ownValue(_ key: String) -> String? {
         for case .pair(key, let value) in node.annotations { return value }
+        for (annotation, role) in annotated {
+            guard case .word(let word) = annotation else { continue }
+            switch (role, key) {
+            case (.app, "app"), (.template, "template"), (.target, "target"): return word
+            case (.alert(let minutes), "alertMinutes"): return String(minutes)
+            default: continue
+            }
+        }
         return nil
+    }
+
+    /// Sets the app, replacing an app word where there is one so the outline
+    /// keeps its `[Rider]` style. A bundle ID is written only when the name
+    /// alone wouldn't find the app.
+    private func setApp(_ name: String?, _ bundle: String?) {
+        let roles = model.info(id)?.roles ?? []
+        model.edit("Set App") { document in
+            guard var current = document.node(id) else { return }
+            let appIndex = zip(current.annotations.indices, roles).first { pair in
+                if case .app = pair.1, case .word = current.annotations[pair.0] { return true }
+                return false
+            }?.0
+            if let appIndex {
+                if let name { current.annotations[appIndex] = .word(name) } else { current.annotations.remove(at: appIndex) }
+                try document.setText(id, current.text)
+            } else {
+                try document.setPair(id, key: "app", value: name)
+            }
+            let findable = name.flatMap(AppLocator.locate)?.bundleIdentifier != nil
+            try document.setPair(id, key: "bundleId", value: findable ? nil : bundle)
+        }
     }
 
     private func effectiveValue(_ key: String) -> String {
@@ -264,11 +307,32 @@ private struct NodeInspector: View {
                 .fixedSize()
             }
         default:
-            DraftField(title: spec.title, value: own ?? "", placeholder: effectiveValue(spec.key),
-                       note: source(of: spec.key), hint: spec.hint) { value in
-                setField(spec.key, value.isEmpty ? nil : value)
+            if spec.key == "app" {
+                AppField(own: own, placeholder: effectiveValue("app"), note: source(of: "app")) { name, bundle in
+                    setApp(name, bundle)
+                }
+            } else {
+                HStack(alignment: .top) {
+                    DraftField(title: spec.title, value: own ?? "", placeholder: effectiveValue(spec.key),
+                               note: source(of: spec.key), hint: spec.hint,
+                               multiline: ["body", "entry", "notes"].contains(spec.key)) { value in
+                        setField(spec.key, value.isEmpty ? nil : value)
+                    }
+                    if spec.key == "open" {
+                        Button("Choose…") { chooseFileToOpen() }.controlSize(.small)
+                    }
+                }
             }
         }
+    }
+
+    private func chooseFileToOpen() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.message = "Choose a file or folder for the app to open."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        setField("open", (url.path as NSString).abbreviatingWithTildeInPath)
     }
 
     /// Writes a field as a pair. Alerts and templates can also be written as
@@ -375,6 +439,11 @@ private struct NodeInspector: View {
                     model.edit("Set \(key)") { $0.setEntryField(kind, name: name, key: key, value: value) }
                 }
             }
+            if kind == .contacts {
+                ContactLookup(name: name) { key, value in
+                    model.edit("Set \(key)") { $0.setEntryField(.contacts, name: name, key: key, value: value) }
+                }
+            }
         }
     }
 
@@ -414,6 +483,8 @@ struct DraftField: View {
     var placeholder = ""
     var note = ""
     var hint = ""
+    /// Grows to several lines; ⌥Return starts a new line.
+    var multiline = false
     let commit: (String) -> Void
 
     @State private var draft = ""
@@ -422,7 +493,8 @@ struct DraftField: View {
     var body: some View {
         LabeledContent {
             VStack(alignment: .trailing, spacing: 2) {
-                TextField(placeholder.isEmpty ? hint : placeholder, text: $draft)
+                TextField(placeholder.isEmpty ? hint : placeholder, text: $draft, axis: multiline ? .vertical : .horizontal)
+                    .lineLimit(multiline ? 1...6 : 1...1)
                     .textFieldStyle(.roundedBorder)
                     .focused($focused)
                     .onSubmit(save)
@@ -443,5 +515,150 @@ struct DraftField: View {
     private func save() {
         let trimmed = draft.trimmingCharacters(in: .whitespaces)
         if trimmed != value { commit(trimmed) }
+    }
+}
+
+/// The app to open: type a name (with completion from the installed apps),
+/// or choose one in the file browser. Records the bundle ID too, so the app is
+/// found wherever it lives.
+private struct AppField: View {
+    let own: String?
+    let placeholder: String
+    let note: String
+    let set: (String?, String?) -> Void
+
+    var body: some View {
+        LabeledContent("App") {
+            VStack(alignment: .trailing, spacing: 2) {
+                HStack {
+                    AppComboBox(value: own ?? "", placeholder: placeholder) { name in
+                        let trimmed = name.trimmingCharacters(in: .whitespaces)
+                        guard !trimmed.isEmpty else { return set(nil, nil) }
+                        set(trimmed, AppCatalog.named(trimmed)?.bundleIdentifier)
+                    }
+                    Button("Choose…", action: choose).controlSize(.small)
+                }
+                if !note.isEmpty {
+                    Text(note).font(.caption2).foregroundStyle(note == "set here" ? Color.accentColor : .secondary)
+                }
+            }
+        }
+    }
+
+    private func choose() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.message = "Choose the app to open."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        set(url.deletingPathExtension().lastPathComponent, Bundle(url: url)?.bundleIdentifier)
+    }
+}
+
+private struct AppComboBox: NSViewRepresentable {
+    let value: String
+    let placeholder: String
+    let commit: (String) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(commit: commit) }
+
+    func makeNSView(context: Context) -> NSComboBox {
+        let box = NSComboBox()
+        box.completes = true
+        box.numberOfVisibleItems = 16
+        box.addItems(withObjectValues: AppCatalog.all.map(\.name))
+        box.delegate = context.coordinator
+        box.stringValue = value
+        box.placeholderString = placeholder
+        return box
+    }
+
+    func updateNSView(_ box: NSComboBox, context: Context) {
+        context.coordinator.commit = commit
+        if box.currentEditor() == nil, box.stringValue != value { box.stringValue = value }
+        box.placeholderString = placeholder
+    }
+
+    final class Coordinator: NSObject, NSComboBoxDelegate {
+        var commit: (String) -> Void
+
+        init(commit: @escaping (String) -> Void) {
+            self.commit = commit
+        }
+
+        func comboBoxSelectionDidChange(_ notification: Notification) {
+            guard let box = notification.object as? NSComboBox, box.indexOfSelectedItem >= 0,
+                  let name = box.itemObjectValue(at: box.indexOfSelectedItem) as? String else { return }
+            commit(name)
+        }
+
+        func controlTextDidEndEditing(_ notification: Notification) {
+            guard let box = notification.object as? NSComboBox else { return }
+            commit(box.stringValue)
+        }
+    }
+}
+
+/// Finds a contact by name in the Contacts app and offers their numbers and
+/// addresses to fill in.
+private struct ContactLookup: View {
+    let name: String
+    let apply: (String, String) -> Void
+
+    @State private var matches: [ContactsService.Match] = []
+    @State private var searched = false
+    @State private var denied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !ContactsService.isAvailable {
+                Text("Looking people up in Contacts works in KeybowNotes.app.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if !ContactsService.isAuthorised {
+                Button("Look Up “\(name)” in Contacts…") {
+                    NSApp.activate()
+                    Task {
+                        denied = await ContactsService.shared.requestAccess() != .granted
+                        await search()
+                    }
+                }
+                .controlSize(.small)
+                if denied {
+                    Text("KeybowNotes isn't allowed to read Contacts. Allow it in System Settings → Privacy & Security → Contacts.")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+            } else if searched && matches.isEmpty {
+                Text("No one called “\(name)” in Contacts.").font(.caption).foregroundStyle(.secondary)
+            } else {
+                ForEach(matches) { match in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(match.organisation.isEmpty ? match.name : "\(match.name) · \(match.organisation)")
+                            .font(.caption.weight(.semibold))
+                        ForEach(match.phones, id: \.self) { phone in
+                            Button { apply("phone", phone.value) } label: {
+                                Label("\(phone.label.isEmpty ? "phone" : phone.label)  \(phone.value)", systemImage: "phone")
+                            }
+                        }
+                        ForEach(match.emails, id: \.self) { email in
+                            Button { apply("email", email.value) } label: {
+                                Label("\(email.label.isEmpty ? "email" : email.label)  \(email.value)", systemImage: "envelope")
+                            }
+                        }
+                    }
+                    .buttonStyle(.link)
+                    .font(.caption)
+                }
+                if !matches.isEmpty {
+                    Text("From Contacts: click one to use it.").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .task(id: name) { await search() }
+    }
+
+    private func search() async {
+        guard ContactsService.isAuthorised else { return }
+        matches = await ContactsService.shared.search(name)
+        searched = true
     }
 }

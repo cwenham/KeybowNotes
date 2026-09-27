@@ -445,6 +445,9 @@ extension KeybowConfig {
         "mail.compose": [
             "to": .string("{{contact.email}}"),
         ],
+        "phone.call": [
+            "to": .string("{{contact.phone}}"),
+        ],
         "app.open": [
             "open": .string("{{project.path|}}"),
         ],

@@ -108,6 +108,19 @@ public enum ActionRunner {
             try await openURL(url)
             return .success("Message to \(to) ready", "Nothing is sent until you press Return.")
 
+        case .placeCall(let to, let faceTime):
+            // Digits, + and the dialling marks are all a tel: link needs.
+            let allowed = CharacterSet(charactersIn: "0123456789+*#,;")
+            let number = String(to.unicodeScalars.filter { allowed.contains($0) })
+            guard !number.isEmpty else { throw RunError("“\(to)” isn't a phone number") }
+            guard let url = URL(string: (faceTime ? "facetime-audio:" : "tel:") + number) else {
+                throw RunError("Couldn't make a call link for \(to)")
+            }
+            try await openURL(url)
+            return .success(faceTime ? "FaceTime call to \(to)" : "Calling \(to)",
+                            faceTime ? "Confirm on screen to start it."
+                                     : "Confirm on screen; the call goes through your iPhone.")
+
         case .composeMail(let to, let subject, let body):
             _ = try await appleScript(Scripts.composeMail, app: "Mail", [to, subject, body])
             return .success(to.isEmpty ? "New email ready" : "Email to \(to) ready",

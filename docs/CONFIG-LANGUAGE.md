@@ -133,6 +133,8 @@ An annotation is either a **word** or a **pair**.
 | `Reminders` | a reminder | `"type": "reminders.create"` |
 | `Messages` | a message, ready to send | `"type": "messages.compose"` |
 | `Mail` | an email draft | `"type": "mail.compose"` |
+| `Call` | a phone call through your iPhone | `"type": "phone.call"` |
+| `FaceTime` | a FaceTime audio call | `"type": "phone.call", "via": "facetime"` |
 | `append` | add to a running note rather than make a new one | `"type": "notes.append"` |
 | `new`, `create` | make a new note | `"type": "notes.create"` |
 | `something.md` | a template (§8) | `"template": "something.md"` |
@@ -167,7 +169,7 @@ An annotation is either a **word** or a **pair**.
   `account`, `entry`, `createIfMissing`, `find.byName`, `guards.maxBodyBytes`,
   `guards.refuseInlineImages`, `start`, `duration`, `alertMinutes`, `calendar`,
   `calendarId`, `notes`, `show`, `due`, `list`, `to`, `body`, `subject`, `app`,
-  `bundleId`, `open`, `url`, `target`, `name`, `input`. A dotted key sets a field
+  `bundleId`, `open`, `url`, `target`, `name`, `input`, `via`. A dotted key sets a field
   inside another: `find.byName: Journal`.
 - **Anything else** is a value for templates (§6), inherited by everything
   beneath: `area: work`, `when: tomorrow`, `contact: Rudy Rudolph`.
@@ -176,8 +178,9 @@ An annotation is either a **word** or a **pair**.
 and `guards.refuseInlineImages` are `true` or `false`; everything else is text,
 placeholders included: `title: Standup — {{date:d MMM}}`. The value runs to the
 next comma; **put it in double quotes** if it contains a comma, a square
-bracket or a quote (written `\"`), or starts or ends with a space. `key:` with
-nothing after it is an empty value.
+bracket or a quote (written `\"`), or starts or ends with a space. Inside
+quotes, `\n` is a new line: `body: "Running late.\nSorry!"`. `key:` with nothing
+after it is an empty value.
 
 #### Contacts, projects and defaults
 
@@ -204,6 +207,7 @@ A leaf with no annotations still means something, depending on what it inherits:
 | a calendar branch | `Today`, `Next week`, `friday` | a `when` value, if it reads as a date (§7) |
 | a Messages branch | `Rudy Rudolph` | a contact needing a phone number |
 | a Mail branch | `Rudy Rudolph` | the same contact, needing an email address |
+| a Call branch | `Rudy Rudolph` | the same contact, needing a phone number |
 | an app that opens files | `Project A` | a project needing a path |
 | an app that is a service (Discord, Claude…) | `Channel1` | a target needing a URL — add `open: …` |
 | nothing | `Inventions` | the default action: a new note (§4) |
@@ -351,6 +355,7 @@ leaf without it inheriting the append settings.
 | `calendar.createEvent` | `title: {{parent}}`, `start: {{when}}`, `duration: +30m`, `show: true` |
 | `reminders.create` | `title: {{leaf}}` |
 | `messages.compose` | `to: {{contact.phone}}` |
+| `phone.call` | `to: {{contact.phone}}` |
 | `mail.compose` | `to: {{contact.email}}` |
 | `app.open` | `open: {{project.path\|}}` |
 
@@ -460,9 +465,22 @@ A list that doesn't exist falls back to the default, and the result says so.
 |---|---|
 | `to` | A phone number or Apple ID. **Required.** |
 | `body` | The text, placed in the message field. |
+| `template` | A file whose text is used instead of `body`, placeholders filled in. |
 
 Messages opens with the conversation and the text in place. **Nothing is sent**
 until you press Return.
+
+### `phone.call` — a phone call, confirmed first
+
+| Field | |
+|---|---|
+| `to` | The number. **Required.** Spaces and brackets are dropped; digits, `+`, `*`, `#` are kept. |
+| `via` | Empty for a call through your iPhone; `facetime` for FaceTime audio. |
+
+The Mac opens a `tel:` link, and macOS shows its call prompt: **you confirm the
+call** — nothing dials by itself. Calls go through your iPhone when it and the
+Mac share an Apple ID and *Calls from iPhone* is on (FaceTime → Settings on the
+Mac; *Calls on Other Devices* on the iPhone).
 
 ### `mail.compose` — an email draft
 
@@ -470,6 +488,7 @@ until you press Return.
 |---|---|
 | `to` | An address. If missing, the draft opens without one, with a warning. |
 | `subject`, `body` | |
+| `template` | A file whose text is used instead of `body`. |
 
 ### `app.open` — open an app, a file or a link
 
@@ -614,7 +633,8 @@ window instead of the file. Two of them feed into the language:
 
 ## 10. Reserved words
 
-**Outline words:** `Notes`, `Calendar`, `Reminders`, `Messages`, `Mail`,
+**Outline words:** `Notes`, `Calendar`, `Reminders`, `Messages`, `Mail`, `Call`,
+`FaceTime`,
 `append`, `new`, `create`, `… alert`, `….md`, `@…`, and the app names the
 compiler knows.
 
@@ -625,7 +645,8 @@ action fields listed in §2.
 `list …`, `contacts`, `projects`, `defaults`.
 
 **Action types:** `notes.create`, `notes.append`, `calendar.createEvent`,
-`reminders.create`, `messages.compose`, `mail.compose`, `app.open`, `shortcut`.
+`reminders.create`, `messages.compose`, `mail.compose`, `phone.call`, `app.open`,
+`shortcut`.
 
 **Computed values:** `leaf`, `parent`, `level1`–`level4`, `path`, `folderPath`,
 `parentPath`, `tree`, `contact.*`, `project.*`, `clipboard`, `frontApp`, `date`,

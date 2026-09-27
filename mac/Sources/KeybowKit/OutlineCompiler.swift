@@ -59,6 +59,8 @@ public enum OutlineCompiler {
         "reminders": "reminders.create",
         "messages": "messages.compose",
         "mail": "mail.compose",
+        "call": "phone.call",
+        "facetime": "phone.call",
     ]
 
     /// `key: value` pairs that set an action field rather than a template value.
@@ -67,7 +69,7 @@ public enum OutlineCompiler {
         "find.byName", "guards.maxBodyBytes", "guards.refuseInlineImages",
         "start", "duration", "alertMinutes", "calendar", "calendarId", "notes", "show",
         "due", "list", "to", "body", "subject",
-        "app", "bundleId", "open", "url", "target", "name", "input",
+        "app", "bundleId", "open", "url", "target", "name", "input", "via",
     ]
     static let numericFields: Set<String> = ["alertMinutes", "guards.maxBodyBytes"]
     static let booleanFields: Set<String> = ["createIfMissing", "show", "guards.refuseInlineImages"]
@@ -253,6 +255,8 @@ private struct Compiler {
                 }
             case (_, .noteMode(let type)), (_, .actionType(let type)):
                 declare(type)
+                // FaceTime is a call type of its own; Call means the iPhone.
+                if case .word(let word) = annotation, word.lowercased() == "facetime" { set("via", .string("facetime")) }
             case (.word(let word), .app(let name, let installed)):
                 declare("app.open")
                 let match = locateApp(word) ?? OutlineConverter.AppMatch(name: name, installed: false, isService: false)
@@ -356,7 +360,7 @@ private struct Compiler {
                 note(.warning, "An event with no date: add “when: …” or “start: …”.")
                 todo.append("\(where_): “\(node.label)” is an event with no date; add when: or start:")
             }
-        case "messages.compose":
+        case "messages.compose", "phone.call":
             if !has("to"), !has("contact") { addContact(node.label, field: "phone") }
         case "mail.compose":
             if !has("to"), !has("contact") { addContact(node.label, field: "email") }

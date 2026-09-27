@@ -287,6 +287,7 @@ extension OutlineDocument {
         "reminders.create": "Reminders",
         "messages.compose": "Messages",
         "mail.compose": "Mail",
+        "phone.call": "Call",
     ]
 
     /// Sets this node's own action type, replacing any it named — or, with nil,

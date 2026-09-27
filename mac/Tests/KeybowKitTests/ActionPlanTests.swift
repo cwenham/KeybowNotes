@@ -321,3 +321,73 @@ final class SettingsSupportTests: XCTestCase {
         XCTAssertEqual(list, "LIST-9")
     }
 }
+
+final class CallAndTemplateTests: XCTestCase {
+    private var templates: URL!
+
+    override func setUpWithError() throws {
+        templates = FileManager.default.temporaryDirectory.appendingPathComponent("keybow-msg-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: templates, withIntermediateDirectories: true)
+        try "Running late — see you at {{time}}.\nSorry!".write(
+            to: templates.appendingPathComponent("late.md"), atomically: true, encoding: .utf8)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: templates)
+    }
+
+    private func plan(_ outline: String, path: [Int]) throws -> ActionPlan {
+        let (document, _) = OutlineParser.parse(outline)
+        let compiled = OutlineCompiler.compile(document, locateApp: { _ in nil })
+        let config = try XCTUnwrap(compiled.config, compiled.configError ?? "")
+        let selection = try XCTUnwrap(config.resolve(path: path))
+        return try ActionPlanner.plan(selection, config: config,
+                                      context: ActionContext(templatesDirectory: templates)).plan
+    }
+
+    func testCallUsesTheContactsNumber() throws {
+        let outline = """
+        1. Call [Call]
+           1. Alex Example
+
+        # contacts
+        - Alex Example [phone: +1 555 0100]
+        """
+        XCTAssertEqual(try plan(outline, path: [0, 0]), .placeCall(to: "+1 555 0100", faceTime: false))
+    }
+
+    func testFaceTimeIsACallByAnotherRoute() throws {
+        let outline = """
+        1. FaceTime [FaceTime]
+           1. Alex Example
+
+        # contacts
+        - Alex Example [phone: +15550100]
+        """
+        XCTAssertEqual(try plan(outline, path: [0, 0]), .placeCall(to: "+15550100", faceTime: true))
+    }
+
+    func testMessageTextFromATemplate() throws {
+        let outline = """
+        1. Late [Messages, late.md]
+           1. Alex Example
+
+        # contacts
+        - Alex Example [phone: +15550100]
+        """
+        guard case .composeMessage(let to, let body) = try plan(outline, path: [0, 0]) else { return XCTFail() }
+        XCTAssertEqual(to, "+15550100")
+        XCTAssertTrue(body.hasPrefix("Running late — see you at "))
+        XCTAssertTrue(body.hasSuffix("\nSorry!"), "templates keep their lines")
+    }
+
+    func testMultiLineValuesRoundTrip() {
+        var document = OutlineDocument()
+        document.trees[.main] = [OutlineNode(label: "Note", annotations: [.pair(key: "body", value: "Line one\nLine two, too")]),
+                                 nil, nil, nil]
+        let written = OutlineWriter.text(document)
+        XCTAssertEqual(written, "1. Note [body: \"Line one\\nLine two, too\"]\n", "one line in the outline")
+        let (reread, _) = OutlineParser.parse(written)
+        XCTAssertEqual(reread.roots(.main)[0]?.annotations, [.pair(key: "body", value: "Line one\nLine two, too")])
+    }
+}

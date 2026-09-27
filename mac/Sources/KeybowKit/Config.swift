@@ -231,6 +231,14 @@ public struct KeybowConfig: Sendable {
         )
     }
 
+    /// The action a node's leaves would get from everything down to and
+    /// including it — for a branch, what its leaves inherit; for a leaf, its
+    /// action. For showing, not running: `resolve` is what runs.
+    public func inheritedAction(tree: TreeKind = .main, path: [Int]) -> ActionSpec? {
+        guard let chain = nodes(in: tree, along: path), !chain.isEmpty else { return nil }
+        return effectiveAction(for: chain)
+    }
+
     /// Inheritance, in increasing priority:
     ///   1. per-type defaults
     ///   2. the default action, if nothing on the path named a type

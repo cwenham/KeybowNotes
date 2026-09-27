@@ -1,6 +1,6 @@
 # The tree editor
 
-**Status:** specification, being built in phases (see the end). The outline
+**Status:** phases 1–4 built; mirroring on the Keybow and completion are next (see the end). The outline
 language it edits is described in [CONFIG-LANGUAGE.md](CONFIG-LANGUAGE.md).
 
 A guided outliner for the KeybowNotes outline, in the style of OmniOutliner:
@@ -226,9 +226,9 @@ tree then becomes something you can feel as well as see.
 
 1. ✅ **The language, version 3**: square brackets, pairs, sections, lossless
    reading and writing; `keybow upgrade-outline`.
-2. **The outline pane**: the window, the tabs, keyboard editing with its rules,
-   highlighting, problem markers, undo, save and compile.
-3. **The inspector**, editing in both directions.
-4. **The keypad drawing**, with click to jump.
+2. ✅ **The outline pane**: the window, the tabs, keyboard editing with its
+   rules, highlighting, problem markers, undo, save and compile.
+3. ✅ **The inspector**, editing in both directions.
+4. ✅ **The keypad drawing**, with click to jump.
 5. **Mirroring on the Keybow**; completion inside brackets (keywords, installed
    apps, templates, lists, field names); panes for lists, contacts and projects.

@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var overlay: OverlayController?
     private var statusItem: NSStatusItem?
     private var settingsWindow: SettingsWindowController?
+    private var editorWindow: EditorWindowController?
 
     private let connectionItem = NSMenuItem(title: "Keybow: looking…", action: nil, keyEquivalent: "")
     private let configItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
@@ -35,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var dryRun: Bool { options.dryRun || settings.dryRun }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        installMainMenu()
         let overlay = OverlayController(config: config, placement: options.placement ?? settings.placement)
         overlay.debugDirectory = options.debugDirectory
         let driver = SelectionDriver(config: config, connection: KeybowConnection())
@@ -73,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if !options.simulated.isEmpty { simulate(options.simulated, pace: options.pace) }
         if options.showSettings { showSettings() }
+        if options.editTree { showEditor() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -318,6 +321,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Menu bar
 
+    /// Never shown — a menu-bar app has no menu bar — but key equivalents are
+    /// looked up here, so without it ⌘Z, ⌘S, ⌘C and ⌘V would do nothing in the
+    /// editor and settings windows.
+    private func installMainMenu() {
+        let main = NSMenu()
+        func submenu(_ title: String, _ items: [NSMenuItem]) {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            let menu = NSMenu(title: title)
+            items.forEach(menu.addItem)
+            item.submenu = menu
+            main.addItem(item)
+        }
+        func item(_ title: String, _ action: Selector, _ key: String, _ modifiers: NSEvent.ModifierFlags = .command) -> NSMenuItem {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+            item.keyEquivalentModifierMask = modifiers
+            return item
+        }
+        submenu("KeybowNotes", [item("Quit KeybowNotes", #selector(NSApplication.terminate(_:)), "q")])
+        submenu("File", [
+            item("Save", #selector(EditorWindowController.saveDocument(_:)), "s"),
+            item("Close", #selector(NSWindow.performClose(_:)), "w"),
+        ])
+        submenu("Edit", [
+            item("Undo", Selector(("undo:")), "z"),
+            item("Redo", Selector(("redo:")), "z", [.command, .shift]),
+            .separator(),
+            item("Cut", #selector(NSText.cut(_:)), "x"),
+            item("Copy", #selector(NSText.copy(_:)), "c"),
+            item("Paste", #selector(NSText.paste(_:)), "v"),
+            item("Select All", #selector(NSText.selectAll(_:)), "a"),
+        ])
+        NSApp.mainMenu = main
+    }
+
     private var versionDescription: String {
         let info = Bundle.main.infoDictionary
         guard let version = info?["CFBundleShortVersionString"] as? String else { return "(development build)" }
@@ -337,6 +374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.addItem(.separator())
 
+        addItem(to: menu, "Edit Tree…", #selector(openEditor), key: "e")
         addItem(to: menu, "Settings…", #selector(openSettings), key: ",")
         addItem(to: menu, "Reload Config", #selector(reloadConfig), key: "r")
         addItem(to: menu, "Open Config Folder", #selector(openConfigFolder))
@@ -378,6 +416,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func openSettings() { showSettings() }
+
+    @objc private func openEditor() { showEditor() }
+
+    /// The tree editor, on `tree.md` beside the config in use.
+    private func showEditor() {
+        let outline = store.url.deletingLastPathComponent().appendingPathComponent("tree.md")
+        if editorWindow == nil || editorWindow?.model.outlineURL != outline {
+            editorWindow = EditorWindowController(outlineURL: outline, configURL: store.url)
+        }
+        editorWindow?.show()
+    }
 
     @objc private func reloadConfig() { store.reload() }
 

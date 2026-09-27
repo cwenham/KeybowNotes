@@ -182,3 +182,44 @@ final class OutlineTests: XCTestCase {
         XCTAssertTrue(compiled.diagnostics.contains { $0.severity == .error && $0.message.contains("nope") })
     }
 }
+
+final class OutlineSyntaxTests: XCTestCase {
+    private func pieces(_ text: String) -> (label: String, items: [String]) {
+        let tokens = OutlineSyntax.tokens(in: text)
+        let string = text as NSString
+        return (string.substring(with: tokens.label), tokens.items.map { string.substring(with: $0.range) })
+    }
+
+    func testFindsEachItem() {
+        let result = pieces("Meeting [Calendar,  5 min alert, duration: 1h]")
+        XCTAssertEqual(result.label, "Meeting")
+        XCTAssertEqual(result.items, ["Calendar", "5 min alert", "duration: 1h"])
+    }
+
+    func testQuotedCommasStayInOneItem() {
+        XCTAssertEqual(pieces(#"Friday [when: "friday, 14:00", Calendar]"#).items, [#"when: "friday, 14:00""#, "Calendar"])
+    }
+
+    func testNoBrackets() {
+        let tokens = OutlineSyntax.tokens(in: "Just a label")
+        XCTAssertNil(tokens.brackets)
+        XCTAssertEqual(tokens.label.length, 12)
+    }
+
+    func testRangesWorkWithWideCharacters() {
+        // “ and ’ are single UTF-16 units, but an emoji is two.
+        let result = pieces("Café 🎹 notes [Notes]")
+        XCTAssertEqual(result.label, "Café 🎹 notes")
+        XCTAssertEqual(result.items, ["Notes"])
+    }
+
+    func testInheritedActionForABranch() throws {
+        let config = try KeybowConfig.parse(Data("""
+        { "tree": [ { "label": "Meeting", "action": { "type": "calendar.createEvent", "alertMinutes": 5 },
+                      "children": [ { "label": "Today" } ] } ] }
+        """.utf8))
+        XCTAssertNil(config.resolve(path: [0])?.action, "running still needs a leaf")
+        XCTAssertEqual(config.inheritedAction(path: [0])?.type, "calendar.createEvent")
+        XCTAssertEqual(config.inheritedAction(path: [0])?.fields["alertMinutes"], .number(5))
+    }
+}

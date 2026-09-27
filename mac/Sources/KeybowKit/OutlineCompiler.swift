@@ -102,7 +102,7 @@ public enum OutlineCompiler {
     }
 
     /// "5 min alert", "20 minute alert", "1 hour alert" → minutes.
-    static func alertMinutes(_ text: String) -> Int? {
+    public static func alertMinutes(_ text: String) -> Int? {
         guard text.hasSuffix("alert") else { return nil }
         let words = text.split(separator: " ")
         guard words.count >= 3, let value = Int(words[0]) else { return nil }

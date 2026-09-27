@@ -159,7 +159,7 @@ public struct OutlineNode: Equatable, Identifiable, Sendable {
 
     /// The `[` that opens the final group: scanning back from the end, the
     /// first one that isn't escaped or inside quotes.
-    private static func openingBracket(of text: String) -> String.Index? {
+    static func openingBracket(of text: String) -> String.Index? {
         let characters = Array(text)
         var inQuotes = false
         var index = characters.count - 2
@@ -552,5 +552,69 @@ public enum OutlineMigration {
         where !document.projects.contains(where: { $0.name == name }) {
             document.projects.append(OutlineEntry(name: name, fields: fields.keys.sorted().map { .pair(key: $0, value: fields[$0] ?? "") }))
         }
+    }
+}
+
+// MARK: - Positions, for highlighting
+
+/// Where the parts of a node's line are, in UTF-16 offsets (NSRange), so an
+/// editor can colour them.
+public struct OutlineTokens: Sendable {
+    public struct Item: Sendable {
+        public let range: NSRange
+        public let annotation: Annotation
+    }
+
+    public let label: NSRange
+    /// The brackets and everything between them, if there are any.
+    public let brackets: NSRange?
+    public let items: [Item]
+}
+
+public enum OutlineSyntax {
+    public static func tokens(in text: String) -> OutlineTokens {
+        let whole = text as NSString
+        let trimmedEnd = text.trimmingCharacters(in: .whitespaces)
+        guard trimmedEnd.hasSuffix("]"), let open = OutlineNode.openingBracket(of: text.trimmingTrailingSpaces) else {
+            return OutlineTokens(label: NSRange(location: 0, length: whole.length), brackets: nil, items: [])
+        }
+        let openOffset = NSRange(open..<open, in: text).location
+        let closeOffset = (text.trimmingTrailingSpaces as NSString).length - 1
+        var labelEnd = openOffset
+        while labelEnd > 0, whole.character(at: labelEnd - 1) == 32 { labelEnd -= 1 }
+
+        // Items: split the inside on commas outside quotes, trimming spaces.
+        var items: [OutlineTokens.Item] = []
+        var start = openOffset + 1
+        var inQuotes = false
+        var index = start
+        func finish(_ end: Int) {
+            var from = start, to = end
+            while from < to, whole.character(at: from) == 32 { from += 1 }
+            while to > from, whole.character(at: to - 1) == 32 { to -= 1 }
+            if to > from {
+                let range = NSRange(location: from, length: to - from)
+                items.append(.init(range: range, annotation: Annotation(parsing: whole.substring(with: range))))
+            }
+        }
+        while index < closeOffset {
+            let character = whole.character(at: index)
+            if character == 92 { index += 2; continue }                 // backslash escapes the next
+            if character == 34 { inQuotes.toggle() }                     // "
+            if character == 44 && !inQuotes { finish(index); start = index + 1 }   // ,
+            index += 1
+        }
+        finish(closeOffset)
+        return OutlineTokens(label: NSRange(location: 0, length: labelEnd),
+                             brackets: NSRange(location: openOffset, length: closeOffset - openOffset + 1),
+                             items: items)
+    }
+}
+
+private extension String {
+    var trimmingTrailingSpaces: String {
+        var result = self
+        while result.last == " " { result.removeLast() }
+        return result
     }
 }

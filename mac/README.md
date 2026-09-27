@@ -53,6 +53,10 @@ Once installed it runs like any menu-bar app:
   is installed there. Edits are picked up within a couple of seconds; a config
   with a mistake is reported in the menu and the previous one stays in use.
 - **One copy only** — two would compete for the Keybow, so a second refuses to start.
+- **Edit Tree…** (⌘E from the menu) opens the tree editor on `tree.md` beside
+  the config: an outliner with the keypad's rules built in, an inspector that
+  edits a node's settings as syntax, and a drawing of the keys. Saving compiles
+  `config.json`. See [docs/TREE-EDITOR.md](../docs/TREE-EDITOR.md).
 - **Settings** (⌘, from the menu): Open at login, dry run, key brightness, which
   screen the overlay uses, timings, the default calendar and reminders list, and
   which config file to load. Settings belong to this Mac and live in

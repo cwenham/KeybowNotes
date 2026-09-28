@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import KeybowKit
 
 /// The text selected in the app in front, for `{{selection}}`. Asked of the
 /// app through the accessibility API; apps that don't answer (Chrome, Electron
@@ -68,10 +69,10 @@ enum SelectedText {
     /// what was there before. Nil if the app copied nothing.
     private static func copySelection() async -> String? {
         let pasteboard = NSPasteboard.general
-        let saved = contents(of: pasteboard)
+        let saved = PasteboardContents(pasteboard)
         let before = pasteboard.changeCount
 
-        pressCommandC()
+        Keystroke.press(Keystroke.c, with: .maskCommand)
         var waited = 0
         while pasteboard.changeCount == before, waited < 400 {
             try? await Task.sleep(for: .milliseconds(10))
@@ -82,36 +83,7 @@ enum SelectedText {
         // to finish writing.
         try? await Task.sleep(for: .milliseconds(30))
         let text = pasteboard.string(forType: .string)
-        restore(saved, to: pasteboard)
+        saved.restore(to: pasteboard)
         return text?.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func pressCommandC() {
-        let source = CGEventSource(stateID: .combinedSessionState)
-        let c: CGKeyCode = 0x08    // kVK_ANSI_C
-        for isDown in [true, false] {
-            let event = CGEvent(keyboardEventSource: source, virtualKey: c, keyDown: isDown)
-            event?.flags = .maskCommand
-            event?.post(tap: .cghidEventTap)
-        }
-    }
-
-    private static func contents(of pasteboard: NSPasteboard) -> [[(NSPasteboard.PasteboardType, Data)]] {
-        (pasteboard.pasteboardItems ?? []).map { item in
-            item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }
-        }
-    }
-
-    /// Marked transient so clipboard managers don't record it a second time.
-    private static func restore(_ saved: [[(NSPasteboard.PasteboardType, Data)]], to pasteboard: NSPasteboard) {
-        pasteboard.clearContents()
-        guard !saved.isEmpty else { return }
-        let items = saved.map { entries -> NSPasteboardItem in
-            let item = NSPasteboardItem()
-            for (type, data) in entries { item.setData(data, forType: type) }
-            return item
-        }
-        items[0].setData(Data(), forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
-        pasteboard.writeObjects(items)
     }
 }

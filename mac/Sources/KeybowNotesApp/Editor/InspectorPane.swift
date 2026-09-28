@@ -79,6 +79,8 @@ private let fieldsByType: [String: [FieldSpec]] = [
                    .init(key: "shuffle", title: "Shuffle", kind: .flag)],
     "clipboard.copy": [.init(key: "text", title: "Text", hint: "empty copies the label"),
                        .init(key: "template", title: "Template")],
+    "text.insert": [.init(key: "text", title: "Text", hint: "empty inserts the label — {{date}}, {{selection}}…"),
+                    .init(key: "template", title: "Template")],
 ]
 
 /// The built-in types, then any a module adds.
@@ -105,6 +107,7 @@ private let builtInTypeNames: [(String?, String)] = [
     ("calendar.createEvent", "Calendar event"), ("reminders.create", "Reminder"),
     ("messages.compose", "Message"), ("mail.compose", "Email"), ("phone.call", "Phone call"),
     ("app.open", "Open an app"), ("url.open", "Open a link"), ("clipboard.copy", "Copy to clipboard"),
+    ("text.insert", "Insert text"),
     ("clock.timer", "Clock timer"), ("maps.search", "Search Maps"), ("music.play", "Play music"),
     ("shortcut", "Run a shortcut"),
 ]

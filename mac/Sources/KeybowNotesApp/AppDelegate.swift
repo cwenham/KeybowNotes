@@ -295,7 +295,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             overlay.showRefused("\(error)", summary: summary)
             return
         }
-        if case .copyToClipboard = planned.plan { isPrivate = true }
+        switch planned.plan {
+        case .copyToClipboard, .insertText: isPrivate = true
+        default: break
+        }
+        // Pasting presses ⌘V in another app, which needs Accessibility access.
+        if case .insertText = planned.plan, !SelectedText.isAllowed {
+            Log.info("  can't run: no Accessibility access for inserting text")
+            overlay.showRefused("KeybowNotes needs Accessibility access to type into other apps. "
+                                + "Allow it in System Settings, then press again.", summary: summary)
+            SelectedText.requestAccess()
+            return
+        }
 
         bringPermissionPromptsForward(for: planned.plan)
         overlay.showRunning(summary, path: path)

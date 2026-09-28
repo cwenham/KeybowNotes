@@ -67,6 +67,8 @@ public enum OutlineCompiler {
         "browser": "url.open",
         "copy": "clipboard.copy",
         "clipboard": "clipboard.copy",
+        "insert": "text.insert",
+        "paste": "text.insert",
         "timer": "clock.timer",
         "maps": "maps.search",
         "music": "music.play",

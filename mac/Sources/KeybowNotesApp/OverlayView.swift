@@ -306,6 +306,7 @@ private struct ActionHeadline: View {
         case "shortcut": return "bolt.fill"
         case "url.open": return "link"
         case "clipboard.copy": return "doc.on.clipboard"
+        case "text.insert": return "character.cursor.ibeam"
         case "clock.timer": return "timer"
         case "maps.search": return "map"
         case "music.play": return "music.note"

@@ -137,6 +137,7 @@ An annotation is either a **word** or a **pair**.
 | `FaceTime` | a FaceTime audio call | `"type": "phone.call", "via": "facetime"` |
 | `Link`, `Browser` | open a link: web links in the default browser | `"type": "url.open"` |
 | `Copy`, `Clipboard` | put text on the clipboard | `"type": "clipboard.copy"` |
+| `Insert`, `Paste` | type text at the cursor in the app in front | `"type": "text.insert"` |
 | `Timer` | start a timer in Clock | `"type": "clock.timer"` |
 | `Maps` | search in Maps | `"type": "maps.search"` |
 | `Music` | play a playlist or album in Music | `"type": "music.play"` |
@@ -649,6 +650,31 @@ value for any action: `{{stopwatch}}` (3:12), `{{stopwatch.seconds}}` (192) and
 The stopwatch is a **module** — see MODULES.md — so its keyword, field and
 values come from the module, not the core.
 
+### `text.insert` — text at the cursor
+
+| Field | |
+|---|---|
+| `text` | The text, placeholders and `\n` new lines included; kept exactly, spaces and all. |
+| `template` | A file whose text is inserted instead. |
+
+With neither, the leaf's label is inserted. Like typing it, it goes wherever
+the cursor is in the app in front, and replaces any selected text — so
+`text: "“{{selection}}”"` wraps the selection in quotes.
+
+It works by pasting: the text goes on the clipboard, KeybowNotes presses ⌘V,
+and a moment later your clipboard is put back as it was, marked so clipboard
+managers don't record it twice. That works in nearly every app, including
+Chrome, Electron apps and Terminal. Pressing ⌘V needs **Accessibility
+access**, the same as `{{selection}}`; the first use asks for it.
+
+```
+1. Type [Insert]
+   1. Kind regards
+   2. Today [text: "{{date:d MMMM yyyy}}"]
+   3. Signature [signature.md]
+   4. Quote it [text: "“{{selection}}”"]
+```
+
 ### `clipboard.copy` — put text on the clipboard
 
 | Field | |
@@ -819,7 +845,7 @@ window instead of the file. Two of them feed into the language:
 ## 10. Reserved words
 
 **Outline words:** `Notes`, `Calendar`, `Reminders`, `Messages`, `Mail`, `Call`,
-`FaceTime`, `Link`, `Browser`, `Copy`, `Clipboard`, `Timer`, `Maps`, `Music`,
+`FaceTime`, `Link`, `Browser`, `Copy`, `Clipboard`, `Insert`, `Paste`, `Timer`, `Maps`, `Music`,
 `Stopwatch` (and any other module's keywords),
 `append`, `new`, `create`, `… alert`, `….md`, `@…`, and the app names the
 compiler knows.
@@ -832,7 +858,7 @@ action fields listed in §2.
 
 **Action types:** `notes.create`, `notes.append`, `calendar.createEvent`,
 `reminders.create`, `messages.compose`, `mail.compose`, `phone.call`, `app.open`,
-`url.open`, `clipboard.copy`, `clock.timer`, `maps.search`, `music.play`, `shortcut`,
+`url.open`, `clipboard.copy`, `text.insert`, `clock.timer`, `maps.search`, `music.play`, `shortcut`,
 and from modules, `stopwatch`.
 
 **Computed values:** `leaf`, `parent`, `level1`–`level4`, `path`, `folderPath`,

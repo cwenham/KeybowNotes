@@ -1,3 +1,4 @@
+import AppKit
 import KeybowKit
 import XCTest
 
@@ -162,6 +163,47 @@ final class LinkAndClipboardTests: XCTestCase {
         let outline = "1. Quote [Copy, quote.md]"
         XCTAssertEqual(try plan(outline, path: [0], environment: ["selection": "To be", "frontApp": "Books"]),
                        .copyToClipboard("Quote: To be\n— from Books"))
+    }
+
+    // MARK: - Inserting
+
+    func testInsertTakesTextLikeCopy() throws {
+        let outline = """
+        1. Type [Insert]
+           1. Kind regards
+           2. Stamp [text: "{{date:yyyy-MM-dd}} "]
+           3. Quote it [text: "“{{selection}}”"]
+        2. Quote [Paste, quote.md]
+        """
+        XCTAssertEqual(try plan(outline, path: [0, 0]), .insertText("Kind regards"))
+        guard case .insertText(let stamp) = try plan(outline, path: [0, 1]) else { return XCTFail() }
+        XCTAssertTrue(stamp.hasSuffix(" "), "kept exactly, trailing space and all")
+        XCTAssertEqual(try plan(outline, path: [0, 2], environment: ["selection": "to be"]), .insertText("“to be”"),
+                       "pasting replaces the selection, so this wraps it")
+        assertRefused(outline, path: [0, 2], environment: ["frontApp": "Pages"],
+                      with: .nothingSelected(app: "Pages", for: "text to insert"))
+        XCTAssertEqual(try plan(outline, path: [1], environment: ["selection": "Hi", "frontApp": "Mail"]),
+                       .insertText("Quote: Hi\n— from Mail"))
+    }
+
+    @MainActor
+    func testTheClipboardComesBackAsItWas() {
+        let pasteboard = NSPasteboard(name: .init("keybow-test-\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.clearContents()
+        let item = NSPasteboardItem()
+        item.setString("original", forType: .string)
+        item.setData(Data("<b>original</b>".utf8), forType: .html)
+        pasteboard.writeObjects([item])
+
+        let saved = PasteboardContents(pasteboard)
+        pasteboard.clearContents()
+        pasteboard.setString("borrowed", forType: .string)
+        saved.restore(to: pasteboard)
+
+        XCTAssertEqual(pasteboard.string(forType: .string), "original")
+        XCTAssertEqual(pasteboard.data(forType: .html), Data("<b>original</b>".utf8), "every type, not just text")
+        XCTAssertNotNil(pasteboard.data(forType: PasteboardContents.transient), "so clipboard managers skip it")
     }
 
     // MARK: - Knowing when to read the selection

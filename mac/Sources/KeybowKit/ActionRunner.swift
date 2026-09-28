@@ -180,6 +180,18 @@ public enum ActionRunner {
             }
             return .success("Opened \(url.host ?? url.scheme ?? "the link")", url.absoluteString)
 
+        case .insertText(let text):
+            let app = await MainActor.run { NSWorkspace.shared.frontmostApplication?.localizedName }
+            do {
+                try await TextInsertion.insert(text)
+            } catch TextInsertion.Failure.notAllowed {
+                throw RunError("KeybowNotes needs Accessibility access to type into other apps",
+                               "Allow it in System Settings → Privacy & Security → Accessibility.")
+            }
+            let flat = text.replacingOccurrences(of: "\n", with: " ")
+            return .success("Inserted “\(flat.count > 50 ? String(flat.prefix(50)) + "…" : flat)”",
+                            app.map { "into \($0)" })
+
         case .copyToClipboard(let text):
             await copy(text)
             let flat = text.replacingOccurrences(of: "\n", with: " ")

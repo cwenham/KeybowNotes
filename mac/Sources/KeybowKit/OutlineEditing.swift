@@ -290,6 +290,7 @@ extension OutlineDocument {
         "phone.call": "Call",
         "url.open": "Link",
         "clipboard.copy": "Copy",
+        "text.insert": "Insert",
         "clock.timer": "Timer",
         "maps.search": "Maps",
         "music.play": "Music",

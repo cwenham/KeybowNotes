@@ -278,6 +278,7 @@ Every text field in an action is expanded through the template system first.
 | `app.open` | `NSWorkspace` | Opens an app (by `bundleId`, else `app` name), optionally with a file, folder or URL. |
 | `url.open` | `NSWorkspace` | Any link in its default app — web links in the browser, `things:`, `obsidian:`… — or a file. |
 | `clipboard.copy` | `NSPasteboard` | Text, a template, or the label. |
+| `text.insert` | paste | The same, at the cursor in the app in front: on the clipboard, ⌘V, then the clipboard put back. |
 | `clock.timer` | `shortcuts run` | Clock has no scripting; a helper shortcut runs Start Timer. |
 | `maps.search` | `maps:` URL | Opens Maps searching. |
 | `music.play` | AppleScript | A playlist, or an album in order through a playlist of KeybowNotes' own. |
@@ -436,7 +437,7 @@ should explain a refusal rather than failing silently.
 | Calendars (write) | `calendar.createEvent` |
 | Reminders | `reminders.create` |
 | Contacts | The tree editor's *Look Up in Contacts*; asked for when first used |
-| Accessibility | `{{selection}}`: reading the selected text, and sending ⌘C to apps that won't share it. Asked for when first needed, or from Settings → Selected Text |
+| Accessibility | `text.insert`: pressing ⌘V in the app in front. `{{selection}}`: reading the selected text, and sending ⌘C to apps that won't share it. Asked for when first needed, or from Settings → Selected Text |
 
 `url.open`, `clipboard.copy` and `maps.search` need nothing. `clock.timer` needs
 a helper shortcut, *KeybowNotes Timer*, that the person makes once in Shortcuts:

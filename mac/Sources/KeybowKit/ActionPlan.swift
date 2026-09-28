@@ -42,6 +42,8 @@ public enum ActionPlan: Equatable, Sendable {
     /// handles it, or a file in its default app.
     case openLink(URL)
     case copyToClipboard(String)
+    /// Pasted at the cursor in the app in front, the clipboard put back after.
+    case insertText(String)
     /// A timer in Clock, started by a helper shortcut: Clock can't be
     /// scripted, but Shortcuts' Start Timer action reaches it.
     case startTimer(seconds: Int, shortcut: String)
@@ -294,16 +296,10 @@ private struct Planner {
             return .playPlaylist(playlist, shuffle: shuffle)
 
         case "clipboard.copy":
-            // A template, then the text field, then the label itself: a list of
-            // snippets can be copied by name alone.
-            if let text = try templateText() { return .copyToClipboard(text) }
-            if let text = action.string("text") {
-                let result = expand(text)
-                if !result.missing.isEmpty { throw missingError(result.missing, for: "text to copy") }
-                guard !result.text.isEmpty else { throw ActionPlanError.empty("text to copy") }
-                return .copyToClipboard(result.text)
-            }
-            return .copyToClipboard(selection.labels.last ?? "")
+            return .copyToClipboard(try snippet(for: "text to copy"))
+
+        case "text.insert":
+            return .insertText(try snippet(for: "text to insert"))
 
         default:
             guard let module = ModuleRegistry.shared.module(handling: action.type) else {
@@ -368,6 +364,20 @@ private struct Planner {
 
     private func missingError(_ names: [String], for purpose: String) -> ActionPlanError {
         names.contains("selection") ? .nothingSelected(app: frontApp, for: purpose) : .missing(names, for: purpose)
+    }
+
+    /// Text to copy or insert: a template, then the text field, then the label
+    /// itself, so a list of snippets works by name alone. Kept exactly, spaces
+    /// and lines and all; a value it needs but can't find stops it.
+    private mutating func snippet(for purpose: String) throws -> String {
+        if let text = try templateText() { return text }
+        if let text = action.string("text") {
+            let result = expand(text)
+            if !result.missing.isEmpty { throw missingError(result.missing, for: purpose) }
+            guard !result.text.isEmpty else { throw ActionPlanError.empty(purpose) }
+            return result.text
+        }
+        return selection.labels.last ?? ""
     }
 
     // MARK: - Links

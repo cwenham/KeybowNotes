@@ -147,3 +147,7 @@ through AppleScript rules that out.
   Claude
 - [firmware/README.md](firmware/README.md) — the keypad's side and its protocol
 - [mac/README.md](mac/README.md) — building, running and testing the Mac side
+
+## Licence
+
+MIT — see [LICENSE](LICENSE).

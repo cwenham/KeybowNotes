@@ -266,19 +266,24 @@ final class OverlayController {
                      debugCount, frame.minX, frame.minY, frame.width, frame.height, screen,
                      panel.alphaValue, panel.level.rawValue))
 
-        // Behind-window blur only exists on screen, so paint a stand-in backdrop.
+        // Behind-window blur only exists on screen, so paint a stand-in backdrop
+        // — which also keeps whatever is behind the HUD out of the picture. At
+        // the screen's own resolution: 2× on a Retina display.
         let bounds = hosting.bounds
         guard let content = hosting.bitmapImageRepForCachingDisplay(in: bounds) else { return }
         hosting.cacheDisplay(in: bounds, to: content)
-        let image = NSImage(size: bounds.size, flipped: false) { rect in
-            NSColor(white: 0.16, alpha: 1).setFill()
-            NSBezierPath(roundedRect: rect, xRadius: Self.cornerRadius, yRadius: Self.cornerRadius).fill()
-            content.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1,
-                         respectFlipped: true, hints: nil)
-            return true
-        }
-        guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
-              let png = bitmap.representation(using: .png, properties: [:]) else { return }
+        guard let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: content.pixelsWide, pixelsHigh: content.pixelsHigh,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return }
+        bitmap.size = bounds.size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
+        NSColor(white: 0.16, alpha: 1).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: Self.cornerRadius, yRadius: Self.cornerRadius).fill()
+        content.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        NSGraphicsContext.restoreGraphicsState()
+        guard let png = bitmap.representation(using: .png, properties: [:]) else { return }
         let url = directory.appendingPathComponent(String(format: "overlay-%02d.png", debugCount))
         try? png.write(to: url)
     }

@@ -12,15 +12,28 @@ enum Modules {
         BuiltInModules.registerAll(host: host)
         // Development builds only, on request: a block that just waits, for
         // trying the HUD's timer and Cancel without asking anyone anything.
-        if Bundle.main.bundleIdentifier == nil, ProcessInfo.processInfo.environment["KEYBOW_DEBUG_BLOCKS"] != nil {
-            ModuleRegistry.shared.register(WaitModule(), host: host)
+        // KEYBOW_DEBUG_BLOCKS=claude has it stand in for Claude — {{#ai}},
+        // "Asking Claude…" — for screenshots, with no request and no key.
+        let debug = ProcessInfo.processInfo.environment["KEYBOW_DEBUG_BLOCKS"]
+        if Bundle.main.bundleIdentifier == nil, let debug {
+            ModuleRegistry.shared.register(WaitModule(standingInForClaude: debug == "claude"), host: host)
         }
     }
 }
 
 /// `{{#wait seconds=3}}text{{/wait}}` → "TEXT", after the wait. Not in the app.
 private final class WaitModule: KeybowModule, @unchecked Sendable {
-    let manifest = ModuleManifest(id: "wait", name: "Wait", blocks: [ModuleBlockType(name: "wait", title: "Wait")])
+    let manifest: ModuleManifest
+    private let standIn: String
+
+    init(standingInForClaude: Bool) {
+        manifest = standingInForClaude
+            ? ModuleManifest(id: "ai", name: "Claude", blocks: [ModuleBlockType(name: "ai", title: "Claude")])
+            : ModuleManifest(id: "wait", name: "Wait", blocks: [ModuleBlockType(name: "wait", title: "Wait")])
+        standIn = standingInForClaude ? "‹Claude's reply›" : "‹wait›"
+    }
+
+    func standIn(for call: TemplateBlockCall) -> String { standIn }
     func start(host: ModuleHost) {}
     func summary(of request: ModuleRequest, now: Date) -> ModuleSummary { ModuleSummary(verb: "Wait", subject: "") }
     func run(_ request: ModuleRequest, now: Date) async -> ActionOutcome { .failure("Not an action") }

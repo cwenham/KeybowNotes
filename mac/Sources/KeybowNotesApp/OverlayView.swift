@@ -58,14 +58,18 @@ private struct TreeBadge: View {
     let tree: TreeKind
 
     var body: some View {
-        Text(title)
-            .font(.system(size: 10, weight: .semibold))
-            .textCase(.uppercase)
-            .tracking(0.6)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(.white.opacity(0.12), in: Capsule())
-            .foregroundStyle(.secondary)
+        // The same diagram and colour as the editor's tab for this tree.
+        HStack(spacing: 5) {
+            TreeGridIcon(tree: tree, cell: 2.5, gap: 0.8)
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .textCase(.uppercase)
+                .tracking(0.6)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(tree.tint.opacity(0.28), in: Capsule())
+        .foregroundStyle(.secondary)
     }
 
     private var title: String {

@@ -43,8 +43,11 @@ the editor knows is kept anywhere but the outline.
 └──────────────────────────────────────┴───────────────────────────────────┘
 ```
 
-- **Tabs** switch between the four trees. Each shows its direction; a dot marks a
-  tree with problems.
+- **Tabs** switch between the four trees, or ⌘1 to ⌘4. Each has a diagram of the
+  keypad in the tree's colour — Main blue, Row 2 teal, Row 3 orange, Bottom
+  pink — with its starting row at full strength and the rows it goes on to
+  fading in order, so it shows which way the tree runs. The overlay's tree badge
+  uses the same diagram and colour. A dot marks a tree with problems.
 - **Outline** on the left; **inspector** at top right; **keypad** at bottom right.
 - The window opens from the menu bar: **Edit Tree…** (⌘E).
 

@@ -232,14 +232,7 @@ struct EditorRootView: View {
 
     private var toolbar: some View {
         HStack(spacing: 12) {
-            Picker("Tree", selection: $model.tab) {
-                ForEach(TreeKind.allCases, id: \.self) { tree in
-                    Text(tabTitle(tree)).tag(tree)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
+            TreeTabs(selection: $model.tab, title: tabTitle)
             Spacer()
             if model.isDirty {
                 Text("Edited").font(.caption).foregroundStyle(.secondary)
@@ -287,5 +280,46 @@ struct EditorRootView: View {
                 .padding(.bottom, 14)
                 .transition(.opacity)
         }
+    }
+}
+
+/// The four trees, as tabs: each with a diagram of the keypad showing where
+/// it starts and which way it runs, in its own colour. A segmented control
+/// would draw the diagrams in one colour, so these are buttons that look the
+/// part. ⌘1 to ⌘4 choose them from the keyboard.
+private struct TreeTabs: View {
+    @Binding var selection: TreeKind
+    let title: (TreeKind) -> String
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(Array(TreeKind.allCases.enumerated()), id: \.element) { index, tree in
+                tab(tree, shortcut: KeyEquivalent(Character(String(index + 1))))
+            }
+        }
+        .padding(2)
+        .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func tab(_ tree: TreeKind, shortcut: KeyEquivalent) -> some View {
+        let chosen = tree == selection
+        return Button {
+            selection = tree
+        } label: {
+            HStack(spacing: 6) {
+                TreeGridIcon(tree: tree)
+                Text(title(tree))
+                    .fontWeight(chosen ? .semibold : .regular)
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(chosen ? tree.tint.opacity(0.22) : .clear, in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(chosen ? tree.tint.opacity(0.65) : .clear))
+            .contentShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(shortcut, modifiers: .command)
+        .help("\(treeName(tree)): \(tree.shape). ⌘\(shortcut.character)")
+        .accessibilityAddTraits(chosen ? .isSelected : [])
     }
 }

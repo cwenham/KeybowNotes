@@ -394,11 +394,36 @@ Placeholders are `{{…}}`:
    `{{folderPath}}` ("Work/Notes/Standup"), `{{parentPath}}`, `{{tree}}`.
 4. **Built-ins** — `{{date}}`, `{{time}}`, `{{datetime}}`, `{{weekday}}`,
    `{{isoWeek}}`, `{{clipboard}}`, `{{frontApp}}`.
+5. **Data sources** — `{{api.weather}}`, fetched from an API when an action
+   uses it (see below).
 
 `{{selection}}` is the text selected in the frontmost app. It is read only when
 the action uses it, through the accessibility API; apps that don't answer
 (Chrome, Electron) are sent ⌘C, with the clipboard restored straight after. In
 a link, placed values are percent-encoded — see CONFIG-LANGUAGE.md §6.
+
+### Data sources
+
+Values from APIs. Every API differs, and the value wanted may be deep in its
+response; writing a JSONPath or XPath for it is beyond most people. Claude can
+write it, but asking Claude on every key press would be slow, cost money on
+each press, and let the response — someone else's text — steer the model
+every time. So Claude is asked **once**, when a source is set up: from a sample
+response and the person's description it writes a rule (JSONPath, XPath or a
+regular expression), which the Mac checks against the sample before offering
+it. Every key press after that fetches the source and applies the rule
+locally — deterministic, free and quick — and responses are kept for as long
+as each source says. When a rule stops finding its value the action stops,
+the source is marked, and the person asks Claude to find it again from the
+description they kept. A rule is never rewritten without them.
+
+Because a rule is fixed and applied by the Mac, a fetched value may go where
+a block's reply may not — in a link or a phone number. An `{{#ai}}` block that
+reads a fetched value is still a block, and stays out of those fields.
+
+The API's key lives in the Keychain and goes only to that API's server:
+requests don't follow redirects to other hosts, and the key is taken out of
+any sample sent to Claude.
 
 ### Date expressions
 

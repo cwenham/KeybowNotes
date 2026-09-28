@@ -1,4 +1,5 @@
 import KeybowAI
+import KeybowData
 import KeybowKit
 import KeybowStopwatch
 
@@ -9,5 +10,6 @@ public enum BuiltInModules {
     public static func registerAll(host: ModuleHost) {
         ModuleRegistry.shared.register(StopwatchModule(), host: host)
         ModuleRegistry.shared.register(ClaudeModule(), host: host)
+        ModuleRegistry.shared.register(DataModule(), host: host)
     }
 }

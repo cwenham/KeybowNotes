@@ -752,6 +752,7 @@ Any text in an action, and every template, can use placeholders:
 | `{{project.path\|}}` | an empty fallback: missing is fine |
 | `{{date:yyyy-MM-dd}}` | a date built-in with a format |
 | `{{selection}}` | the text selected in the app in front when the key was pressed |
+| `{{api.weather}}` | a value fetched from an API, found by a rule Claude wrote once (below) |
 
 A fallback in quotes is taken without them: `{{selection|"5 minute timer"}}`
 gives *5 minute timer*.
@@ -802,7 +803,8 @@ the block's place. `{{#ai}}` asks Claude:
   `bundleId`, `target`, `via`, a shortcut's `name` and `input`, and a timer's
   `shortcut`. Selected text can carry instructions aimed at the model, so its
   reply mustn't choose a link, a number or an app. Such an action is refused
-  before anything is asked. Blocks in values (`topic: "{{#ai}}…"`) don't run;
+  before anything is asked. A value from a data source may go in those fields
+  (below); a block reading one may not. Blocks in values (`topic: "{{#ai}}…"`) don't run;
   they're kept as written, and the editor says so.
 - **Waiting.** While replies are worked out the overlay shows how long it's
   been, with a **Cancel** button that stops every request and the action with
@@ -821,6 +823,60 @@ with `{{selection}}` or `{{clipboard}}` text in them when the prompt uses them;
 neither the prompts nor the replies are written to the log. With Opus 5.5,
 Opus 5 and Fable 5.1, a request Claude's safety classifiers decline is retried
 on the model Anthropic recommends for it (`fallbacks: "default"`).
+
+### Values from APIs: `{{api.weather}}`
+
+A **data source** is an API KeybowNotes fetches when a key needs it, and the one
+value you want from its response. Sources are set up in their own window — *Edit
+Data Sources…* in the menu bar's menu:
+
+- **A name**, which is how templates use it: `{{api.weather}}`. Letters, digits,
+  `-` and `_`, starting with a letter.
+- **A URL**, over https. It can hold placeholders, filled from the key being
+  pressed and encoded as in any link (§6, *Inside links*):
+  `https://api.example.com/v1/current?city={{city}}`. Give them sample values in
+  the window, for fetching a sample there.
+- **An API key**, if it needs one — sent as a Bearer token, in a header of its
+  own (`X-API-Key` unless you name another) or as a query parameter (`key`
+  unless you name another). It's kept in the Keychain, sent only to that
+  source's server, and never to Claude.
+- **How long to keep a response:** from every time to a day. Each URL is kept
+  apart, so `{{city}}` London and York are two responses.
+- **The value you want,** in your own words: *the current temperature, in
+  Celsius*.
+
+**Find It with Claude** fetches a sample and sends it, with your description,
+to Claude — the model and effort in Settings → Claude. Claude writes a **rule**:
+a JSONPath for JSON (`$.current.temp_c`), an XPath for XML or HTML
+(`//item[1]/title`), or a regular expression whose first group is the value.
+KeybowNotes tries the rule on the sample itself, and if it finds nothing, or
+something other than what Claude expected, tells Claude and asks again, up to
+three times. You see what the rule finds, and keep it with **Use This Rule**.
+You can also write a rule yourself.
+
+That's the only time Claude is asked. **Every key press after that** fetches the
+source (or uses the kept response) and applies the rule on the Mac: no Claude,
+no cost, no waiting on a model. The overlay shows *Fetching weather…* with the
+same timer and **Cancel** as a block.
+
+**When a rule stops finding its value** — the API changed, or sent an error
+page — the action stops, saying which source, and the source is marked: in the
+window, and as *⚠︎ weather needs fixing* in the menu bar's menu. **Find It
+Again** asks Claude for a new rule from the description you kept; **Test Now**
+tries the current one.
+
+- **`{{api.weather.raw}}`** is the whole response, for an `{{#ai}}` block to
+  read: `{{#ai}}In one line, what's the news here? {{api.news.raw}}{{/ai}}`. It
+  needs no rule.
+- **Fetched values can steer an action.** A rule is fixed, and applied by the
+  Mac, so its value may go in a `url`, a `to` or a shortcut's `input`:
+  `url: "https://example.com/track/{{api.parcel}}"`. What can't is an `{{#ai}}`
+  block, even one reading a fetched value — blocks stay out of those fields.
+- Sources used by one key are fetched at the same time, and each once, however
+  many of its values the key uses.
+- The window never shows a key once saved; removing a source removes its key.
+  Responses are never written to the log, and neither are values.
+- **Previews** show a stand-in, `‹weather›`, and fetch nothing.
 
 ### Where values come from
 
@@ -854,7 +910,9 @@ Highest priority first:
    sent ⌘C instead, and the clipboard is put back straight after; that can be
    turned off in Settings. Neither the selection nor the clipboard is written to
    the system log.
-5. **Built-ins:**
+5. **Data sources:** `{{api.weather}}` and `{{api.weather.raw}}` (above),
+   fetched only when the action uses them.
+6. **Built-ins:**
 
    | Name | Default format | Example |
    |---|---|---|
@@ -957,7 +1015,7 @@ and from modules, `stopwatch`.
 
 **Computed values:** `leaf`, `parent`, `level1`–`level4`, `path`, `folderPath`,
 `parentPath`, `tree`, `contact.*`, `project.*`, `selection`, `clipboard`, `frontApp`,
-`stopwatch`, `stopwatch.*`, `date`,
+`stopwatch`, `stopwatch.*`, `api.*`, `date`,
 `time`, `datetime`, `weekday`, `isoWeek`, and `when` by convention.
 
 **Tree names:** `main`, `row2`, `row3`, `bottom`.

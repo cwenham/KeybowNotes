@@ -107,7 +107,30 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
     // MARK: - Replying
 
     public func reply(to call: TemplateBlockCall) async throws -> String {
-        let request = try makeRequest(for: call)
+        try await send(try makeRequest(for: call))
+    }
+
+    // MARK: - For other modules
+
+    /// Asks Claude something on another module's behalf, with the Settings
+    /// window's model and effort. With a `schema`, the reply is JSON that
+    /// matches it (structured outputs). Other modules find this through
+    /// `ModuleRegistry.shared.module(id: ClaudeModule.id) as? ClaudeModule`.
+    public func ask(system: String, prompt: String, schema: [String: Any]? = nil) async throws -> String {
+        let modelName = host?.setting("model", for: Self.id) ?? Self.defaultModel
+        let model = Self.model(named: modelName) ?? Self.model(named: Self.defaultModel)!
+        let effort = host?.setting("effort", for: Self.id) ?? Self.defaultEffort
+        return try await send(try request(model: model, effort: effort, system: system, prompt: prompt, schema: schema))
+    }
+
+    /// Whether there's a key to ask with.
+    public var isReady: Bool {
+        !(host?.secret("apiKey", for: Self.id) ?? "").isEmpty
+    }
+
+    // MARK: - Sending
+
+    private func send(_ request: URLRequest) async throws -> String {
         let data: Data
         let response: URLResponse
         do {
@@ -147,6 +170,11 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
         }
         let prompt = call.body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else { throw ModuleError("A {{#ai}} block is empty", "There's nothing to ask.") }
+        return try request(model: model, effort: effort, system: Self.system, prompt: prompt, schema: nil)
+    }
+
+    func request(model: Model, effort: String, system: String, prompt: String,
+                 schema: [String: Any]?) throws -> URLRequest {
         guard let key = host?.secret("apiKey", for: Self.id), !key.isEmpty else {
             throw ModuleError("Claude needs an API key", "Make one in the Claude Console, then add it in Settings → Claude.")
         }
@@ -154,12 +182,15 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
         var body: [String: Any] = [
             "model": model.id,
             "max_tokens": Self.maxTokens,
-            "system": Self.system,
+            "system": system,
             "messages": [["role": "user", "content": prompt]],
         ]
         // Thinking is left to the model — always on for Opus 5.5 — and effort
         // is the control for how much, and so for speed and cost.
-        if model.effort { body["output_config"] = ["effort": effort] }
+        var outputConfig: [String: Any] = [:]
+        if model.effort { outputConfig["effort"] = effort }
+        if let schema { outputConfig["format"] = ["type": "json_schema", "schema": schema] }
+        if !outputConfig.isEmpty { body["output_config"] = outputConfig }
         if model.fallbacks { body["fallbacks"] = "default" }
 
         var request = URLRequest(url: Self.endpoint, timeoutInterval: Self.timeout)

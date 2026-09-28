@@ -218,6 +218,13 @@ final class OverlayController {
         show()
     }
 
+    /// From "Fetching weather…" to "Asking Claude…", timer running on.
+    func updateWorking(title: String) {
+        guard let working = model.working else { return }
+        model.working = OverlayModel.Working(summary: working.summary, path: working.path, title: title,
+                                             since: working.since)
+    }
+
     func endWorking() {
         model.working = nil
         model.onCancel = nil

@@ -28,6 +28,11 @@ public struct ActionSummary: Equatable, Sendable {
 
         func expand(_ text: String?) -> String {
             guard let text else { return "" }
+            // Fetched values show a stand-in: a preview mustn't fetch anything.
+            var params = params
+            for name in ModuleRegistry.shared.fetchedNames(in: Template.names(in: text)) where params[name] == nil {
+                params[name] = ModuleRegistry.shared.standIn(forValue: name)
+            }
             // Blocks show a stand-in: a preview mustn't spend anything.
             let result = Template.expand(text, params: params, now: now, calendar: calendar,
                                          standIn: ModuleRegistry.shared.standIn(for:))

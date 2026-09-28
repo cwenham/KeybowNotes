@@ -8,7 +8,7 @@ import KeybowKit
 // terminal, for development:
 //
 //   swift run keybownotes [--config file.json] [--screen cursor|main] [--dry-run]
-//                         [--show-settings] [--edit-tree] [--simulate "4 8 12"] [--pace 1.2]
+//                         [--show-settings] [--show-data-sources] [--edit-tree] [--simulate "4 8 12"] [--pace 1.2]
 //                         [--debug-snapshots dir]
 //
 // --dry-run shows what each action would do without doing it.
@@ -26,6 +26,7 @@ struct Options {
     var debugDirectory: URL?
     var dryRun = false
     var showSettings = false
+    var showDataSources = false
     var editTree = false
 }
 
@@ -58,6 +59,8 @@ func parseOptions() -> Options {
             options.dryRun = true
         case "--show-settings":
             options.showSettings = true
+        case "--show-data-sources":
+            options.showDataSources = true
         case "--edit-tree":
             options.editTree = true
         case "--debug-snapshots":

@@ -66,6 +66,19 @@ public protocol KeybowModule: AnyObject, Sendable {
 
     /// What a block shows in previews, where nothing is asked: "‹Claude's reply›".
     func standIn(for call: TemplateBlockCall) -> String
+
+    /// Values it fetches when an action uses them — `{{api.weather}}` for a
+    /// module whose manifest lists "api" in `fetches`. Asked before an action
+    /// runs, only for the names it uses, with the values it can draw on.
+    /// Runs off the main thread; cancelling the task cancels it.
+    func fetch(_ names: [String], params: [String: String], now: Date) async throws -> [String: String]
+
+    /// Other values those names need to be fetched — a URL's `{{city}}` or
+    /// `{{selection}}` — so the host gets them ready first.
+    func valuesNeeded(toFetch names: [String]) -> Set<String>
+
+    /// What a fetched value shows in previews: "‹weather›".
+    func standIn(forValue name: String) -> String
 }
 
 /// A module's reason, fit to show on the overlay.
@@ -92,6 +105,11 @@ extension KeybowModule {
         throw ModuleError("{{#\(call.name)}} isn't something this module can reply to")
     }
     public func standIn(for call: TemplateBlockCall) -> String { "‹\(call.name)›" }
+    public func fetch(_ names: [String], params: [String: String], now: Date) async throws -> [String: String] {
+        throw ModuleError("This module doesn't fetch values")
+    }
+    public func valuesNeeded(toFetch names: [String]) -> Set<String> { [] }
+    public func standIn(forValue name: String) -> String { "‹\(name)›" }
 }
 
 /// A command a module offers in the menu bar's menu — or a submenu of them,
@@ -129,14 +147,17 @@ public struct ModuleManifest: Sendable {
     public let blocks: [ModuleBlockType]
     /// Its part of the Settings window.
     public let settings: [ModuleSetting]
+    /// Value prefixes it fetches: "api" for `{{api.weather}}`.
+    public let fetches: [String]
 
     public init(id: String, name: String, actionTypes: [ModuleActionType] = [], blocks: [ModuleBlockType] = [],
-                settings: [ModuleSetting] = []) {
+                settings: [ModuleSetting] = [], fetches: [String] = []) {
         self.id = id
         self.name = name
         self.actionTypes = actionTypes
         self.blocks = blocks
         self.settings = settings
+        self.fetches = fetches
     }
 }
 
@@ -318,11 +339,18 @@ public protocol ModuleHost: AnyObject, Sendable {
     func setting(_ key: String, for module: String) -> String?
     /// A secret setting, from the Keychain.
     func secret(_ key: String, for module: String) -> String?
+    /// Keeps a secret in the Keychain — for a module with a window of its
+    /// own, like Data Sources' API keys. Nil removes it. Says why, if it
+    /// couldn't.
+    func setSecret(_ value: String?, _ key: String, for module: String) -> String?
 }
 
 extension ModuleHost {
     public func setting(_ key: String, for module: String) -> String? { nil }
     public func secret(_ key: String, for module: String) -> String? { nil }
+    public func setSecret(_ value: String?, _ key: String, for module: String) -> String? {
+        "This host can't keep secrets"
+    }
 }
 
 /// Keeps modules' state in memory only: for tools and tests, where nothing
@@ -364,6 +392,11 @@ public final class MemoryModuleHost: ModuleHost, @unchecked Sendable {
     public func set(_ value: String?, for key: String, of module: String, secret: Bool = false) {
         lock.withLock { settings[secret ? "\(module).secret.\(key)" : "\(module).\(key)"] = value }
     }
+
+    public func setSecret(_ value: String?, _ key: String, for module: String) -> String? {
+        set(value, for: key, of: module, secret: true)
+        return nil
+    }
 }
 
 /// The modules in this app, and what they add together.
@@ -402,6 +435,54 @@ public final class ModuleRegistry: @unchecked Sendable {
     /// What a block shows in previews, whether or not anything handles it.
     public func standIn(for call: TemplateBlockCall) -> String {
         module(handlingBlock: call.name)?.standIn(for: call) ?? "‹\(call.name)›"
+    }
+
+    /// The module that fetches a value: `api.weather` → the one fetching "api".
+    public func module(fetching name: String) -> KeybowModule? {
+        let prefix = name.split(separator: ".", maxSplits: 1).first.map(String.init) ?? name
+        return all.first { $0.manifest.fetches.contains(prefix) }
+    }
+
+    /// The names among these that some module fetches.
+    public func fetchedNames(in names: Set<String>) -> [String] {
+        names.filter { module(fetching: $0) != nil }.sorted()
+    }
+
+    /// What those names need first, from the modules that fetch them.
+    public func valuesNeeded(toFetch names: [String]) -> Set<String> {
+        var needed = Set<String>()
+        for (module, group) in grouped(names) { needed.formUnion(module.valuesNeeded(toFetch: group)) }
+        return needed
+    }
+
+    /// Fetches them — each module's at once, the modules side by side.
+    public func fetch(_ names: [String], params: [String: String], now: Date) async throws -> [String: String] {
+        let groups = grouped(names)
+        return try await withThrowingTaskGroup(of: [String: String].self) { group in
+            for (module, names) in groups {
+                group.addTask { try await module.fetch(names, params: params, now: now) }
+            }
+            var values: [String: String] = [:]
+            for try await fetched in group { values.merge(fetched) { first, _ in first } }
+            return values
+        }
+    }
+
+    public func standIn(forValue name: String) -> String {
+        module(fetching: name)?.standIn(forValue: name) ?? "‹\(name)›"
+    }
+
+    private func grouped(_ names: [String]) -> [(KeybowModule, [String])] {
+        var groups: [(KeybowModule, [String])] = []
+        for name in names {
+            guard let module = module(fetching: name) else { continue }
+            if let index = groups.firstIndex(where: { $0.0 === module }) {
+                groups[index].1.append(name)
+            } else {
+                groups.append((module, [name]))
+            }
+        }
+        return groups
     }
 
     /// Works out a block through the module that handles it.

@@ -65,6 +65,13 @@ where an action goes — links, phone numbers, apps — so text you select can't
 it there. Claude Opus 5.5 at low effort by default; your API key stays in the
 Keychain.
 
+**Values from APIs** — add an API in *Data Sources*, describe the value you want
+from it — *the current temperature in Celsius* — and Claude writes a rule to find it,
+once. After that `{{api.weather}}` fetches the API and applies the rule on your Mac
+on every key press: no model in the loop, with responses kept as long as you choose.
+If the API changes and the rule stops working, the key says so and Claude can find
+it again. API keys stay in the Keychain.
+
 **Four trees** — the row you press first chooses the tree: row 1 runs down through
 all four rows, rows 2 and 3 are shorter trees of their own, and row 4 runs upwards.
 Four menus on one keypad, with the top row always a way back to the main one.
@@ -77,7 +84,7 @@ has that does nothing is flagged, with a button to remove it.
 
 ![The tree editor with a calendar event selected: its title, start, duration and alert, each showing where it comes from](docs/images/tree-editor-event.png)
 
-**Modules** — the stopwatch and the Claude blocks are modules: separate code that
+**Modules** — the stopwatch, the Claude blocks and data sources are modules: separate code that
 plugs in through one interface, adding actions, template blocks, values, settings
 and menu commands. See [docs/MODULES.md](docs/MODULES.md).
 

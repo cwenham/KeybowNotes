@@ -17,9 +17,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var moduleClock: Timer?
     /// Modules' commands go after this, rebuilt each time the menu opens.
     private let moduleMenuAnchor = NSMenuItem.separator()
-    /// Replies being worked out for an action; one at a time, cancellable.
-    private var blockWork: Task<Void, Never>?
-    private let cancelWorkItem = NSMenuItem(title: "Cancel Waiting for Replies", action: nil, keyEquivalent: "")
+    /// Values being fetched and replies worked out for an action; one at a
+    /// time, cancellable.
+    private var pendingWork: Task<Void, Never>?
+    private let cancelWorkItem = NSMenuItem(title: "Cancel Waiting", action: nil, keyEquivalent: "")
     private var moduleMenuItems: [NSMenuItem] = []
 
     private let connectionItem = NSMenuItem(title: "Keybow: looking…", action: nil, keyEquivalent: "")
@@ -85,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if !options.simulated.isEmpty { simulate(options.simulated, pace: options.pace) }
         if options.showSettings { showSettings() }
+        if options.showDataSources { _ = ModuleRegistry.shared.module(id: "api")?.performMenuItem("open", now: Date()) }
         if options.editTree { showEditor() }
     }
 
@@ -271,22 +273,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             overlay.showRefused("\(error)", summary: ActionSummary(selection: selection, config: config))
             return
         }
-        if !blockTexts.isEmpty, blockWork != nil {
-            overlay.showRefused("Still waiting on the last replies. Cancel them, or let them finish, then press again.",
+        // Values modules fetch — {{api.weather}} — and what they need first.
+        let registry = ModuleRegistry.shared
+        let used = ActionPlanner.placeholders(for: selection, context: context)
+        let fetchedNames = registry.fetchedNames(in: used)
+        let needed = used.union(registry.valuesNeeded(toFetch: fetchedNames))
+        let waits = !blockTexts.isEmpty || !fetchedNames.isEmpty
+        if waits, pendingWork != nil {
+            overlay.showRefused("Still waiting on the last fetch or replies. Cancel it, or let it finish, then press again.",
                                 summary: ActionSummary(selection: selection, config: config))
             return
         }
 
-        let needsSelection = ActionPlanner.placeholders(for: selection, context: context).contains("selection")
-        guard needsSelection || !blockTexts.isEmpty else {
+        let needsSelection = needed.contains("selection")
+        guard needsSelection || waits else {
             run(selection, context: context)
             return
         }
-        // The app to type into, if it comes to that: waiting on replies leaves
-        // time to switch to another.
+        // The app to type into, if it comes to that: waiting leaves time to
+        // switch to another.
         let frontApp = NSWorkspace.shared.frontmostApplication?.processIdentifier
         let work = Task { @MainActor in
-            defer { if !blockTexts.isEmpty { self.blockWork = nil } }
+            defer { if waits { self.pendingWork = nil } }
             // Read only when asked for: it can mean sending the app ⌘C.
             if needsSelection {
                 switch await SelectedText.read(copyIfNeeded: settings.copySelection) {
@@ -303,28 +311,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     return
                 }
             }
-            if !blockTexts.isEmpty {
-                guard let replies = await askForReplies(blockTexts, selection: selection, context: context) else { return }
-                context.blockReplies = replies
+            if waits {
+                guard let prepared = await prepare(fetchedNames, blockTexts, selection: selection, context: context) else {
+                    return
+                }
+                context = prepared
             }
-            run(selection, context: context, typingInto: blockTexts.isEmpty ? nil : frontApp)
+            run(selection, context: context, typingInto: waits ? frontApp : nil)
         }
-        if !blockTexts.isEmpty { blockWork = work }
+        if waits { pendingWork = work }
     }
 
-    /// Works out the action's blocks — innermost first, those that can go
-    /// together at once — with a timer and a Cancel button on the HUD. Nil if
-    /// cancelled or refused, having said so.
-    private func askForReplies(_ texts: [String], selection: ResolvedSelection,
-                               context: ActionContext) async -> [TemplateBlockCall: String]? {
+    /// Fetches the values the action uses, then works out its blocks —
+    /// innermost first, those that can go together at once — with a timer
+    /// and a Cancel button on the HUD. Nil if cancelled or refused, having
+    /// said so.
+    private func prepare(_ fetchedNames: [String], _ texts: [String], selection: ResolvedSelection,
+                         context: ActionContext) async -> ActionContext? {
         guard let overlay else { return nil }
+        var context = context
         let summary = ActionSummary(selection: selection, config: config, environment: context.environment)
         let registry = ModuleRegistry.shared
         let askers = Set(texts.flatMap(TemplateBlocks.names(in:)).compactMap { name in
             registry.module(handlingBlock: name)?.manifest.blocks.first { $0.name == name }?.title
         })
-        let title = askers.count == 1 ? "Asking \(askers.first!)…" : "Waiting for replies…"
-        overlay.showWorking(summary, path: selection.pathDescription, title: title) { [weak self] in
+        let askTitle = askers.count == 1 ? "Asking \(askers.first!)…" : "Waiting for replies…"
+        let sources = fetchedNames.map { $0.split(separator: ".").dropFirst().first.map(String.init) ?? $0 }
+        let fetchTitle = "Fetching " + Array(Set(sources)).sorted().joined(separator: ", ") + "…"
+        overlay.showWorking(summary, path: selection.pathDescription,
+                            title: fetchedNames.isEmpty ? askTitle : fetchTitle) { [weak self] in
             self?.cancelReplies()
         }
         defer { overlay.endWorking() }
@@ -339,30 +354,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let started = Date()
         do {
-            let replies = try await TemplateBlocks.resolve(
-                texts, params: ActionPlanner.values(for: selection, context: context),
-                now: context.now, calendar: context.calendar) { call in
-                try await ModuleRegistry.shared.reply(to: call)
+            if !fetchedNames.isEmpty {
+                let values = try await registry.fetch(fetchedNames, params: ActionPlanner.values(for: selection, context: context),
+                                                      now: context.now)
+                context.environment.merge(values) { _, fetched in fetched }
+                Log.info(String(format: "  fetched %d value%@ in %.1fs", values.count, values.count == 1 ? "" : "s",
+                                Date().timeIntervalSince(started)))
             }
-            Log.info(String(format: "  %d repl%@ in %.1fs", replies.count, replies.count == 1 ? "y" : "ies",
-                            Date().timeIntervalSince(started)))
-            return replies
+            if !texts.isEmpty {
+                overlay.updateWorking(title: askTitle)
+                let replies = try await TemplateBlocks.resolve(
+                    texts, params: ActionPlanner.values(for: selection, context: context),
+                    now: context.now, calendar: context.calendar) { call in
+                    try await ModuleRegistry.shared.reply(to: call)
+                }
+                Log.info(String(format: "  %d repl%@ in %.1fs", replies.count, replies.count == 1 ? "y" : "ies",
+                                Date().timeIntervalSince(started)))
+                context.blockReplies = replies
+            }
+            return context
         } catch is CancellationError {
-            Log.info("  cancelled while waiting for replies")
+            Log.info("  cancelled while waiting")
             overlay.handle(.cleared(reason: .cancelled))
         } catch let error as ModuleError {
             // A module's own words; they don't quote the prompt.
-            Log.error("  FAILED waiting for replies: \(error)")
+            Log.error("  FAILED while waiting: \(error)")
             overlay.showFinished(.failure(error.message, error.detail), summary: summary, warnings: [])
         } catch {
-            Log.error("  FAILED waiting for replies: \(error)")
+            Log.error("  FAILED while waiting: \(error)")
             overlay.showRefused("\(error)", summary: summary)
         }
         return nil
     }
 
     @objc private func cancelReplies() {
-        blockWork?.cancel()
+        pendingWork?.cancel()
     }
 
     private func run(_ selection: ResolvedSelection, context: ActionContext, typingInto frontApp: pid_t? = nil) {
@@ -621,7 +647,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         updateAccessItem()
-        cancelWorkItem.isHidden = blockWork == nil
+        cancelWorkItem.isHidden = pendingWork == nil
         updateModuleMenuItems(in: menu)
     }
 

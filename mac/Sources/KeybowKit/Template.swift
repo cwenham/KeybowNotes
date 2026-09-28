@@ -105,6 +105,9 @@ public enum Template {
         return ""
     }
 
+    /// The names filled in from the clock, never needing a value.
+    public static let builtInNames: Set<String> = ["date", "time", "datetime", "weekday", "isoWeek"]
+
     private static func builtIn(_ name: String, now: Date, calendar: Calendar, locale: Locale) -> String? {
         let parts = name.split(separator: ":", maxSplits: 1)
         let key = parts.first.map(String.init) ?? name

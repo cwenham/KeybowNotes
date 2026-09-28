@@ -24,7 +24,9 @@ bar or the outline directly.
 | Keep **state** between runs of the app | `ModuleHost.load` / `save` |
 | Put text on the **clipboard** | `ModuleHost.copy` |
 | Reply to **template blocks** — `{{#ai}}…{{/ai}}` | `manifest.blocks`, `reply(to:)`, `standIn(for:)` |
+| **Fetch values** when an action needs them — `{{api.weather}}` | `manifest.fetches`, `fetch(_:params:now:)`, `valuesNeeded(toFetch:)`, `standIn(forValue:)` |
 | Add **settings** to the Settings window, secrets kept in the Keychain | `manifest.settings`, `ModuleHost.setting` / `secret` |
+| Keep secrets of its own making in the Keychain | `ModuleHost.setSecret` |
 | Say its status changed on its own | `ModuleHost.statusChanged()` |
 
 The interface is in `mac/Sources/KeybowKit/Modules.swift`.
@@ -34,6 +36,8 @@ The interface is in `mac/Sources/KeybowKit/Modules.swift`.
 ```
 KeybowKit            the module interface, the registry, and the core
 KeybowStopwatch      a module: depends on KeybowKit only
+KeybowAI             a module: {{#ai}} blocks, and Claude for other modules
+KeybowData           a module: data sources, using KeybowAI to write rules
 KeybowModules        the list of built-in modules
 KeybowNotesApp       registers them at launch; shows their status
 keybow               registers them too, so their keywords compile
@@ -84,6 +88,15 @@ a module is a new target, a line there, and a dependency in `Package.swift`.
   name, attributes and finished contents; it runs off the main thread and is
   cancelled by task cancellation. Throw `ModuleError` with words to show.
   Previews use `standIn(for:)` instead, and never call `reply`.
+- **Fetched values.** A module lists the prefixes it fetches — `api` — and
+  `fetch(_:params:now:)` gets every name with that prefix an action uses
+  (`api.weather`, `api.news.raw`), with the action's values, and returns
+  theirs. Unlike `values(now:)`, it's asked only when an action uses the names,
+  and may take time: the host fetches before any blocks, since a block may read
+  a fetched value, under the same timer and Cancel. `valuesNeeded(toFetch:)`
+  names the values a fetch needs first — a URL's `{{city}}` — so the host reads
+  `{{selection}}` for it if need be. Fetched values aren't blocks: they may go
+  in fields that steer an action. Previews use `standIn(forValue:)`.
 - **Settings.** A module describes its settings — text, a secret, a choice, a
   flag — and the host draws them in its own section of the Settings window. The
   module reads them with `setting(_:for:)`, and secrets with `secret(_:for:)`,
@@ -98,7 +111,9 @@ A module is called from any thread, so it keeps its state behind a lock.
 Modules find each other through the registry —
 `ModuleRegistry.shared.module(id:)` — and may offer a Swift interface of their
 own. The stopwatch offers `perform(_:at:)` and `reading(at:)`, so a module that
-depends on `KeybowStopwatch` could start it or read it. A looser way needs no
+depends on `KeybowStopwatch` could start it or read it. Claude offers
+`ask(system:prompt:schema:)`, with the model and effort from Settings, which
+data sources use to write their rules. A looser way needs no
 dependency at all: another module's values are in every action's placeholders.
 
 ## The stopwatch
@@ -141,6 +156,38 @@ dependency at all: another module's values are in every action's placeholders.
   refusal or a cut-off. HTTP errors become messages that say what to do.
 - The transport is a protocol, so tests check the exact request and replay
   responses without calling the API.
+- For other modules, `ask(system:prompt:schema:)` sends one request and returns
+  the text; with a JSON schema it asks for structured output
+  (`output_config.format`), so the reply is JSON matching it.
+
+## Data sources
+
+`mac/Sources/KeybowData/`, module id `api`.
+
+- Fetches `{{api.<name>}}` — the value a source's rule finds — and
+  `{{api.<name>.raw}}`, the whole response. Each source a key uses is fetched
+  once, all at the same time, through a transport that refuses redirects to
+  another host, so a key never follows one. https only (plain http for
+  `localhost`), 20 seconds, 5 MB at most.
+- A **rule** (`Extraction.swift`) is a JSONPath (the parts of RFC 9535 rules
+  need: names, indices, wildcards, descendants, filters), an XPath 1.0 through
+  `XMLDocument` (tidying HTML first), or an ICU regular expression. Several
+  matches are joined with commas.
+- **RuleFinder** writes a rule with Claude once: the description and a sample
+  of the response — keys taken out, cut at 60,000 characters — with a JSON
+  schema for the answer (`found`, `kind`, `expression`, `expected_value`,
+  `explanation`). The rule is run on the whole sample on the Mac; if it finds
+  nothing, fails, or finds something other than Claude expected, Claude is told
+  and asked again, three tries at most. `found: false` means the value isn't in
+  the response, and Claude's explanation says what is.
+- **When a rule stops working** the fetch throws, the source is marked broken
+  with why, and the menu bar's menu says so, until a test or a key press finds
+  the value again, or a new rule is written.
+- Its own window, from *Edit Data Sources…* in the menu: sources, keys (in the
+  Keychain, as `api.key.<id>`), caching, the description, Find It with Claude,
+  Test Now, and a rule of your own.
+- Sources are kept with `ModuleHost.save`; responses only in memory, for as
+  long as each source says.
 
 ## Not yet
 

@@ -128,7 +128,9 @@ enum ModuleClock {
 /// can read them back without asking, and they're listed in Keychain Access
 /// as "KeybowNotes: …" should they need removing by hand.
 enum Keychain {
-    static let service = "io.github.cwenham.keybownotes"
+    /// A development build keeps its own: reading the app's items would ask
+    /// for permission, and it mustn't change them.
+    static let service = Bundle.main.bundleIdentifier == nil ? "io.github.cwenham.keybownotes.dev" : "io.github.cwenham.keybownotes"
 
     private static func query(_ account: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,

@@ -533,10 +533,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard !commands.isEmpty else { continue }
             var items = [NSMenuItem.sectionHeader(title: module.manifest.name)]
             for command in commands {
-                let item = NSMenuItem(title: command.title, action: #selector(runModuleMenuItem(_:)), keyEquivalent: "")
-                item.target = self
-                item.isEnabled = command.isEnabled
-                item.representedObject = [module.manifest.id, command.id]
+                let item = menuItem(for: command, of: module)
                 item.indentationLevel = 1
                 items.append(item)
             }
@@ -547,6 +544,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             moduleMenuItems += items
         }
+    }
+
+    /// A command, a submenu of them, or — with no id — a line that only
+    /// shows something, like a lap time, with digits that line up.
+    private func menuItem(for command: ModuleMenuItem, of module: KeybowModule) -> NSMenuItem {
+        let item = NSMenuItem(title: command.title, action: nil, keyEquivalent: "")
+        item.isEnabled = command.isEnabled
+        if !command.submenu.isEmpty {
+            let submenu = NSMenu(title: command.title)
+            submenu.autoenablesItems = false
+            for child in command.submenu { submenu.addItem(menuItem(for: child, of: module)) }
+            item.submenu = submenu
+        } else if command.id.isEmpty {
+            item.attributedTitle = NSAttributedString(string: command.title, attributes: [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
+            ])
+        } else {
+            item.action = #selector(runModuleMenuItem(_:))
+            item.target = self
+            item.representedObject = [module.manifest.id, command.id]
+        }
+        return item
     }
 
     @objc private func runModuleMenuItem(_ sender: NSMenuItem) {

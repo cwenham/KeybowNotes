@@ -68,18 +68,28 @@ extension KeybowModule {
     public func performMenuItem(_ id: String, now: Date) -> ActionOutcome? { nil }
 }
 
-/// A command a module offers in the menu bar's menu.
+/// A command a module offers in the menu bar's menu — or a submenu of them,
+/// or, with an empty id, a line of information: a lap time.
 public struct ModuleMenuItem: Equatable, Sendable {
-    /// Handed back to `performMenuItem` when it's chosen.
+    /// Handed back to `performMenuItem` when it's chosen. Empty for a line
+    /// that only shows something, or one that opens a submenu.
     public let id: String
     public let title: String
     /// Shown either way, so it can be found; only usable when this is true.
     public let isEnabled: Bool
+    /// Items in a submenu under this one.
+    public let submenu: [ModuleMenuItem]
 
-    public init(id: String, title: String, isEnabled: Bool) {
+    public init(id: String, title: String, isEnabled: Bool, submenu: [ModuleMenuItem] = []) {
         self.id = id
         self.title = title
         self.isEnabled = isEnabled
+        self.submenu = submenu
+    }
+
+    /// A line that only shows something.
+    public static func information(_ title: String) -> ModuleMenuItem {
+        ModuleMenuItem(id: "", title: title, isEnabled: true)
     }
 }
 
@@ -217,6 +227,8 @@ public protocol ModuleHost: AnyObject, Sendable {
     /// The module's status or values changed outside an action it was asked
     /// to run: show it.
     func statusChanged()
+    /// Puts text on the clipboard.
+    func copy(_ text: String)
 }
 
 /// Keeps modules' state in memory only: for tools and tests, where nothing
@@ -236,6 +248,13 @@ public final class MemoryModuleHost: ModuleHost, @unchecked Sendable {
     }
 
     public func statusChanged() {}
+
+    /// What was copied, last first: nothing touches the real clipboard.
+    public private(set) var copied: [String] = []
+
+    public func copy(_ text: String) {
+        lock.withLock { copied.insert(text, at: 0) }
+    }
 }
 
 /// The modules in this app, and what they add together.

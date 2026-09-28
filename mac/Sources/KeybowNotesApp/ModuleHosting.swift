@@ -33,6 +33,13 @@ final class AppModuleHost: ModuleHost, @unchecked Sendable {
         if let data { defaults.set(data, forKey: self.key(key, module)) } else { defaults.removeObject(forKey: self.key(key, module)) }
     }
 
+    func copy(_ text: String) {
+        DispatchQueue.main.async {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        }
+    }
+
     func statusChanged() {
         let first = lock.withLock { () -> Bool in
             defer { scheduled = true }

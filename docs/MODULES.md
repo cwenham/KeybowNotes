@@ -22,6 +22,7 @@ bar or the outline directly.
 | Show what it's doing — on the overlay, in the menu bar, by pulsing keys | `status(now:)` |
 | Offer **commands in the menu bar's menu**, for things no key has been set up to do | `menuItems(now:)` / `performMenuItem(_:now:)` |
 | Keep **state** between runs of the app | `ModuleHost.load` / `save` |
+| Put text on the **clipboard** | `ModuleHost.copy` |
 | Say its status changed on its own | `ModuleHost.statusChanged()` |
 
 The interface is in `mac/Sources/KeybowKit/Modules.swift`.
@@ -71,6 +72,8 @@ a module is a new target, a line there, and a dependency in `Package.swift`.
   for commands; they're listed under the module's name, greyed out when not
   enabled. Choosing one calls `performMenuItem(_:now:)`, and its outcome is
   shown on the overlay.
+  An item can hold a submenu, or, with an empty id, be a line that only
+  shows something (`ModuleMenuItem.information`), set in digits that line up.
 - **State.** `load` and `save` keep data per module between runs: in the app,
   in its preferences; on the command line, in memory only.
 
@@ -96,9 +99,11 @@ dependency at all: another module's values are in every action's placeholders.
   time to cancel.
 - The menu bar's menu has Stop, Lap and Reset under *Stopwatch*, usable while
   it runs (Reset while it has a time), so it can always be stopped — even when
-  no key for that has been set up.
+  no key for that has been set up — and a *Laps* submenu listing each lap's
+  length and the time since the start, with *Copy Lap Times* to paste them.
 - Values: `{{stopwatch}}` (3:12), `{{stopwatch.seconds}}` (192),
-  `{{stopwatch.laps}}` (1:05, 2:07 — the time at each lap).
+  `{{stopwatch.laps}}` (1:05, 1:00 — each lap's length) and
+  `{{stopwatch.splits}}` (1:05, 2:05 — the time since the start at each lap).
 - Status: shown while it has a time — running, or stopped and not yet reset —
   with the last lap. Its key pulses while it runs.
 - State: saved on every change, so it keeps running through a restart of the

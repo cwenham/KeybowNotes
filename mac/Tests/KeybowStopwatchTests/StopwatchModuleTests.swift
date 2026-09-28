@@ -10,6 +10,8 @@ private final class MemoryHost: ModuleHost, @unchecked Sendable {
     func load(_ key: String, for module: String) -> Data? { stored["\(module).\(key)"] }
     func save(_ data: Data?, as key: String, for module: String) { stored["\(module).\(key)"] = data }
     func statusChanged() { changes += 1 }
+    var copied: [String] = []
+    func copy(_ text: String) { copied.append(text) }
 }
 
 final class StopwatchModuleTests: XCTestCase {
@@ -39,7 +41,8 @@ final class StopwatchModuleTests: XCTestCase {
         stopwatch.perform(.start, at: at(0))
         XCTAssertEqual(stopwatch.perform(.lap, at: at(65)).message, "Lap 1: 1:05")
         XCTAssertEqual(stopwatch.perform(.lap, at: at(125)).message, "Lap 2: 1:00")
-        XCTAssertEqual(stopwatch.values(now: at(130))["stopwatch.laps"], "1:05, 2:05")
+        XCTAssertEqual(stopwatch.values(now: at(130))["stopwatch.laps"], "1:05, 1:00", "each lap's length")
+        XCTAssertEqual(stopwatch.values(now: at(130))["stopwatch.splits"], "1:05, 2:05", "the time since the start")
         XCTAssertEqual(stopwatch.perform(.reset, at: at(130)).detail, "It had 2:10")
         XCTAssertEqual(stopwatch.reading(at: at(200)), .init(elapsed: 0, isRunning: false, laps: []))
         XCTAssertNil(stopwatch.status(now: at(200)), "nothing to show once reset")
@@ -82,7 +85,8 @@ final class StopwatchModuleTests: XCTestCase {
         func enabled(at seconds: TimeInterval) -> [String] {
             stopwatch.menuItems(now: at(seconds)).filter(\.isEnabled).map(\.title)
         }
-        XCTAssertEqual(stopwatch.menuItems(now: at(0)).map(\.title), ["Stop", "Lap", "Reset"], "always listed")
+        XCTAssertEqual(stopwatch.menuItems(now: at(0)).map(\.title), ["Stop", "Lap", "Reset", "Laps", "Copy Lap Times"],
+                       "always listed")
         XCTAssertEqual(enabled(at: 0), [], "nothing to do before it's started")
         stopwatch.perform(.start, at: at(0))
         XCTAssertEqual(enabled(at: 10), ["Stop", "Lap", "Reset"])
@@ -91,6 +95,20 @@ final class StopwatchModuleTests: XCTestCase {
         XCTAssertEqual(stopwatch.performMenuItem("reset", now: at(40))?.message, "Stopwatch reset")
         XCTAssertEqual(enabled(at: 50), [])
         XCTAssertNil(stopwatch.performMenuItem("explode", now: at(50)))
+    }
+
+    func testLapsAreListedAndCopied() throws {
+        let (stopwatch, host) = fresh()
+        XCTAssertEqual(stopwatch.menuItems(now: at(0)).first { $0.title == "Laps" }?.isEnabled, false, "no laps yet")
+        stopwatch.perform(.start, at: at(0))
+        stopwatch.perform(.lap, at: at(65))
+        stopwatch.perform(.lap, at: at(125))
+        let laps = try XCTUnwrap(stopwatch.menuItems(now: at(130)).first { $0.title == "Laps" })
+        XCTAssertTrue(laps.isEnabled)
+        XCTAssertEqual(laps.submenu, [.information("Lap 1 — 1:05 (1:05)"), .information("Lap 2 — 1:00 (2:05)")])
+
+        XCTAssertEqual(stopwatch.performMenuItem("copyLaps", now: at(130))?.message, "Copied 2 lap times")
+        XCTAssertEqual(host.copied, ["Lap 1\t1:05\t1:05\nLap 2\t1:00\t2:05"], "columns: lap, length, since the start")
     }
 
     func testFormat() {

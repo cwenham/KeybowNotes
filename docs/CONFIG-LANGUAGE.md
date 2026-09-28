@@ -644,12 +644,23 @@ so a stray press can't wipe a time; `instant:` changes either.
 A lone `Stopwatch [Stopwatch]` key starts and stops it. Whatever keys you set
 up, the menu bar's menu has Stop, Lap and Reset under *Stopwatch*, usable while
 it runs, so a stopwatch started from a key that only starts it can always be
-stopped. While it has a time it
-shows at the foot of the overlay and in the menu bar; while it runs, the key
-that leads to it breathes. It keeps running through a restart. Its time is a
-value for any action: `{{stopwatch}}` (3:12), `{{stopwatch.seconds}}` (192) and
-`{{stopwatch.laps}}` (1:05, 2:07), so a note can log it:
-`Log [append, entry: "**{{datetime}}** — {{stopwatch}}"]`.
+stopped. The same menu lists the laps so far under *Laps* — each lap's length,
+then the time since the start: "Lap 2 — 1:00 (2:05)" — and *Copy Lap Times*
+puts them on the clipboard as tab-separated columns, which paste into a
+spreadsheet or a note.
+
+While it has a time it shows at the foot of the overlay and in the menu bar;
+while it runs, the key that leads to it breathes. It keeps running through a
+restart. Its time is a value for any action:
+
+| Value | Example | |
+|---|---|---|
+| `{{stopwatch}}` | 3:12 | the time so far |
+| `{{stopwatch.seconds}}` | 192 | the same, in seconds |
+| `{{stopwatch.laps}}` | 1:05, 1:00 | how long each lap took |
+| `{{stopwatch.splits}}` | 1:05, 2:05 | the time since the start at each lap |
+
+So a note can log it: `Log [append, entry: "**{{datetime}}** — {{stopwatch}}, laps {{stopwatch.laps}}"]`.
 
 The stopwatch is a **module** — see MODULES.md — so its keyword, field and
 values come from the module, not the core.

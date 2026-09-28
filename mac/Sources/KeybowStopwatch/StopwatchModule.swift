@@ -34,6 +34,11 @@ public final class StopwatchModule: KeybowModule, @unchecked Sendable {
         public let isRunning: Bool
         /// The time at each lap, from the start.
         public let laps: [TimeInterval]
+
+        /// How long each lap took.
+        public var lapLengths: [TimeInterval] {
+            zip(laps, [0] + laps).map { $0 - $1 }
+        }
     }
 
     public let manifest = ModuleManifest(id: id, name: "Stopwatch", actionTypes: [
@@ -183,27 +188,58 @@ public final class StopwatchModule: KeybowModule, @unchecked Sendable {
 
     /// Stop, lap and reset without a key for them: a stopwatch started from a
     /// key that only starts it can't otherwise be stopped.
+    /// And the laps so far, with a way to copy them.
     public func menuItems(now: Date) -> [ModuleMenuItem] {
         let reading = reading(at: now)
+        let lines = Self.lapLines(reading).map { ModuleMenuItem.information($0) }
         return [
             ModuleMenuItem(id: Command.stop.rawValue, title: "Stop", isEnabled: reading.isRunning),
             ModuleMenuItem(id: Command.lap.rawValue, title: "Lap", isEnabled: reading.isRunning),
             ModuleMenuItem(id: Command.reset.rawValue, title: "Reset",
                            isEnabled: reading.isRunning || reading.elapsed > 0),
+            ModuleMenuItem(id: "", title: "Laps", isEnabled: !lines.isEmpty, submenu: lines),
+            ModuleMenuItem(id: Self.copyLaps, title: "Copy Lap Times", isEnabled: !lines.isEmpty),
         ]
     }
 
+    static let copyLaps = "copyLaps"
+
     public func performMenuItem(_ id: String, now: Date) -> ActionOutcome? {
-        Command(rawValue: id).map { perform($0, at: now) }
+        if id == Self.copyLaps {
+            let reading = reading(at: now)
+            guard !reading.laps.isEmpty else { return .success("No laps to copy") }
+            host?.copy(Self.lapTable(reading))
+            let count = reading.laps.count
+            return .success("Copied \(count) lap time\(count == 1 ? "" : "s")", "Ready to paste")
+        }
+        return Command(rawValue: id).map { perform($0, at: now) }
     }
 
-    /// `{{stopwatch}}` "3:12", `{{stopwatch.seconds}}` "192", `{{stopwatch.laps}}` "1:05, 2:07".
+    /// "Lap 2 — 1:00 (2:05)": each lap's length, then the time since the start.
+    static func lapLines(_ reading: Reading) -> [String] {
+        zip(reading.lapLengths, reading.laps).enumerated().map { index, pair in
+            "Lap \(index + 1) — \(format(pair.0)) (\(format(pair.1)))"
+        }
+    }
+
+    /// Tab-separated, so it pastes into a spreadsheet as columns and reads
+    /// well anywhere else: lap, length, time since the start.
+    static func lapTable(_ reading: Reading) -> String {
+        zip(reading.lapLengths, reading.laps).enumerated().map { index, pair in
+            "Lap \(index + 1)\t\(format(pair.0))\t\(format(pair.1))"
+        }.joined(separator: "\n")
+    }
+
+    /// `{{stopwatch}}` "3:12", `{{stopwatch.seconds}}` "192"; each lap's length,
+    /// `{{stopwatch.laps}}` "1:05, 1:02"; and the time since the start at each
+    /// lap, `{{stopwatch.splits}}` "1:05, 2:07".
     public func values(now: Date) -> [String: String] {
         let reading = reading(at: now)
         return [
             "stopwatch": Self.format(reading.elapsed),
             "stopwatch.seconds": String(Int(reading.elapsed)),
-            "stopwatch.laps": reading.laps.map(Self.format).joined(separator: ", "),
+            "stopwatch.laps": reading.lapLengths.map(Self.format).joined(separator: ", "),
+            "stopwatch.splits": reading.laps.map(Self.format).joined(separator: ", "),
         ]
     }
 

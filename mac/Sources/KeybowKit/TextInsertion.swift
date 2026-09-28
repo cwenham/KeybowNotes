@@ -36,6 +36,130 @@ public enum TextInsertion {
     }
 }
 
+/// Puts text at the cursor in the app in front without going near the
+/// clipboard, so a clipboard manager's history stays clean. First by asking
+/// the app, through accessibility, to replace its selection with the text —
+/// exact and instant where it works, as in standard Mac text views. Apps that
+/// don't take it that way get it typed, a character at a time, which works
+/// nearly everywhere and doesn't depend on the keyboard layout. Both need
+/// Accessibility access.
+public enum DirectInsertion {
+    public enum Method: String, CaseIterable, Sendable {
+        /// Accessibility where the app takes it, else typing.
+        case automatic = ""
+        case accessibility
+        case typing
+    }
+
+    public enum Failure: Error, Equatable {
+        case notAllowed
+        /// `via: accessibility`, and the app didn't take it.
+        case refused
+    }
+
+    /// Gaps between typed characters, so a busy app doesn't drop any.
+    static let keystrokeGap: Duration = .milliseconds(2)
+
+    /// Inserts it, and says which way it went.
+    @MainActor
+    @discardableResult
+    public static func insert(_ text: String, via method: Method) async throws -> Method {
+        guard AXIsProcessTrusted() else { throw Failure.notAllowed }
+        if method != .typing {
+            if replaceSelection(with: text) { return .accessibility }
+            if method == .accessibility { throw Failure.refused }
+        }
+        await type(text)
+        return .typing
+    }
+
+    // MARK: - Accessibility
+
+    /// Sets the focused element's selected text, then checks it really
+    /// changed: some apps — Chrome, Electron — report success and do nothing.
+    /// Declines, touching nothing, when it can't tell, so typing can't insert
+    /// the text a second time.
+    @MainActor
+    static func replaceSelection(with text: String) -> Bool {
+        let system = AXUIElementCreateSystemWide()
+        AXUIElementSetMessagingTimeout(system, 0.5)
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+              let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return false }
+        let element = focused as! AXUIElement
+        AXUIElementSetMessagingTimeout(element, 0.5)
+
+        var settable: DarwinBoolean = false
+        guard AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &settable) == .success,
+              settable.boolValue,
+              let countBefore = characterCount(element),
+              let selection = selectedRange(element) else { return false }
+        guard AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFString) == .success,
+              let countAfter = characterCount(element) else { return false }
+
+        if countAfter != countBefore { return true }
+        // The same length in and out: see whether the cursor moved past it.
+        let length = (text as NSString).length
+        guard length == selection.length, length > 0, let after = selectedRange(element) else { return false }
+        return after.location == selection.location + length && after.length == 0
+    }
+
+    private static func characterCount(_ element: AXUIElement) -> Int? {
+        var value: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXNumberOfCharactersAttribute as CFString, &value) == .success,
+           let number = value as? Int {
+            return number
+        }
+        guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value) == .success,
+              let string = value as? String else { return nil }
+        return (string as NSString).length
+    }
+
+    private static func selectedRange(_ element: AXUIElement) -> CFRange? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+        var range = CFRange()
+        guard AXValueGetValue(value as! AXValue, .cfRange, &range) else { return nil }
+        return range
+    }
+
+    // MARK: - Typing
+
+    enum Keystroke: Equatable {
+        case characters(String)
+        case newLine
+    }
+
+    /// One key press per character — some apps take only the first of several
+    /// — and Return for a new line, which a text field needs as a key.
+    static func keystrokes(for text: String) -> [Keystroke] {
+        text.map { character in
+            character == "\n" || character == "\r\n" || character == "\r" ? .newLine : .characters(String(character))
+        }
+    }
+
+    @MainActor
+    static func type(_ text: String) async {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        for keystroke in keystrokes(for: text) {
+            switch keystroke {
+            case .newLine:
+                KeybowKit.Keystroke.press(0x24, with: [])        // kVK_Return
+            case .characters(let characters):
+                let units = Array(characters.utf16)
+                for isDown in [true, false] {
+                    let event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: isDown)
+                    event?.flags = []
+                    event?.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units)
+                    event?.post(tap: .cghidEventTap)
+                }
+            }
+            try? await Task.sleep(for: keystrokeGap)
+        }
+    }
+}
+
 /// Everything on a pasteboard, to put back after borrowing it.
 public struct PasteboardContents {
     /// Marks contents that clipboard managers shouldn't record — nspasteboard.org.

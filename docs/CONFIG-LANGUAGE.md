@@ -138,6 +138,7 @@ An annotation is either a **word** or a **pair**.
 | `Link`, `Browser` | open a link: web links in the default browser | `"type": "url.open"` |
 | `Copy`, `Clipboard` | put text on the clipboard | `"type": "clipboard.copy"` |
 | `Insert`, `Paste` | type text at the cursor in the app in front | `"type": "text.insert"` |
+| `Direct Insert`, `Type` | the same, without using the clipboard | `"type": "text.insertDirect"` |
 | `Timer` | start a timer in Clock | `"type": "clock.timer"` |
 | `Maps` | search in Maps | `"type": "maps.search"` |
 | `Music` | play a playlist or album in Music | `"type": "music.play"` |
@@ -675,6 +676,35 @@ access**, the same as `{{selection}}`; the first use asks for it.
    4. Quote it [text: "“{{selection}}”"]
 ```
 
+### `text.insertDirect` — text at the cursor, without the clipboard
+
+| Field | |
+|---|---|
+| `text`, `template` | As for `text.insert`; with neither, the leaf's label. |
+| `via` | `accessibility`, `typing`, or empty for accessibility where the app takes it, else typing. |
+
+For when a clipboard manager is installed and `text.insert`'s paste would
+clutter its history. It never touches the clipboard:
+
+- **Accessibility**: the app is asked to replace its selection with the text.
+  Exact and instant, in standard Mac text views — Notes, TextEdit, Mail, Pages.
+  Some apps — Chrome, Electron apps — say yes and do nothing, so KeybowNotes
+  checks the text really went in, by the field's length, before believing it.
+- **Typing**: a key press for each character, carrying the character itself,
+  so it doesn't depend on the keyboard layout. Works nearly everywhere, a
+  little slower for long text. A new line is typed as Return — which, in a chat
+  app, sends the message.
+
+`via: accessibility` fails with a message rather than typing, for apps where
+typing would go wrong. Both ways need **Accessibility access**.
+
+```
+1. Type [Direct Insert]
+   1. Kind regards
+   2. Today [text: "{{date:d MMMM yyyy}}"]
+   3. In the terminal [text: "git status", via: typing]
+```
+
 ### `clipboard.copy` — put text on the clipboard
 
 | Field | |
@@ -845,7 +875,8 @@ window instead of the file. Two of them feed into the language:
 ## 10. Reserved words
 
 **Outline words:** `Notes`, `Calendar`, `Reminders`, `Messages`, `Mail`, `Call`,
-`FaceTime`, `Link`, `Browser`, `Copy`, `Clipboard`, `Insert`, `Paste`, `Timer`, `Maps`, `Music`,
+`FaceTime`, `Link`, `Browser`, `Copy`, `Clipboard`, `Insert`, `Paste`, `Direct Insert`, `Type`,
+`Timer`, `Maps`, `Music`,
 `Stopwatch` (and any other module's keywords),
 `append`, `new`, `create`, `… alert`, `….md`, `@…`, and the app names the
 compiler knows.
@@ -858,7 +889,7 @@ action fields listed in §2.
 
 **Action types:** `notes.create`, `notes.append`, `calendar.createEvent`,
 `reminders.create`, `messages.compose`, `mail.compose`, `phone.call`, `app.open`,
-`url.open`, `clipboard.copy`, `text.insert`, `clock.timer`, `maps.search`, `music.play`, `shortcut`,
+`url.open`, `clipboard.copy`, `text.insert`, `text.insertDirect`, `clock.timer`, `maps.search`, `music.play`, `shortcut`,
 and from modules, `stopwatch`.
 
 **Computed values:** `leaf`, `parent`, `level1`–`level4`, `path`, `folderPath`,

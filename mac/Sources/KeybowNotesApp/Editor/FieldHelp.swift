@@ -238,6 +238,25 @@ enum FieldHelp {
                 Example: signature.md
                 """,
         ],
+        "text.insertDirect": [
+            "text": """
+                The text to put at the cursor in the app in front, replacing any selection — without using \
+                the clipboard, so a clipboard manager doesn't record it. Empty: the node's label. \
+                ⌥Return for a new line.
+                Examples: {{date:d MMMM yyyy}} · Kind regards
+                """,
+            "template": """
+                A file whose text is inserted instead.
+                Example: signature.md
+                """,
+            "via": """
+                How it goes in. Accessibility: the app replaces its selection with the text, exactly — standard \
+                Mac text views take this. Typing: a key press for each character; works nearly everywhere, \
+                but new lines press Return, which sends in some chat apps. Inherit: accessibility where the app \
+                takes it, else typing.
+                Example: via: typing
+                """,
+        ],
         "clock.timer": [
             "duration": """
                 How long the timer runs, or until when. Empty: a Due value, else the node's label.

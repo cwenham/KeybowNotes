@@ -44,6 +44,8 @@ public enum ActionPlan: Equatable, Sendable {
     case copyToClipboard(String)
     /// Pasted at the cursor in the app in front, the clipboard put back after.
     case insertText(String)
+    /// At the cursor without the clipboard: through accessibility, or typed.
+    case insertTextDirectly(String, via: DirectInsertion.Method)
     /// A timer in Clock, started by a helper shortcut: Clock can't be
     /// scripted, but Shortcuts' Start Timer action reaches it.
     case startTimer(seconds: Int, shortcut: String)
@@ -75,6 +77,7 @@ public enum ActionPlanError: Error, Equatable, CustomStringConvertible {
     case notALink(String)
     case notALength(String)
     case timerTooLong(String)
+    case unknownInsertion(String)
     /// A module's own reason.
     case module(String)
 
@@ -94,6 +97,8 @@ public enum ActionPlanError: Error, Equatable, CustomStringConvertible {
             return "Nothing is selected\(app.isEmpty ? "" : " in \(app)"), and the \(field) needs it."
         case .module(let reason):
             return reason
+        case .unknownInsertion(let word):
+            return "“\(word)” isn't a way to insert text: accessibility or typing, or leave it empty for either."
         case .notALength(let text):
             return "“\(text)” isn't a length of time or a time of day."
         case .timerTooLong(let text):
@@ -300,6 +305,11 @@ private struct Planner {
 
         case "text.insert":
             return .insertText(try snippet(for: "text to insert"))
+
+        case "text.insertDirect":
+            let way = optional("via").lowercased()
+            guard let method = DirectInsertion.Method(rawValue: way) else { throw ActionPlanError.unknownInsertion(way) }
+            return .insertTextDirectly(try snippet(for: "text to insert"), via: method)
 
         default:
             guard let module = ModuleRegistry.shared.module(handling: action.type) else {

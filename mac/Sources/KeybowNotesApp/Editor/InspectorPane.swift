@@ -83,6 +83,10 @@ private let fieldsByType: [String: [FieldSpec]] = [
                        .init(key: "template", title: "Template")],
     "text.insert": [.init(key: "text", title: "Text", hint: "empty inserts the label — {{date}}, {{selection}}…"),
                     .init(key: "template", title: "Template")],
+    "text.insertDirect": [.init(key: "text", title: "Text", hint: "empty inserts the label — {{date}}, {{selection}}…"),
+                          .init(key: "template", title: "Template"),
+                          .init(key: "via", title: "Via", kind: .choice(["accessibility", "typing"]),
+                                hint: "Inherit: accessibility where the app takes it, else typing")],
 ]
 
 /// The built-in types, then any a module adds.
@@ -109,7 +113,7 @@ private let builtInTypeNames: [(String?, String)] = [
     ("calendar.createEvent", "Calendar event"), ("reminders.create", "Reminder"),
     ("messages.compose", "Message"), ("mail.compose", "Email"), ("phone.call", "Phone call"),
     ("app.open", "Open an app"), ("url.open", "Open a link"), ("clipboard.copy", "Copy to clipboard"),
-    ("text.insert", "Insert text"),
+    ("text.insert", "Insert text"), ("text.insertDirect", "Direct insert"),
     ("clock.timer", "Clock timer"), ("maps.search", "Search Maps"), ("music.play", "Play music"),
     ("shortcut", "Run a shortcut"),
 ]

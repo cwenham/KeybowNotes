@@ -192,6 +192,23 @@ public enum ActionRunner {
             return .success("Inserted “\(flat.count > 50 ? String(flat.prefix(50)) + "…" : flat)”",
                             app.map { "into \($0)" })
 
+        case .insertTextDirectly(let text, let method):
+            let app = await MainActor.run { NSWorkspace.shared.frontmostApplication?.localizedName }
+            let used: DirectInsertion.Method
+            do {
+                used = try await DirectInsertion.insert(text, via: method)
+            } catch DirectInsertion.Failure.notAllowed {
+                throw RunError("KeybowNotes needs Accessibility access to type into other apps",
+                               "Allow it in System Settings → Privacy & Security → Accessibility.")
+            } catch DirectInsertion.Failure.refused {
+                throw RunError("\(app ?? "The app") didn't take the text through accessibility",
+                               "Leave via empty to type it instead.")
+            }
+            let flat = text.replacingOccurrences(of: "\n", with: " ")
+            let how = used == .typing ? "typed" : "directly"
+            return .success("Inserted “\(flat.count > 50 ? String(flat.prefix(50)) + "…" : flat)”",
+                            app.map { "into \($0), \(how)" } ?? how.capitalized)
+
         case .copyToClipboard(let text):
             await copy(text)
             let flat = text.replacingOccurrences(of: "\n", with: " ")

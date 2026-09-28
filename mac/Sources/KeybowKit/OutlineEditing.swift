@@ -291,6 +291,7 @@ extension OutlineDocument {
         "url.open": "Link",
         "clipboard.copy": "Copy",
         "text.insert": "Insert",
+        "text.insertDirect": "Direct Insert",
         "clock.timer": "Timer",
         "maps.search": "Maps",
         "music.play": "Music",

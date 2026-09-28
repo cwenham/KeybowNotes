@@ -138,8 +138,8 @@ public struct ActionSummary: Equatable, Sendable {
                 details.append("playlist")
                 if case .bool(let shuffle)? = action.fields["shuffle"] { details.append(shuffle ? "shuffled" : "in order") }
             }
-        case "clipboard.copy", "text.insert":
-            verb = action.type == "text.insert" ? "Insert" : "Copy"
+        case "clipboard.copy", "text.insert", "text.insertDirect":
+            verb = action.type == "clipboard.copy" ? "Copy" : action.type == "text.insert" ? "Insert" : "Insert directly"
             if let template = action.string("template") {
                 details.append("from \(template)")
             } else if action.string("text") != nil {

@@ -1,5 +1,5 @@
 import AppKit
-import KeybowKit
+@testable import KeybowKit
 import XCTest
 
 final class LinkAndClipboardTests: XCTestCase {
@@ -204,6 +204,42 @@ final class LinkAndClipboardTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "original")
         XCTAssertEqual(pasteboard.data(forType: .html), Data("<b>original</b>".utf8), "every type, not just text")
         XCTAssertNotNil(pasteboard.data(forType: PasteboardContents.transient), "so clipboard managers skip it")
+    }
+
+    // MARK: - Inserting directly
+
+    func testDirectInsertTakesTextLikeInsert() throws {
+        let outline = """
+        1. Type [Direct Insert]
+           1. Kind regards
+           2. Typed [via: typing, text: "{{leaf}}!"]
+           3. Exact [via: Accessibility]
+           4. Odd [via: telepathy]
+        2. Sig [Type, quote.md]
+        """
+        XCTAssertEqual(try plan(outline, path: [0, 0]), .insertTextDirectly("Kind regards", via: .automatic))
+        XCTAssertEqual(try plan(outline, path: [0, 1]), .insertTextDirectly("Typed!", via: .typing))
+        XCTAssertEqual(try plan(outline, path: [0, 2]), .insertTextDirectly("Exact", via: .accessibility))
+        assertRefused(outline, path: [0, 3], with: .unknownInsertion("telepathy"))
+        XCTAssertEqual(try plan(outline, path: [1], environment: ["selection": "Hi", "frontApp": "Mail"]),
+                       .insertTextDirectly("Quote: Hi\n— from Mail", via: .automatic))
+    }
+
+    func testTypingIsAKeyPerCharacterAndReturnForNewLines() {
+        XCTAssertEqual(DirectInsertion.keystrokes(for: "Hi\nyou"),
+                       [.characters("H"), .characters("i"), .newLine, .characters("y"), .characters("o"), .characters("u")])
+        XCTAssertEqual(DirectInsertion.keystrokes(for: "a\r\nb"), [.characters("a"), .newLine, .characters("b")])
+        XCTAssertEqual(DirectInsertion.keystrokes(for: "🇬🇧é"), [.characters("🇬🇧"), .characters("é")],
+                       "a character made of several code units goes in one key press")
+    }
+
+    func testTheEditorWritesDirectInsert() throws {
+        var document = OutlineDocument()
+        document.trees[.main] = [OutlineNode(label: "Sig"), nil, nil, nil]
+        let id = try XCTUnwrap(document.roots(.main)[0]?.id)
+        try document.setType(id, "text.insertDirect")
+        XCTAssertEqual(document.node(id)?.annotations, [.word("Direct Insert")])
+        XCTAssertEqual(OutlineWriter.text(document), "1. Sig [Direct Insert]\n")
     }
 
     // MARK: - Knowing when to read the selection

@@ -69,6 +69,8 @@ public enum OutlineCompiler {
         "clipboard": "clipboard.copy",
         "insert": "text.insert",
         "paste": "text.insert",
+        "direct insert": "text.insertDirect",
+        "type": "text.insertDirect",
         "timer": "clock.timer",
         "maps": "maps.search",
         "music": "music.play",

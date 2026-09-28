@@ -40,7 +40,12 @@ public final class StopwatchModule: KeybowModule, @unchecked Sendable {
         ModuleActionType(
             type: "stopwatch", title: "Stopwatch", keywords: ["Stopwatch"], symbol: "stopwatch",
             fields: [ModuleField(key: "do", title: "Do", kind: .choice(Command.allCases.map(\.rawValue)),
-                                 hint: "from the label — Start, Stop, Lap, Reset — else toggle")]
+                                 hint: "from the label — Start, Stop, Lap, Reset — else toggle",
+                                 help: """
+                                     What the key does to the stopwatch. Inherit lets the label decide — \
+                                     Start, Stop, Pause, Lap, Split, Reset — and anything else starts or stops it.
+                                     Example: do: lap
+                                     """)]
         ),
     ])
 

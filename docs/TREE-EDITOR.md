@@ -196,6 +196,11 @@ For the selected node:
   Editing one writes the pair in place of the word. Links are underlined in the
   outline, in the link colour.
 - **Problems** — everything the compiler said about this node.
+- **Tooltips** — resting the pointer on any field, or its label, says what it
+  does, what can go in it, and gives an example. The wording is in
+  `Editor/FieldHelp.swift`, looked up by action type then field, since `title`
+  or `duration` mean different things in different actions; a module's fields
+  bring their own.
 
 Edits in the inspector change the node's annotations in place: an existing pair
 is updated where it stands; a new one is added at the end; bare words are kept.

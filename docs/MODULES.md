@@ -44,7 +44,8 @@ a module is a new target, a line there, and a dependency in `Package.swift`.
   names the `stopwatch` type, and its field keys are action fields, not
   template values. `flag` fields read `true`/`false`, `number` fields numbers.
   The tree editor lists its types in the Type menu and shows its fields —
-  a `choice` field as a menu.
+  a `choice` field as a menu — with each field's `help` as its tooltip: what
+  it does, what can go in it, and an example.
 - **Planning.** For a module's type, the planner fills in the placeholders of
   every text field and hands over a `ModuleRequest`: the type, the fields, and
   the labels chosen. If `problem(with:)` returns a reason, the action is

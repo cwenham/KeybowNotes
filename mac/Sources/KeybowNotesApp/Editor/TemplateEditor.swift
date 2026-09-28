@@ -36,10 +36,13 @@ struct TemplateSection: View {
                 HStack {
                     Button("Save Template") { write() }
                         .disabled(text == saved)
+                        .help("Write the file now. It's shared, so every node using it changes too.")
                     Button("Revert") { text = saved }
                         .disabled(text == saved)
+                        .help("Throw away the changes since it was last saved.")
                     Spacer()
                     Button("Open in TextEdit") { openInTextEdit() }
+                        .help("Edit the file in TextEdit instead, saving any changes here first.")
                 }
                 .controlSize(.small)
                 Text("Shared by every node that uses \(name). {{placeholders}} are filled in when the key is pressed.")
@@ -49,6 +52,7 @@ struct TemplateSection: View {
                     .font(.callout).foregroundStyle(.orange)
                 Button("Create It") { create() }
                     .controlSize(.small)
+                    .help("Make the file in the templates folder, starting with a heading to fill in.")
             }
         }
         .onAppear(perform: load)

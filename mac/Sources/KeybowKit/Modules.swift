@@ -105,13 +105,18 @@ public struct ModuleField: Sendable {
     public let key: String
     public let title: String
     public let kind: Kind
+    /// A few words under or inside the field.
     public let hint: String
+    /// The editor's tooltip: what the field does, what can go in it, and an
+    /// example.
+    public let help: String
 
-    public init(key: String, title: String, kind: Kind = .text, hint: String = "") {
+    public init(key: String, title: String, kind: Kind = .text, hint: String = "", help: String = "") {
         self.key = key
         self.title = title
         self.kind = kind
         self.hint = hint
+        self.help = help
     }
 }
 

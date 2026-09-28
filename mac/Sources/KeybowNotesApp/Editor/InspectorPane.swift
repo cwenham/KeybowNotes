@@ -33,6 +33,8 @@ private struct FieldSpec {
     let title: String
     var kind: Kind = .text
     var hint = ""
+    /// For the tooltip, when FieldHelp has nothing: a module's own words.
+    var help = ""
 }
 
 private let fieldsByType: [String: [FieldSpec]] = [
@@ -98,7 +100,7 @@ private func fields(for type: String) -> [FieldSpec]? {
         case .flag: kind = .flag
         case .choice(let words): kind = .choice(words)
         }
-        return FieldSpec(key: field.key, title: field.title, kind: kind, hint: field.hint)
+        return FieldSpec(key: field.key, title: field.title, kind: kind, hint: field.hint, help: field.help)
     }
 }
 
@@ -174,7 +176,7 @@ private struct NodeInspector: View {
             header
             preview
             Divider()
-            DraftField(title: "Label", value: node.label) { label in
+            DraftField(title: "Label", value: node.label, help: FieldHelp.label) { label in
                 model.edit("Rename") { try $0.setLabel(id, label) }
             }
             colourSection
@@ -242,7 +244,7 @@ private struct NodeInspector: View {
     private var actionSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Action").font(.subheadline.weight(.semibold))
-            InspectorRow("Type") {
+            InspectorRow("Type", help: FieldHelp.type) {
                 Picker("Type", selection: Binding(
                     get: { ownType },
                     set: { type in model.edit("Set Type") { try $0.setType(id, type) } }
@@ -365,9 +367,10 @@ private struct NodeInspector: View {
     @ViewBuilder
     private func fieldRow(_ spec: FieldSpec) -> some View {
         let own = ownValue(spec.key)
+        let help = FieldHelp.field(spec.key, type: action?.type) ?? (spec.help.isEmpty ? nil : spec.help)
         switch spec.kind {
         case .flag:
-            InspectorRow(spec.title) {
+            InspectorRow(spec.title, help: help) {
                 Picker(spec.title, selection: Binding(
                     get: { own.map { ["true", "yes", "on", "1"].contains($0.lowercased()) ? "on" : "off" } ?? "inherit" },
                     set: { choice in setField(spec.key, choice == "inherit" ? nil : (choice == "on" ? "true" : "false")) }
@@ -380,7 +383,7 @@ private struct NodeInspector: View {
                 .fixedSize()
             }
         case .choice(let words):
-            InspectorRow(spec.title) {
+            InspectorRow(spec.title, help: help) {
                 VStack(alignment: .leading, spacing: 2) {
                     Picker(spec.title, selection: Binding(
                         get: { own.map { $0.lowercased() } ?? "" },
@@ -400,22 +403,24 @@ private struct NodeInspector: View {
             }
         default:
             if spec.key == "app" {
-                AppField(own: own, placeholder: effectiveValue("app"), note: source(of: "app")) { name, bundle in
+                AppField(own: own, placeholder: effectiveValue("app"), note: source(of: "app"), help: help) { name, bundle in
                     setApp(name, bundle)
                 }
             } else if spec.key == "name", action?.type == "shortcut" {
-                ShortcutField(own: own, placeholder: effectiveValue("name"), note: source(of: "name")) { name in
+                ShortcutField(own: own, placeholder: effectiveValue("name"), note: source(of: "name"), help: help) { name in
                     setField("name", name)
                 }
             } else {
                 HStack(alignment: .firstTextBaseline) {
                     DraftField(title: spec.title, value: own ?? "", placeholder: effectiveValue(spec.key),
                                note: source(of: spec.key), hint: spec.hint,
-                               multiline: ["body", "entry", "notes", "text"].contains(spec.key)) { value in
+                               multiline: ["body", "entry", "notes", "text"].contains(spec.key), help: help) { value in
                         setField(spec.key, value.isEmpty ? nil : value)
                     }
                     if spec.key == "open" {
-                        Button("Choose…") { chooseFileToOpen() }.controlSize(.small)
+                        Button("Choose…") { chooseFileToOpen() }
+                            .controlSize(.small)
+                            .help("Choose a file or folder in the Finder.")
                     }
                 }
             }
@@ -457,7 +462,7 @@ private struct NodeInspector: View {
     private var ownParameters: [(String, String)] {
         node.annotations.compactMap { annotation in
             guard case .pair(let key, let value) = annotation,
-                  !OutlineCompiler.actionFields.contains(key), key != "colour", key != "color" else { return nil }
+                  !OutlineCompiler.isActionField(key), key != "colour", key != "color" else { return nil }
             return (key, value)
         }
     }
@@ -467,7 +472,7 @@ private struct NodeInspector: View {
         var result: [(String, String, String)] = []
         for ancestor in chain.dropLast().reversed() {
             for case .pair(let key, let value) in ancestor.annotations
-            where !OutlineCompiler.actionFields.contains(key) && key != "colour" && key != "color" && !seen.contains(key) {
+            where !OutlineCompiler.isActionField(key) && key != "colour" && key != "color" && !seen.contains(key) {
                 seen.insert(key)
                 result.append((key, value, ancestor.label))
             }
@@ -507,7 +512,7 @@ private struct NodeInspector: View {
     }
 
     private var colourSection: some View {
-        InspectorRow("Key colour") {
+        InspectorRow("Key colour", help: FieldHelp.colour) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     ColorPicker("Key colour", selection: Binding(
@@ -554,6 +559,7 @@ private struct NodeInspector: View {
                             setColour(nil)
                         }
                         .controlSize(.small)
+                        .help("Remove this node's own colour, so it takes the one from above.")
                     }
                     Text(colourSource).font(.caption2)
                         .foregroundStyle(colourSource == "set here" ? Color.accentColor : .secondary)
@@ -584,7 +590,7 @@ private struct NodeInspector: View {
             Text("Values").font(.subheadline.weight(.semibold))
             ForEach(ownParameters, id: \.0) { key, value in
                 HStack(alignment: .firstTextBaseline) {
-                    DraftField(title: key, value: value, note: "set here") { updated in
+                    DraftField(title: key, value: value, note: "set here", help: FieldHelp.parameter(key)) { updated in
                         model.edit("Set \(key)") { try $0.setPair(id, key: key, value: updated) }
                     }
                     Button {
@@ -593,16 +599,19 @@ private struct NodeInspector: View {
                         Image(systemName: "minus.circle")
                     }
                     .buttonStyle(.borderless)
+                    .help("Remove \(key) from this node.")
                 }
             }
             ForEach(inheritedParameters, id: \.key) { item in
-                InspectorRow(item.key) {
+                InspectorRow(item.key, help: FieldHelp.inheritedParameter(item.key, from: item.from)) {
                     Text("\(item.value) — from \(item.from)").foregroundStyle(.secondary)
                 }
             }
             HStack(spacing: InspectorLayout.spacing) {
                 TextField("name", text: $newKey).frame(width: InspectorLayout.labelWidth)
+                    .help(FieldHelp.newParameterName)
                 TextField("value", text: $newValue)
+                    .help(FieldHelp.newParameterValue)
                 Button("Add") {
                     let key = newKey.trimmingCharacters(in: .whitespaces)
                     guard !key.isEmpty else { return }
@@ -611,6 +620,7 @@ private struct NodeInspector: View {
                     newValue = ""
                 }
                 .disabled(newKey.trimmingCharacters(in: .whitespaces).isEmpty)
+                .help("Add it to this node's brackets as name: value.")
             }
             .textFieldStyle(.roundedBorder)
         }
@@ -637,7 +647,8 @@ private struct NodeInspector: View {
             let extra = params.keys.filter { $0.hasPrefix(prefix) && $0 != prefix + "name" }
                 .map { String($0.dropFirst(prefix.count)) }.filter { !keys.contains($0) }.sorted()
             ForEach(keys + extra, id: \.self) { key in
-                DraftField(title: key, value: params[prefix + key] ?? "", note: "shared") { value in
+                DraftField(title: key, value: params[prefix + key] ?? "", note: "shared",
+                           help: FieldHelp.entry(key, contact: kind == .contacts)) { value in
                     model.edit("Set \(key)") { $0.setEntryField(kind, name: name, key: key, value: value) }
                 }
             }
@@ -688,10 +699,13 @@ enum InspectorLayout {
 
 struct InspectorRow<Content: View>: View {
     let title: String
+    /// Shown when the pointer rests on the label or the control.
+    let help: String?
     @ViewBuilder let content: Content
 
-    init(_ title: String, @ViewBuilder content: () -> Content) {
+    init(_ title: String, help: String? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
+        self.help = help
         self.content = content()
     }
 
@@ -703,6 +717,20 @@ struct InspectorRow<Content: View>: View {
                 .frame(width: InspectorLayout.labelWidth, alignment: .trailing)
             content
                 .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .modifier(OptionalHelp(text: help))
+    }
+}
+
+/// A tooltip when there's something to say, and none at all otherwise.
+struct OptionalHelp: ViewModifier {
+    let text: String?
+
+    func body(content: Content) -> some View {
+        if let text, !text.isEmpty {
+            content.help(text)
+        } else {
+            content
         }
     }
 }
@@ -717,13 +745,14 @@ struct DraftField: View {
     var hint = ""
     /// Grows to several lines; ⌥Return starts a new line.
     var multiline = false
+    var help: String?
     let commit: (String) -> Void
 
     @State private var draft = ""
     @FocusState private var focused: Bool
 
     var body: some View {
-        InspectorRow(title) {
+        InspectorRow(title, help: help) {
             VStack(alignment: .trailing, spacing: 2) {
                 TextField(placeholder.isEmpty ? hint : placeholder, text: $draft, axis: multiline ? .vertical : .horizontal)
                     .lineLimit(multiline ? 1...6 : 1...1)
@@ -755,18 +784,22 @@ private struct AppField: View {
     let own: String?
     let placeholder: String
     let note: String
+    let help: String?
     let set: (String?, String?) -> Void
 
     var body: some View {
-        InspectorRow("App") {
+        InspectorRow("App", help: help) {
             VStack(alignment: .trailing, spacing: 2) {
                 HStack(alignment: .firstTextBaseline) {
-                    NameComboBox(items: AppCatalog.all.map(\.name), value: own ?? "", placeholder: placeholder) { name in
+                    NameComboBox(items: AppCatalog.all.map(\.name), value: own ?? "", placeholder: placeholder,
+                                 toolTip: help) { name in
                         let trimmed = name.trimmingCharacters(in: .whitespaces)
                         guard !trimmed.isEmpty else { return set(nil, nil) }
                         set(trimmed, AppCatalog.named(trimmed)?.bundleIdentifier)
                     }
-                    Button("Choose…", action: choose).controlSize(.small)
+                    Button("Choose…", action: choose)
+                        .controlSize(.small)
+                        .help("Choose the app in the Finder.")
                 }
                 if !note.isEmpty {
                     Text(note).font(.caption2).foregroundStyle(note == "set here" ? Color.accentColor : .secondary)
@@ -831,6 +864,7 @@ private struct ShortcutField: View {
     let own: String?
     let placeholder: String
     let note: String
+    let help: String?
     let set: (String?) -> Void
 
     @State private var names: [String] = []
@@ -844,15 +878,17 @@ private struct ShortcutField: View {
     }
 
     var body: some View {
-        InspectorRow("Shortcut") {
+        InspectorRow("Shortcut", help: help) {
             VStack(alignment: .trailing, spacing: 2) {
                 HStack(alignment: .firstTextBaseline) {
-                    NameComboBox(items: names, value: own ?? "", placeholder: placeholder) { name in
+                    NameComboBox(items: names, value: own ?? "", placeholder: placeholder, toolTip: help) { name in
                         let trimmed = name.trimmingCharacters(in: .whitespaces)
                         set(trimmed.isEmpty ? nil : trimmed)
                     }
                     Button(current.isEmpty || isMissing ? "Open Shortcuts" : "Edit…", action: open)
                         .controlSize(.small)
+                        .help(current.isEmpty || isMissing ? "Open the Shortcuts app, to make one."
+                              : "Open this shortcut in Shortcuts, to change it.")
                 }
                 HStack(alignment: .firstTextBaseline) {
                     if isMissing {
@@ -894,6 +930,8 @@ private struct NameComboBox: NSViewRepresentable {
     let items: [String]
     let value: String
     let placeholder: String
+    /// Set on the box itself: SwiftUI's help doesn't reach an AppKit view.
+    var toolTip: String?
     let commit: (String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(commit: commit) }
@@ -906,6 +944,7 @@ private struct NameComboBox: NSViewRepresentable {
         box.delegate = context.coordinator
         box.stringValue = value
         box.placeholderString = placeholder
+        box.toolTip = toolTip
         return box
     }
 
@@ -918,6 +957,7 @@ private struct NameComboBox: NSViewRepresentable {
         }
         if box.currentEditor() == nil, box.stringValue != value { box.stringValue = value }
         box.placeholderString = placeholder
+        box.toolTip = toolTip
     }
 
     final class Coordinator: NSObject, NSComboBoxDelegate {
@@ -964,6 +1004,7 @@ private struct ContactLookup: View {
                     }
                 }
                 .controlSize(.small)
+                .help("Search the Contacts app for this name, then click a number or address to use it.")
                 if denied {
                     Text("KeybowNotes isn't allowed to read Contacts. Allow it in System Settings → Privacy & Security → Contacts.")
                         .font(.caption).foregroundStyle(.orange)

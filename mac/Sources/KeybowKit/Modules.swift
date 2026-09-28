@@ -57,6 +57,28 @@ public protocol KeybowModule: AnyObject, Sendable {
 
     /// Does a menu command, and says what happened.
     func performMenuItem(_ id: String, now: Date) -> ActionOutcome?
+
+    /// The reply to one of its blocks — `{{#ai}}…{{/ai}}` — whose contents
+    /// have already been filled in. Runs off the main thread, perhaps
+    /// alongside others; cancelling the task cancels it. Throw a
+    /// `ModuleError` to say what went wrong.
+    func reply(to call: TemplateBlockCall) async throws -> String
+
+    /// What a block shows in previews, where nothing is asked: "‹Claude's reply›".
+    func standIn(for call: TemplateBlockCall) -> String
+}
+
+/// A module's reason, fit to show on the overlay.
+public struct ModuleError: Error, Equatable, CustomStringConvertible {
+    public let message: String
+    public let detail: String?
+
+    public init(_ message: String, _ detail: String? = nil) {
+        self.message = message
+        self.detail = detail
+    }
+
+    public var description: String { detail.map { "\(message) — \($0)" } ?? message }
 }
 
 extension KeybowModule {
@@ -66,6 +88,10 @@ extension KeybowModule {
     public func status(now: Date) -> ModuleStatus? { nil }
     public func menuItems(now: Date) -> [ModuleMenuItem] { [] }
     public func performMenuItem(_ id: String, now: Date) -> ActionOutcome? { nil }
+    public func reply(to call: TemplateBlockCall) async throws -> String {
+        throw ModuleError("{{#\(call.name)}} isn't something this module can reply to")
+    }
+    public func standIn(for call: TemplateBlockCall) -> String { "‹\(call.name)›" }
 }
 
 /// A command a module offers in the menu bar's menu — or a submenu of them,
@@ -99,11 +125,69 @@ public struct ModuleManifest: Sendable {
     public let id: String
     public let name: String
     public let actionTypes: [ModuleActionType]
+    /// Template blocks it replies to: `{{#ai}}`.
+    public let blocks: [ModuleBlockType]
+    /// Its part of the Settings window.
+    public let settings: [ModuleSetting]
 
-    public init(id: String, name: String, actionTypes: [ModuleActionType]) {
+    public init(id: String, name: String, actionTypes: [ModuleActionType] = [], blocks: [ModuleBlockType] = [],
+                settings: [ModuleSetting] = []) {
         self.id = id
         self.name = name
         self.actionTypes = actionTypes
+        self.blocks = blocks
+        self.settings = settings
+    }
+}
+
+/// A template block a module replies to.
+public struct ModuleBlockType: Sendable {
+    /// As written in templates: "ai" for `{{#ai}}…{{/ai}}`.
+    public let name: String
+    /// Who replies, for messages: "Claude".
+    public let title: String
+
+    public init(name: String, title: String) {
+        self.name = name
+        self.title = title
+    }
+}
+
+/// A setting in the module's part of the Settings window. The host draws it
+/// and keeps it: secrets in the Keychain, the rest with the app's settings.
+public struct ModuleSetting: Sendable {
+    public enum Kind: Sendable, Equatable {
+        case text
+        /// Kept in the Keychain, never shown once saved: an API key.
+        case secret
+        case choice([Choice])
+        case flag
+    }
+
+    public struct Choice: Sendable, Equatable {
+        public let value: String
+        public let title: String
+
+        public init(_ value: String, _ title: String) {
+            self.value = value
+            self.title = title
+        }
+    }
+
+    public let key: String
+    public let title: String
+    public let kind: Kind
+    /// Used until the person sets one.
+    public let defaultValue: String
+    /// The tooltip: what it does, and an example.
+    public let help: String
+
+    public init(key: String, title: String, kind: Kind, defaultValue: String = "", help: String = "") {
+        self.key = key
+        self.title = title
+        self.kind = kind
+        self.defaultValue = defaultValue
+        self.help = help
     }
 }
 
@@ -229,6 +313,16 @@ public protocol ModuleHost: AnyObject, Sendable {
     func statusChanged()
     /// Puts text on the clipboard.
     func copy(_ text: String)
+    /// A setting from the module's part of the Settings window, or nil if the
+    /// person hasn't set it.
+    func setting(_ key: String, for module: String) -> String?
+    /// A secret setting, from the Keychain.
+    func secret(_ key: String, for module: String) -> String?
+}
+
+extension ModuleHost {
+    public func setting(_ key: String, for module: String) -> String? { nil }
+    public func secret(_ key: String, for module: String) -> String? { nil }
 }
 
 /// Keeps modules' state in memory only: for tools and tests, where nothing
@@ -254,6 +348,21 @@ public final class MemoryModuleHost: ModuleHost, @unchecked Sendable {
 
     public func copy(_ text: String) {
         lock.withLock { copied.insert(text, at: 0) }
+    }
+
+    private var settings: [String: String] = [:]
+
+    public func setting(_ key: String, for module: String) -> String? {
+        lock.withLock { settings["\(module).\(key)"] }
+    }
+
+    public func secret(_ key: String, for module: String) -> String? {
+        lock.withLock { settings["\(module).secret.\(key)"] }
+    }
+
+    /// For tests: as though set in the Settings window.
+    public func set(_ value: String?, for key: String, of module: String, secret: Bool = false) {
+        lock.withLock { settings[secret ? "\(module).secret.\(key)" : "\(module).\(key)"] = value }
     }
 }
 
@@ -283,6 +392,24 @@ public final class ModuleRegistry: @unchecked Sendable {
 
     public func module(handling type: String) -> KeybowModule? {
         all.first { $0.manifest.actionTypes.contains { $0.type == type } }
+    }
+
+    /// The module that replies to `{{#name}}` blocks.
+    public func module(handlingBlock name: String) -> KeybowModule? {
+        all.first { $0.manifest.blocks.contains { $0.name == name } }
+    }
+
+    /// What a block shows in previews, whether or not anything handles it.
+    public func standIn(for call: TemplateBlockCall) -> String {
+        module(handlingBlock: call.name)?.standIn(for: call) ?? "‹\(call.name)›"
+    }
+
+    /// Works out a block through the module that handles it.
+    public func reply(to call: TemplateBlockCall) async throws -> String {
+        guard let module = module(handlingBlock: call.name) else {
+            throw ModuleError("Nothing here replies to {{#\(call.name)}} blocks")
+        }
+        return try await module.reply(to: call)
     }
 
     public var actionTypes: [ModuleActionType] { all.flatMap(\.manifest.actionTypes) }

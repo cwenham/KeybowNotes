@@ -14,9 +14,16 @@ struct OverlayView: View {
                         .font(.system(size: 15, weight: .medium))
                 } else if !model.snapshot.isIdle {
                     ChoosingView(snapshot: model.snapshot, pending: model.pendingSummary)
+                } else if let working = model.working {
+                    WorkingView(working: working, cancel: { model.onCancel?() })
                 } else {
                     Color.clear.frame(height: 1)
                 }
+            }
+            // Still waiting on replies while something else is on show.
+            if let working = model.working,
+               model.outcome != nil || model.notice != nil || !model.snapshot.isIdle {
+                WorkingRow(working: working, cancel: { model.onCancel?() })
             }
             ForEach(model.moduleStatuses, id: \.moduleID) { status in
                 ModuleStatusRow(status: status)
@@ -317,6 +324,79 @@ private struct ActionHeadline: View {
         case "music.play": return "music.note"
         default: return ModuleRegistry.shared.actionType(summary.type)?.symbol ?? "questionmark.circle"
         }
+    }
+}
+
+// MARK: - Waiting on replies
+
+/// "Asking Claude…", how long it's been, and a way out.
+private struct WorkingView: View {
+    let working: OverlayModel.Working
+    let cancel: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            ProgressView()
+                .controlSize(.small)
+                .frame(width: 30)
+            VStack(alignment: .leading, spacing: 6) {
+                ActionHeadline(summary: working.summary, caption: working.title)
+                HStack(spacing: 8) {
+                    // A live timer's text takes all the width it's offered
+                    // unless held to its own.
+                    Text(working.since, style: .timer)
+                        .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                    Text(working.path).font(.system(size: 11)).foregroundStyle(.tertiary).lineLimit(1)
+                }
+                .padding(.leading, 36)          // under the title, past the action's icon
+            }
+            Spacer(minLength: 8)
+            CancelButton(action: cancel)
+        }
+    }
+}
+
+/// The same, in a line, under whatever else the HUD is showing.
+private struct WorkingRow: View {
+    let working: OverlayModel.Working
+    let cancel: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.mini)
+            Text(working.title).foregroundStyle(.secondary)
+            Text(working.since, style: .timer)
+                .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                .fixedSize()
+            Spacer(minLength: 0)
+            CancelButton(action: cancel)
+        }
+        .font(.system(size: 12, weight: .medium))
+        .padding(.leading, 10)
+        .padding(.trailing, 4)
+        .padding(.vertical, 4)
+        .background(.white.opacity(0.07), in: Capsule())
+    }
+}
+
+/// Drawn by SwiftUI rather than an AppKit button, so it answers the first
+/// click in a window that never becomes key.
+private struct CancelButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label("Cancel", systemImage: "xmark.circle.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(.white.opacity(0.14), in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("Stop waiting, and don't run the action")
     }
 }
 

@@ -773,6 +773,55 @@ A field that is **only a placeholder** — `url: "{{selection}}"`,
 `open: "{{project.url}}"` — is taken as the whole link and isn't encoded, and
 neither is a path: `open: "~/Downloads/{{selection}}"` gets the text as it is.
 
+### Blocks: `{{#ai}}…{{/ai}}`
+
+A **block** wraps text and hands it to something that replies; the reply takes
+the block's place. `{{#ai}}` asks Claude:
+
+```
+{{#ai}}Summarise in one line: {{selection}}{{/ai}}
+{{#ai model="sonnet-5" effort="medium"}}Draft a polite reply to: {{clipboard}}{{/ai}}
+```
+
+- **Inside first.** A block's own placeholders are filled in, and any blocks
+  inside it worked out, before it's sent — so blocks nest:
+  `{{#ai}}Translate into French: {{#ai}}Summarise: {{selection}}{{/ai}}{{/ai}}`.
+  Blocks side by side are asked at the same time; the same block twice is asked
+  once. Nesting can go as deep as you like — nothing about it is recursive — but
+  one key press may ask for at most 24 replies, since each can cost money.
+- **The reply is plain text.** It's never read as a template: `{{…}}` in a reply
+  stays as written.
+- **Attributes** go in the opening tag, `key="value"` (or `key=value` without
+  spaces). `{{#ai}}` takes `model` — `opus-5.5`, `opus-5`, `sonnet-5`,
+  `haiku-4.5`, `fable-5.1`, a family (`opus`) for its newest, or a full
+  `claude-…` ID — and `effort` — `low`, `medium`, `high`, `xhigh`, `max`.
+  Without them, the choices in Settings → Claude: Claude Opus 5.5 at low effort.
+- **Where blocks go.** In an action's fields and in templates — notes, messages,
+  email, the clipboard, inserted text, titles. **Not** where a reply could decide
+  where the action goes or who it reaches: `url`, `open`, `to`, `app`,
+  `bundleId`, `target`, `via`, a shortcut's `name` and `input`, and a timer's
+  `shortcut`. Selected text can carry instructions aimed at the model, so its
+  reply mustn't choose a link, a number or an app. Such an action is refused
+  before anything is asked. Blocks in values (`topic: "{{#ai}}…"`) don't run;
+  they're kept as written, and the editor says so.
+- **Waiting.** While replies are worked out the overlay shows how long it's
+  been, with a **Cancel** button that stops every request and the action with
+  them; *Cancel Waiting for Replies* in the menu bar's menu does the same. The
+  time to cancel still comes first, so a wrong key costs nothing.
+- **If you switch apps while waiting,** an Insert or Direct Insert doesn't type
+  into the new one; the text goes on the clipboard instead.
+- **Previews** in the editor and the overlay show a stand-in, `‹Claude's
+  reply›`, and never ask anything.
+- **Refused or failed** replies stop the action with the reason: no API key, a
+  model that doesn't exist, Claude declining the request, no connection.
+
+Claude needs an **API key**, kept in the Keychain from Settings → Claude. Make
+it in a Claude Console workspace with a spend limit. Requests go to Anthropic
+with `{{selection}}` or `{{clipboard}}` text in them when the prompt uses them;
+neither the prompts nor the replies are written to the log. With Opus 5.5,
+Opus 5 and Fable 5.1, a request Claude's safety classifiers decline is retried
+on the model Anthropic recommends for it (`fallbacks: "default"`).
+
 ### Where values come from
 
 Highest priority first:

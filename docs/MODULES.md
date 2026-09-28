@@ -23,6 +23,8 @@ bar or the outline directly.
 | Offer **commands in the menu bar's menu**, for things no key has been set up to do | `menuItems(now:)` / `performMenuItem(_:now:)` |
 | Keep **state** between runs of the app | `ModuleHost.load` / `save` |
 | Put text on the **clipboard** | `ModuleHost.copy` |
+| Reply to **template blocks** — `{{#ai}}…{{/ai}}` | `manifest.blocks`, `reply(to:)`, `standIn(for:)` |
+| Add **settings** to the Settings window, secrets kept in the Keychain | `manifest.settings`, `ModuleHost.setting` / `secret` |
 | Say its status changed on its own | `ModuleHost.statusChanged()` |
 
 The interface is in `mac/Sources/KeybowKit/Modules.swift`.
@@ -74,6 +76,18 @@ a module is a new target, a line there, and a dependency in `Package.swift`.
   shown on the overlay.
   An item can hold a submenu, or, with an empty id, be a line that only
   shows something (`ModuleMenuItem.information`), set in digits that line up.
+- **Blocks.** A module lists the block names it replies to. Before an action
+  runs, the host finds its blocks, checks they're allowed where they are, and
+  asks for replies innermost first — `TemplateBlocks.resolve`, which works in
+  rounds, each asking for every block whose contents are ready at once — while
+  the overlay shows a timer and a Cancel button. `reply(to:)` gets the block's
+  name, attributes and finished contents; it runs off the main thread and is
+  cancelled by task cancellation. Throw `ModuleError` with words to show.
+  Previews use `standIn(for:)` instead, and never call `reply`.
+- **Settings.** A module describes its settings — text, a secret, a choice, a
+  flag — and the host draws them in its own section of the Settings window. The
+  module reads them with `setting(_:for:)`, and secrets with `secret(_:for:)`,
+  which the host keeps in the Keychain. A module never draws or stores them.
 - **State.** `load` and `save` keep data per module between runs: in the app,
   in its preferences; on the command line, in memory only.
 
@@ -108,6 +122,25 @@ dependency at all: another module's values are in every action's placeholders.
   with the last lap. Its key pulses while it runs.
 - State: saved on every change, so it keeps running through a restart of the
   app, or of the Mac.
+
+## Claude
+
+`mac/Sources/KeybowAI/ClaudeModule.swift`, module id `ai`.
+
+- One block, `{{#ai}}`, answered through the Messages API (`POST /v1/messages`,
+  plain HTTPS: there's no Swift SDK). Attributes `model`, `effort` and `source`
+  (`claude` only, for now).
+- Settings: the API key (a secret), the model (Claude Opus 5.5 by default) and
+  the effort (low by default).
+- The request leaves thinking to the model — always on for Opus 5.5 — with
+  `output_config.effort` as the control, `max_tokens` 16,000 for thinking and
+  reply together, a system prompt asking for just the text wanted, and, on
+  Opus 5.5 / Opus 5 / Fable 5.1, `fallbacks: "default"` so a classifier decline
+  is retried on the recommended model.
+- The reply is the response's `text` blocks, after checking `stop_reason` for a
+  refusal or a cut-off. HTTP errors become messages that say what to do.
+- The transport is a protocol, so tests check the exact request and replay
+  responses without calling the API.
 
 ## Not yet
 

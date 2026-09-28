@@ -318,6 +318,13 @@ private struct Compiler {
             case (.pair(_, let value), .colour(let valid)):
                 if valid { colour = value } else { note(.error, "“\(value)” isn't a colour; use rrggbb.") }
             case (.pair(let key, let value), .field):
+                // Blocks: allowed here, and readable?
+                if value.contains("{{#"), let block = TemplateBlocks.names(in: value).first {
+                    if ActionPlanner.blockFreeFields.contains(key) {
+                        note(.error, "{{#\(block)}} can't go in \(key): a reply there could change where the action goes.")
+                    }
+                    for problem in TemplateBlocks.problems(in: value) { note(.warning, problem) }
+                }
                 if key == "type" {
                     declare(value)
                 } else if OutlineCompiler.isNumericField(key), let number = Double(value) {
@@ -332,6 +339,9 @@ private struct Compiler {
                     }
                 }
             case (.pair(let key, let value), .parameter):
+                if value.contains("{{#"), let block = TemplateBlocks.names(in: value).first {
+                    note(.warning, "{{#\(block)}} only works in an action's fields and templates; in \(key) it's kept as written.")
+                }
                 params.removeAll { $0.0 == key }
                 params.append((key, .string(value)))
             default:

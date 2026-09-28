@@ -28,6 +28,19 @@ final class OverlayModel {
     var notice: Notice?
     /// What modules are doing in the background: a running stopwatch.
     var moduleStatuses: [ModuleStatus] = []
+
+    /// Waiting on replies before an action can run — blocks being worked out.
+    struct Working: Equatable {
+        let summary: ActionSummary
+        let path: String
+        /// "Asking Claude…"
+        let title: String
+        let since: Date
+    }
+
+    var working: Working?
+    /// The HUD's Cancel button.
+    @ObservationIgnored var onCancel: (() -> Void)?
 }
 
 /// Where the overlay appears.
@@ -97,7 +110,7 @@ final class OverlayController {
         blur.state = .active
         blur.maskImage = Self.roundedMask(radius: Self.cornerRadius)
 
-        hosting = NSHostingView(rootView: OverlayView(model: model))
+        hosting = OverlayHostingView(rootView: OverlayView(model: model))
         hosting.translatesAutoresizingMaskIntoConstraints = false
         blur.addSubview(hosting)
         NSLayoutConstraint.activate([
@@ -124,7 +137,7 @@ final class OverlayController {
             model.outcome = nil
             model.notice = nil
             show()
-        } else if model.outcome == nil && model.notice == nil {
+        } else if model.outcome == nil && model.notice == nil && model.working == nil {
             // An outcome usually follows within a moment; don't blink out before it.
             hide(after: 0.3)
         }
@@ -190,6 +203,25 @@ final class OverlayController {
     func setModuleStatuses(_ statuses: [ModuleStatus]) {
         guard statuses != model.moduleStatuses else { return }
         model.moduleStatuses = statuses
+        if panel.isVisible { DispatchQueue.main.async { [weak self] in self?.fitAndPlace() } }
+    }
+
+    /// Waiting on replies: a timer and a Cancel button, until `endWorking`.
+    /// The panel takes clicks only while there's a button to click; it never
+    /// becomes key, so the app in front stays in front.
+    func showWorking(_ summary: ActionSummary, path: String, title: String, cancel: @escaping () -> Void) {
+        model.working = OverlayModel.Working(summary: summary, path: path, title: title, since: Date())
+        model.onCancel = cancel
+        model.outcome = nil
+        model.notice = nil
+        panel.ignoresMouseEvents = false
+        show()
+    }
+
+    func endWorking() {
+        model.working = nil
+        model.onCancel = nil
+        panel.ignoresMouseEvents = true
         if panel.isVisible { DispatchQueue.main.async { [weak self] in self?.fitAndPlace() } }
     }
 
@@ -267,9 +299,15 @@ final class OverlayController {
         }, completionHandler: { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, self.hideTask != nil, self.model.snapshot.isIdle else { return }
-                self.panel.orderOut(nil)
                 self.model.outcome = nil
                 self.model.notice = nil
+                // Still waiting on replies: back to the timer, not away.
+                if self.model.working != nil {
+                    self.panel.alphaValue = 1
+                    self.fitAndPlace()
+                    return
+                }
+                self.panel.orderOut(nil)
             }
         })
     }
@@ -316,4 +354,10 @@ final class OverlayController {
         image.resizingMode = .stretch
         return image
     }
+}
+
+/// Takes a click even though its window is never key: the HUD's Cancel
+/// button works on the first click, without bringing this app forward.
+final class OverlayHostingView: NSHostingView<OverlayView> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }

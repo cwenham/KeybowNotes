@@ -16,6 +16,7 @@ struct SettingsView: View {
             timing
             calendarSection
             selectionSection
+            moduleSections
             configSection
         }
         .formStyle(.grouped)
@@ -157,6 +158,18 @@ struct SettingsView: View {
         }
     }
 
+    /// Each module's own settings, as it describes them.
+    @ViewBuilder
+    private var moduleSections: some View {
+        ForEach(ModuleRegistry.shared.all.filter { !$0.manifest.settings.isEmpty }, id: \.manifest.id) { module in
+            Section(module.manifest.name) {
+                ForEach(module.manifest.settings, id: \.key) { setting in
+                    ModuleSettingRow(module: module.manifest.id, setting: setting)
+                }
+            }
+        }
+    }
+
     private var configSection: some View {
         Section("Config File") {
             LabeledContent("File") {
@@ -272,5 +285,88 @@ private struct TimingRow: View {
 
     private func formatted(_ seconds: Double) -> String {
         seconds == seconds.rounded() ? "\(Int(seconds)) s" : String(format: "%.1f s", seconds)
+    }
+}
+
+/// One module setting: a secret goes to the Keychain and is never shown
+/// again; the rest are kept with the app's settings.
+private struct ModuleSettingRow: View {
+    let module: String
+    let setting: ModuleSetting
+
+    @State private var value = ""
+    @State private var draft = ""
+    @State private var stored = false
+    @State private var replacing = false
+    @State private var problem: String?
+
+    private var host: AppModuleHost { Modules.host }
+
+    var body: some View {
+        Group {
+            switch setting.kind {
+            case .secret: secret
+            case .choice(let choices):
+                Picker(setting.title, selection: Binding(
+                    get: { value.isEmpty ? setting.defaultValue : value },
+                    set: { value = $0; host.setSetting($0, setting.key, for: module) }
+                )) {
+                    ForEach(choices, id: \.value) { Text($0.title).tag($0.value) }
+                }
+            case .flag:
+                Toggle(setting.title, isOn: Binding(
+                    get: { (value.isEmpty ? setting.defaultValue : value) == "true" },
+                    set: { value = $0 ? "true" : "false"; host.setSetting(value, setting.key, for: module) }
+                ))
+            case .text:
+                TextField(setting.title, text: $value, prompt: Text(setting.defaultValue))
+                    .onSubmit { host.setSetting(value.isEmpty ? nil : value, setting.key, for: module) }
+            }
+        }
+        .help(setting.help)
+        .onAppear {
+            value = host.setting(setting.key, for: module) ?? ""
+            stored = setting.kind == .secret && host.hasSecret(setting.key, for: module)
+        }
+    }
+
+    @ViewBuilder
+    private var secret: some View {
+        if stored && !replacing {
+            LabeledContent(setting.title) {
+                HStack {
+                    Label("Saved in the Keychain", systemImage: "key.fill").foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Replace…") { replacing = true }
+                    Button("Remove") {
+                        problem = host.setSecret(nil, setting.key, for: module)
+                        stored = host.hasSecret(setting.key, for: module)
+                    }
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    SecureField(setting.title, text: $draft, prompt: Text("Paste it here"))
+                        .onSubmit(save)
+                    Button("Save", action: save).disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
+                    if replacing { Button("Cancel") { replacing = false; draft = "" } }
+                }
+                if let problem {
+                    Text(problem).font(.caption).foregroundStyle(.orange)
+                } else {
+                    Text(setting.help).font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func save() {
+        let key = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        problem = host.setSecret(key, setting.key, for: module)
+        stored = host.hasSecret(setting.key, for: module)
+        if problem == nil { draft = ""; replacing = false }
     }
 }

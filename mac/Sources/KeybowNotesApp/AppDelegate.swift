@@ -17,6 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var moduleClock: Timer?
     /// Modules' commands go after this, rebuilt each time the menu opens.
     private let moduleMenuAnchor = NSMenuItem.separator()
+    /// Replies being worked out for an action; one at a time, cancellable.
+    private var blockWork: Task<Void, Never>?
+    private let cancelWorkItem = NSMenuItem(title: "Cancel Waiting for Replies", action: nil, keyEquivalent: "")
     private var moduleMenuItems: [NSMenuItem] = []
 
     private let connectionItem = NSMenuItem(title: "Keybow: looking…", action: nil, keyEquivalent: "")
@@ -257,30 +260,112 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             environment: environment(),
             defaultCalendarID: settings.defaultCalendarID,
             defaultReminderListID: settings.defaultReminderListID)
-        guard ActionPlanner.placeholders(for: selection, context: context).contains("selection") else {
+
+        // Blocks — {{#ai}} — are refused before anything is asked where a
+        // reply could steer the action, and one lot at a time.
+        let blockTexts: [String]
+        do {
+            blockTexts = try ActionPlanner.blockTexts(for: selection, context: context)
+        } catch {
+            Log.info("  can't run: \(error)")
+            overlay.showRefused("\(error)", summary: ActionSummary(selection: selection, config: config))
+            return
+        }
+        if !blockTexts.isEmpty, blockWork != nil {
+            overlay.showRefused("Still waiting on the last replies. Cancel them, or let them finish, then press again.",
+                                summary: ActionSummary(selection: selection, config: config))
+            return
+        }
+
+        let needsSelection = ActionPlanner.placeholders(for: selection, context: context).contains("selection")
+        guard needsSelection || !blockTexts.isEmpty else {
             run(selection, context: context)
             return
         }
-        // Read only when asked for: it can mean sending the app ⌘C.
-        Task { @MainActor in
-            switch await SelectedText.read(copyIfNeeded: settings.copySelection) {
-            case .text(let text):
-                context.environment["selection"] = text
-            case .nothingSelected:
-                break
-            case .notAllowed:
-                Log.info("  can't run: no Accessibility access for {{selection}}")
-                overlay.showRefused("KeybowNotes needs Accessibility access to read the selected text. "
-                                    + "Allow it in System Settings, then press again.",
-                                    summary: ActionSummary(selection: selection, config: config))
-                SelectedText.requestAccess()
-                return
+        // The app to type into, if it comes to that: waiting on replies leaves
+        // time to switch to another.
+        let frontApp = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        let work = Task { @MainActor in
+            defer { if !blockTexts.isEmpty { self.blockWork = nil } }
+            // Read only when asked for: it can mean sending the app ⌘C.
+            if needsSelection {
+                switch await SelectedText.read(copyIfNeeded: settings.copySelection) {
+                case .text(let text):
+                    context.environment["selection"] = text
+                case .nothingSelected:
+                    break
+                case .notAllowed:
+                    Log.info("  can't run: no Accessibility access for {{selection}}")
+                    overlay.showRefused("KeybowNotes needs Accessibility access to read the selected text. "
+                                        + "Allow it in System Settings, then press again.",
+                                        summary: ActionSummary(selection: selection, config: config))
+                    SelectedText.requestAccess()
+                    return
+                }
             }
-            run(selection, context: context)
+            if !blockTexts.isEmpty {
+                guard let replies = await askForReplies(blockTexts, selection: selection, context: context) else { return }
+                context.blockReplies = replies
+            }
+            run(selection, context: context, typingInto: blockTexts.isEmpty ? nil : frontApp)
         }
+        if !blockTexts.isEmpty { blockWork = work }
     }
 
-    private func run(_ selection: ResolvedSelection, context: ActionContext) {
+    /// Works out the action's blocks — innermost first, those that can go
+    /// together at once — with a timer and a Cancel button on the HUD. Nil if
+    /// cancelled or refused, having said so.
+    private func askForReplies(_ texts: [String], selection: ResolvedSelection,
+                               context: ActionContext) async -> [TemplateBlockCall: String]? {
+        guard let overlay else { return nil }
+        let summary = ActionSummary(selection: selection, config: config, environment: context.environment)
+        let registry = ModuleRegistry.shared
+        let askers = Set(texts.flatMap(TemplateBlocks.names(in:)).compactMap { name in
+            registry.module(handlingBlock: name)?.manifest.blocks.first { $0.name == name }?.title
+        })
+        let title = askers.count == 1 ? "Asking \(askers.first!)…" : "Waiting for replies…"
+        overlay.showWorking(summary, path: selection.pathDescription, title: title) { [weak self] in
+            self?.cancelReplies()
+        }
+        defer { overlay.endWorking() }
+        // Development builds only: press Cancel after a while, for testing.
+        if Bundle.main.bundleIdentifier == nil,
+           let after = Double(ProcessInfo.processInfo.environment["KEYBOW_DEBUG_CANCEL_AFTER"] ?? "") {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(after))
+                self?.cancelReplies()
+            }
+        }
+
+        let started = Date()
+        do {
+            let replies = try await TemplateBlocks.resolve(
+                texts, params: ActionPlanner.values(for: selection, context: context),
+                now: context.now, calendar: context.calendar) { call in
+                try await ModuleRegistry.shared.reply(to: call)
+            }
+            Log.info(String(format: "  %d repl%@ in %.1fs", replies.count, replies.count == 1 ? "y" : "ies",
+                            Date().timeIntervalSince(started)))
+            return replies
+        } catch is CancellationError {
+            Log.info("  cancelled while waiting for replies")
+            overlay.handle(.cleared(reason: .cancelled))
+        } catch let error as ModuleError {
+            // A module's own words; they don't quote the prompt.
+            Log.error("  FAILED waiting for replies: \(error)")
+            overlay.showFinished(.failure(error.message, error.detail), summary: summary, warnings: [])
+        } catch {
+            Log.error("  FAILED waiting for replies: \(error)")
+            overlay.showRefused("\(error)", summary: summary)
+        }
+        return nil
+    }
+
+    @objc private func cancelReplies() {
+        blockWork?.cancel()
+    }
+
+    private func run(_ selection: ResolvedSelection, context: ActionContext, typingInto frontApp: pid_t? = nil) {
         guard let overlay else { return }
         let summary = ActionSummary(selection: selection, config: config, environment: context.environment)
         let path = selection.pathDescription
@@ -313,6 +398,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             overlay.showRefused("KeybowNotes needs Accessibility access to type into other apps. "
                                 + "Allow it in System Settings, then press again.", summary: summary)
             SelectedText.requestAccess()
+            return
+        }
+        // Switched apps while waiting on replies: don't type into the wrong one.
+        if inserts, let frontApp, NSWorkspace.shared.frontmostApplication?.processIdentifier != frontApp {
+            switch planned.plan {
+            case .insertText(let text), .insertTextDirectly(let text, _):
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+            default:
+                break
+            }
+            Log.info("  not inserted: the app in front changed while waiting")
+            overlay.showRefused("You switched apps while waiting, so the text wasn't typed in. It's on the clipboard instead.",
+                                summary: summary)
             return
         }
 
@@ -484,6 +583,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             info.isEnabled = false
             menu.addItem(info)
         }
+        cancelWorkItem.action = #selector(cancelReplies)
+        cancelWorkItem.target = self
+        cancelWorkItem.isHidden = true
+        menu.addItem(cancelWorkItem)
         menu.addItem(.separator())
 
         addItem(to: menu, "Edit Tree…", #selector(openEditor), key: "e")
@@ -518,6 +621,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         updateAccessItem()
+        cancelWorkItem.isHidden = blockWork == nil
         updateModuleMenuItems(in: menu)
     }
 

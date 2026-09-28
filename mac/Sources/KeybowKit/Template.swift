@@ -10,6 +10,9 @@ import Foundation
 ///   {{selection}}          from outside the tree when a key is pressed: the
 ///   {{clipboard}}          selected text and the clipboard's text in the app
 ///   {{frontApp}}           in front, and that app's name
+///   {{#ai}}…{{/ai}}        a block: its contents filled in, then handed to
+///                          a module, whose reply takes its place (see
+///                          TemplateBlocks)
 ///
 /// Anything missing without a fallback expands to nothing and is reported, so
 /// callers can refuse to act on — or at least warn about — an incomplete value.
@@ -22,6 +25,10 @@ public enum Template {
         public let text: String
         /// Names that had no value and no fallback, in order of appearance.
         public let missing: [String]
+        /// Blocks with no reply and no stand-in: the text is incomplete.
+        public var unresolved: [TemplateBlockCall] = []
+        /// Why the template can't be read as written: a block never closed.
+        public var problems: [String] = []
     }
 
     public static func expand(
@@ -30,42 +37,26 @@ public enum Template {
         now: Date = Date(),
         calendar: Calendar = .current,
         locale: Locale = .current,
-        encode: ((String) -> String)? = nil
+        encode: ((String) -> String)? = nil,
+        blocks: [TemplateBlockCall: String] = [:],
+        standIn: ((TemplateBlockCall) -> String)? = nil
     ) -> Result {
-        var output = ""
-        var missing: [String] = []
-        var rest = Substring(template)
-
-        while let open = rest.range(of: "{{") {
-            output += rest[..<open.lowerBound]
-            guard let close = rest[open.upperBound...].range(of: "}}") else {
-                // An unclosed brace is left as written.
-                output += rest[open.lowerBound...]
-                rest = ""
-                break
-            }
-            let body = rest[open.upperBound..<close.lowerBound]
-            let value = value(for: String(body), params: params, now: now, calendar: calendar,
-                              locale: locale, missing: &missing)
-            output += encode.map { $0(value) } ?? value
-            rest = rest[close.upperBound...]
-        }
-        output += rest
-        return Result(text: output, missing: missing)
+        let document = TemplateDocument(template)
+        let rendering = document.render(
+            value: { body, missing in
+                value(for: body, params: params, now: now, calendar: calendar, locale: locale, missing: &missing)
+            },
+            replies: blocks, standIn: standIn, encode: encode)
+        return Result(text: rendering.text ?? "", missing: rendering.missing, unresolved: rendering.pending,
+                      problems: document.problems)
     }
 
     /// The names a template uses, without fallbacks or formats: "selection",
-    /// "contact.phone", "date".
+    /// "contact.phone", "date" — inside blocks too.
     public static func names(in template: String) -> Set<String> {
-        var names = Set<String>()
-        var rest = Substring(template)
-        while let open = rest.range(of: "{{"), let close = rest[open.upperBound...].range(of: "}}") {
-            let body = rest[open.upperBound..<close.lowerBound]
-            let name = body.prefix { $0 != "|" && $0 != ":" }.trimmingCharacters(in: .whitespaces)
-            names.insert(name)
-            rest = rest[close.upperBound...]
-        }
-        return names
+        Set(TemplateDocument(template).placeholderBodies.map { body in
+            body.prefix { $0 != "|" && $0 != ":" }.trimmingCharacters(in: .whitespaces)
+        })
     }
 
     /// True for text that is one placeholder and nothing else: `{{selection}}`.
@@ -85,7 +76,7 @@ public enum Template {
     private static let linkSafe = CharacterSet(charactersIn:
         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~/:@!$'()*,;")
 
-    private static func value(for body: String, params: [String: String], now: Date, calendar: Calendar,
+    static func value(for body: String, params: [String: String], now: Date, calendar: Calendar,
                               locale: Locale, missing: inout [String]) -> String {
         var name = body
         var fallback: String?

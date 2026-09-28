@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .library(name: "KeybowKit", targets: ["KeybowKit"]),
         .library(name: "KeybowStopwatch", targets: ["KeybowStopwatch"]),
+        .library(name: "KeybowAI", targets: ["KeybowAI"]),
         .executable(name: "keybow", targets: ["keybow"]),
         .executable(name: "keybownotes", targets: ["KeybowNotesApp"]),
     ],
@@ -18,10 +19,15 @@ let package = Package(
             dependencies: ["KeybowKit"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .target(
+            name: "KeybowAI",
+            dependencies: ["KeybowKit"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
         // The list of modules built in, for the app and the command line.
         .target(
             name: "KeybowModules",
-            dependencies: ["KeybowKit", "KeybowStopwatch"],
+            dependencies: ["KeybowKit", "KeybowStopwatch", "KeybowAI"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(
@@ -37,6 +43,11 @@ let package = Package(
         .testTarget(
             name: "KeybowKitTests",
             dependencies: ["KeybowKit"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
+            name: "KeybowAITests",
+            dependencies: ["KeybowAI", "KeybowKit"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(

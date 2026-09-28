@@ -78,6 +78,12 @@ public enum ActionPlanError: Error, Equatable, CustomStringConvertible {
     case notALength(String)
     case timerTooLong(String)
     case unknownInsertion(String)
+    /// A block in a field where its reply could decide where the action goes.
+    case blockNotAllowed(field: String, block: String)
+    /// A template that can't be read as written: a block never closed.
+    case templateProblem(String)
+    /// A block with no reply: it wasn't worked out before planning.
+    case blockNotWorkedOut(String)
     /// A module's own reason.
     case module(String)
 
@@ -97,6 +103,12 @@ public enum ActionPlanError: Error, Equatable, CustomStringConvertible {
             return "Nothing is selected\(app.isEmpty ? "" : " in \(app)"), and the \(field) needs it."
         case .module(let reason):
             return reason
+        case .blockNotAllowed(let field, let block):
+            return "{{#\(block)}} can't go in \(field): a reply there could change where the action goes or who it reaches."
+        case .templateProblem(let problem):
+            return problem
+        case .blockNotWorkedOut(let block):
+            return "{{#\(block)}} wasn't worked out before the action ran."
         case .unknownInsertion(let word):
             return "“\(word)” isn't a way to insert text: accessibility or typing, or leave it empty for either."
         case .notALength(let text):
@@ -118,6 +130,9 @@ public struct ActionContext: Sendable {
     /// Values from outside the tree — the clipboard, the frontmost app. The
     /// lowest precedence: anything the tree defines under the same name wins.
     public var environment: [String: String]
+    /// Replies to the action's blocks, worked out before planning — see
+    /// `ActionPlanner.blockTexts` and `TemplateBlocks.resolve`.
+    public var blockReplies: [TemplateBlockCall: String] = [:]
     /// Used when an action names no calendar or list: identifiers chosen in
     /// the settings window. Empty means the system's own defaults.
     public var defaultCalendarID: String
@@ -142,6 +157,56 @@ public enum ActionPlanner {
         var planner = Planner(action: action, selection: selection, config: config, context: context)
         let plan = try planner.make()
         return PlannedAction(plan: plan, warnings: planner.warnings)
+    }
+
+    /// Fields a block's reply may not fill: where the action goes, who it
+    /// reaches, or what it runs. Selected text can carry instructions aimed at
+    /// the model, so its reply mustn't choose a link, a number or an app.
+    public static let blockFreeFields: Set<String> = [
+        "url", "open", "to", "app", "bundleId", "target", "via", "name", "input", "shortcut",
+    ]
+
+    /// The values placeholders are filled from: the tree's, over the Mac's.
+    public static func values(for selection: ResolvedSelection, context: ActionContext) -> [String: String] {
+        context.environment.merging(selection.params) { _, fromTree in fromTree }
+    }
+
+    /// Every piece of text the action will fill in that has blocks in it —
+    /// fields and its template — to be worked out before it runs. Throws for a
+    /// block where one isn't allowed, or a template that can't be read.
+    public static func blockTexts(for selection: ResolvedSelection, context: ActionContext) throws -> [String] {
+        guard let action = selection.action else { return [] }
+        var texts: [String] = []
+        for (key, text) in stringFields(action.fields) where text.contains("{{#") {
+            let names = TemplateBlocks.names(in: text)
+            guard let first = names.first else { continue }
+            if blockFreeFields.contains(key) { throw ActionPlanError.blockNotAllowed(field: key, block: first) }
+            if let problem = TemplateBlocks.problems(in: text).first { throw ActionPlanError.templateProblem(problem) }
+            texts.append(text)
+        }
+        if let name = action.string("template"), !name.isEmpty,
+           let url = Planner.templateURL(name, in: context.templatesDirectory),
+           let text = try? String(contentsOf: url, encoding: .utf8), TemplateBlocks.contains(text) {
+            if let problem = TemplateBlocks.problems(in: text).first {
+                throw ActionPlanError.templateProblem("\(name): \(problem)")
+            }
+            texts.append(text)
+        }
+        return texts
+    }
+
+    /// Text fields by key, nested ones dotted: `find.byName`.
+    static func stringFields(_ fields: [String: JSONValue], prefix: String = "") -> [(String, String)] {
+        var result: [(String, String)] = []
+        var pending: [(String, JSONValue)] = fields.map { (prefix + $0.key, $0.value) }
+        while let (key, value) = pending.popLast() {
+            switch value {
+            case .string(let text): result.append((key, text))
+            case .object(let inner): pending += inner.map { (key + "." + $0.key, $0.value) }
+            default: break
+            }
+        }
+        return result.sorted { $0.0 < $1.0 }
     }
 
     /// The shortcut that starts a Clock timer, unless an action names another.
@@ -186,6 +251,12 @@ private struct Planner {
     }
 
     mutating func make() throws -> ActionPlan {
+        // Blocks: allowed where they are, readable, and all worked out.
+        let texts = try ActionPlanner.blockTexts(for: selection, context: context)
+        for text in texts {
+            if let call = expand(text).unresolved.first { throw ActionPlanError.blockNotWorkedOut(call.name) }
+        }
+
         switch action.type {
         case "notes.create":
             let location = noteLocation()
@@ -337,8 +408,8 @@ private struct Planner {
     // MARK: - Values
 
     private func expand(_ text: String, encode: ((String) -> String)? = nil) -> Template.Result {
-        let params = context.environment.merging(selection.params) { _, fromTree in fromTree }
-        return Template.expand(text, params: params, now: context.now, calendar: context.calendar, encode: encode)
+        Template.expand(text, params: ActionPlanner.values(for: selection, context: context), now: context.now,
+                        calendar: context.calendar, encode: encode, blocks: context.blockReplies)
     }
 
     private mutating func expanded(_ text: String, encode: ((String) -> String)? = nil) -> String {

@@ -35,9 +35,13 @@ enum FieldHelp {
 
     /// For a field of an action type, or nil if there's nothing to say.
     static func field(_ key: String, type: String?) -> String? {
-        if let type, let text = byType[type]?[key] { return text }
-        return byKey[key]
+        guard let text = type.flatMap({ byType[$0]?[key] }) ?? byKey[key] else { return nil }
+        return blockKeys.contains(key) ? text + "\n" + blockLine : text
     }
+
+    /// Text fields where a block's reply may go — not links, numbers or apps.
+    private static let blockKeys: Set<String> = ["template", "entry", "text", "body", "title", "subject", "notes"]
+    private static let blockLine = "An {{#ai}}…{{/ai}} block asks Claude, and its reply takes the block's place."
 
     private static let byKey: [String: String] = [
         "template": """

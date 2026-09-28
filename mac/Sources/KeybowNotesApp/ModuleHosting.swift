@@ -10,6 +10,24 @@ enum Modules {
     /// Before anything reads the outline, so the modules' keywords are known.
     static func registerAll() {
         BuiltInModules.registerAll(host: host)
+        // Development builds only, on request: a block that just waits, for
+        // trying the HUD's timer and Cancel without asking anyone anything.
+        if Bundle.main.bundleIdentifier == nil, ProcessInfo.processInfo.environment["KEYBOW_DEBUG_BLOCKS"] != nil {
+            ModuleRegistry.shared.register(WaitModule(), host: host)
+        }
+    }
+}
+
+/// `{{#wait seconds=3}}text{{/wait}}` → "TEXT", after the wait. Not in the app.
+private final class WaitModule: KeybowModule, @unchecked Sendable {
+    let manifest = ModuleManifest(id: "wait", name: "Wait", blocks: [ModuleBlockType(name: "wait", title: "Wait")])
+    func start(host: ModuleHost) {}
+    func summary(of request: ModuleRequest, now: Date) -> ModuleSummary { ModuleSummary(verb: "Wait", subject: "") }
+    func run(_ request: ModuleRequest, now: Date) async -> ActionOutcome { .failure("Not an action") }
+
+    func reply(to call: TemplateBlockCall) async throws -> String {
+        try await Task.sleep(for: .seconds(Double(call.attributes["seconds"] ?? "") ?? 3))
+        return call.body.uppercased()
     }
 }
 
@@ -31,6 +49,35 @@ final class AppModuleHost: ModuleHost, @unchecked Sendable {
 
     func save(_ data: Data?, as key: String, for module: String) {
         if let data { defaults.set(data, forKey: self.key(key, module)) } else { defaults.removeObject(forKey: self.key(key, module)) }
+    }
+
+    // MARK: Settings
+
+    private func settingKey(_ key: String, _ module: String) -> String { "module.\(module).setting.\(key)" }
+
+    func setting(_ key: String, for module: String) -> String? {
+        defaults.string(forKey: settingKey(key, module))
+    }
+
+    /// From the Settings window.
+    func setSetting(_ value: String?, _ key: String, for module: String) {
+        if let value { defaults.set(value, forKey: settingKey(key, module)) }
+        else { defaults.removeObject(forKey: settingKey(key, module)) }
+    }
+
+    /// From the Keychain. Safe to call from any thread.
+    func secret(_ key: String, for module: String) -> String? {
+        Keychain.read(account: "\(module).\(key)")
+    }
+
+    func hasSecret(_ key: String, for module: String) -> Bool {
+        secret(key, for: module) != nil
+    }
+
+    /// From the Settings window; nil removes it. Says why, if it couldn't.
+    @discardableResult
+    func setSecret(_ value: String?, _ key: String, for module: String) -> String? {
+        Keychain.write(value, account: "\(module).\(key)")
     }
 
     func copy(_ text: String) {
@@ -61,5 +108,40 @@ enum ModuleClock {
         let (hours, minutes, seconds) = (total / 3600, total % 3600 / 60, total % 60)
         return hours > 0 ? String(format: "%d:%02d:%02d", hours, minutes, seconds)
             : String(format: "%d:%02d", minutes, seconds)
+    }
+}
+
+/// Secrets in the login keychain, as generic passwords this app made — so it
+/// can read them back without asking, and they're listed in Keychain Access
+/// as "KeybowNotes: …" should they need removing by hand.
+enum Keychain {
+    static let service = "io.github.cwenham.keybownotes"
+
+    private static func query(_ account: String) -> [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword,
+         kSecAttrService as String: service,
+         kSecAttrAccount as String: account]
+    }
+
+    static func read(account: String) -> String? {
+        var query = query(account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess, let data = item as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    /// Nil on success, else what went wrong.
+    static func write(_ value: String?, account: String) -> String? {
+        SecItemDelete(query(account) as CFDictionary)
+        guard let value, !value.isEmpty else { return nil }
+        var item = query(account)
+        item[kSecValueData as String] = Data(value.utf8)
+        item[kSecAttrLabel as String] = "KeybowNotes: \(account)"
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
+        let status = SecItemAdd(item as CFDictionary, nil)
+        guard status != errSecSuccess else { return nil }
+        return (SecCopyErrorMessageString(status, nil) as String?) ?? "Keychain error \(status)"
     }
 }

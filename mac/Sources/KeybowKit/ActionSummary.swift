@@ -28,7 +28,9 @@ public struct ActionSummary: Equatable, Sendable {
 
         func expand(_ text: String?) -> String {
             guard let text else { return "" }
-            let result = Template.expand(text, params: params, now: now, calendar: calendar)
+            // Blocks show a stand-in: a preview mustn't spend anything.
+            let result = Template.expand(text, params: params, now: now, calendar: calendar,
+                                         standIn: ModuleRegistry.shared.standIn(for:))
             for name in result.missing where !missing.contains(name) { missing.append(name) }
             return result.text
         }

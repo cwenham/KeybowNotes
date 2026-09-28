@@ -438,6 +438,7 @@ should explain a refusal rather than failing silently.
 | Calendars (write) | `calendar.createEvent` |
 | Reminders | `reminders.create` |
 | Contacts | The tree editor's *Look Up in Contacts*; asked for when first used |
+| Network (Anthropic API) | `{{#ai}}` blocks: prompts go to `api.anthropic.com` with an API key from the Keychain. No permission prompt; the key is the gate |
 | Accessibility | `text.insert`: pressing ⌘V in the app in front. `text.insertDirect`: setting the selected text, or typing. `{{selection}}`: reading the selected text, and sending ⌘C to apps that won't share it. Asked for when first needed, or from Settings → Selected Text |
 
 `url.open`, `clipboard.copy` and `maps.search` need nothing. `clock.timer` needs

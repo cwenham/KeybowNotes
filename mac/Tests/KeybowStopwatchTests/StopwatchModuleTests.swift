@@ -114,12 +114,14 @@ final class StopwatchModuleTests: XCTestCase {
            3. Focus [do: reset]
         """)
         let start = try XCTUnwrap(tree.resolve(tree: .row3, path: [0, 0]))
-        let planned = try ActionPlanner.plan(start, config: tree, context: ActionContext(templatesDirectory: nil))
+        let pressed = Date().addingTimeInterval(-0.25)
+        let planned = try ActionPlanner.plan(start, config: tree, context: ActionContext(templatesDirectory: nil,
+                                                                                         now: pressed))
         XCTAssertEqual(planned.plan, .module(ModuleRequest(type: "stopwatch", fields: [:],
-                                                           labels: ["Stopwatch", "Start"])))
+                                                           labels: ["Stopwatch", "Start"], time: pressed)))
         let outcome = await ActionRunner.run(planned.plan)
         XCTAssertEqual(outcome.message, "Stopwatch started")
-        XCTAssertTrue(stopwatch.reading().isRunning)
+        XCTAssertEqual(stopwatch.status(now: pressed)?.countingFrom, pressed, "timed from the press, not the run")
 
         let reset = try XCTUnwrap(tree.resolve(tree: .row3, path: [0, 2]))
         XCTAssertEqual(ActionSummary(selection: reset, config: tree).verb, "Reset stopwatch")
@@ -141,6 +143,46 @@ final class StopwatchModuleTests: XCTestCase {
         let tree = try config(#"1. Log [Notes, title: "Worked {{stopwatch}}"]"#)
         let selection = try XCTUnwrap(tree.resolve(path: [0]))
         XCTAssertEqual(ActionSummary(selection: selection, config: tree).subject, "Worked 3:12")
+    }
+
+    // MARK: - Running at once
+
+    private func events(pressing keys: [Int], in tree: KeybowConfig) -> [NavigatorEvent] {
+        var navigator = Navigator(config: tree, now: Date(timeIntervalSinceReferenceDate: 0))
+        return keys.flatMap { navigator.keyDown($0, at: Date(timeIntervalSinceReferenceDate: 0)) }
+    }
+
+    private func fired(_ events: [NavigatorEvent]) -> Bool {
+        events.contains { if case .fire = $0 { return true }; return false }
+    }
+
+    func testStartStopAndLapFireOnThePress() throws {
+        _ = registered()
+        let tree = try config("""
+        1. Stopwatch [Stopwatch]
+           1. Start
+           2. Lap
+           3. Reset
+           4. Careful start [do: start, instant: false]
+        2. Snippet [Copy, instant: true]
+        3. Note
+        """)
+        XCTAssertTrue(fired(events(pressing: [0, 4], in: tree)), "start: no time to cancel")
+        XCTAssertTrue(fired(events(pressing: [0, 5], in: tree)), "lap: no time to cancel")
+        XCTAssertFalse(fired(events(pressing: [0, 6], in: tree)), "reset keeps the time to cancel")
+        XCTAssertFalse(fired(events(pressing: [0, 7], in: tree)), "instant: false keeps it too")
+        XCTAssertTrue(fired(events(pressing: [1], in: tree)), "instant: true works for any action")
+        XCTAssertFalse(fired(events(pressing: [2], in: tree)), "everything else waits as before")
+    }
+
+    func testAPendingLeafWaitsItsOwnDelay() throws {
+        _ = registered()
+        let tree = try config("1. Stopwatch [Stopwatch]\n   1. Reset")
+        var navigator = Navigator(config: tree, now: Date(timeIntervalSinceReferenceDate: 0))
+        _ = navigator.keyDown(0, at: Date(timeIntervalSinceReferenceDate: 0))
+        _ = navigator.keyDown(4, at: Date(timeIntervalSinceReferenceDate: 0))
+        XCTAssertEqual(navigator.pendingWindow, Date(timeIntervalSinceReferenceDate: 0)...Date(timeIntervalSinceReferenceDate: tree.commitDelay))
+        XCTAssertTrue(fired(navigator.tick(at: Date(timeIntervalSinceReferenceDate: tree.commitDelay))))
     }
 
     func testTheKeyLeadingToItIsFound() throws {

@@ -182,13 +182,13 @@ An annotation is either a **word** or a **pair**.
   `guards.refuseInlineImages`, `start`, `duration`, `alertMinutes`, `calendar`,
   `calendarId`, `notes`, `show`, `due`, `list`, `to`, `body`, `subject`, `app`,
   `bundleId`, `open`, `url`, `target`, `name`, `input`, `via`, `text`, `shortcut`,
-  `query`, `playlist`, `album`, `artist`, `shuffle`. A dotted key sets a field
+  `query`, `playlist`, `album`, `artist`, `shuffle`, `instant`. A dotted key sets a field
   inside another: `find.byName: Journal`.
 - **Anything else** is a value for templates (§6), inherited by everything
   beneath: `area: work`, `when: tomorrow`, `contact: Rudy Rudolph`.
 
 `alertMinutes` and `guards.maxBodyBytes` are numbers; `createIfMissing`, `show`,
-`shuffle` and `guards.refuseInlineImages` are `true` or `false`; everything else is text,
+`shuffle`, `instant` and `guards.refuseInlineImages` are `true` or `false`; everything else is text,
 placeholders included: `title: Standup — {{date:d MMM}}`. The value runs to the
 next comma; **put it in double quotes** if it contains a comma, a square
 bracket or a quote (written `\"`), or starts or ends with a space. Inside
@@ -411,6 +411,15 @@ doesn't exist, stops the action with a message saying what is missing — "The
 config has no value for contact.phone, needed for the message recipient." A
 missing value in an optional field is a warning, not a failure.
 
+### Running at once: `instant`
+
+A chosen leaf normally waits the time to cancel (`commitDelayMs`, a second by
+default) before its action runs, so a wrong press can be taken back.
+`instant: true` on a node skips that wait for the leaves under it: the action
+runs the moment the key is pressed, and can't be cancelled. `instant: false`
+restores the wait where something would otherwise skip it. A module may ask
+for its actions to run at once — the stopwatch does, for all but Reset.
+
 ### `notes.create` — a new note
 
 | Field | |
@@ -625,6 +634,10 @@ time, macOS asks whether KeybowNotes may control Music.
    3. Lap
    4. Reset
 ```
+
+Start, stop and lap happen **the moment the key is pressed**, with no time to
+cancel, and are timed from the press itself. Reset keeps the time to cancel,
+so a stray press can't wipe a time; `instant:` changes either.
 
 A lone `Stopwatch [Stopwatch]` key starts and stops it. While it has a time it
 shows at the foot of the overlay and in the menu bar; while it runs, the key

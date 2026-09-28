@@ -56,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             for await event in driver.events {
                 overlay.handle(event)
                 self.log(event)
-                if case .fire(let selection) = event { self.fire(selection) }
+                if case .fire(let selection, let chosenAt) = event { self.fire(selection, chosenAt: chosenAt) }
             }
         }
         Task { @MainActor [weak self] in
@@ -237,7 +237,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Running actions
 
-    private func fire(_ selection: ResolvedSelection) {
+    /// `chosenAt` is when the key was pressed: the action's "now", so a
+    /// stopwatch starts on the press, not when the overlay has caught up.
+    private func fire(_ selection: ResolvedSelection, chosenAt: Date = Date()) {
         guard let overlay else { return }
         let path = selection.pathDescription
 
@@ -248,6 +250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         var context = ActionContext(
             templatesDirectory: store.templatesDirectory,
+            now: chosenAt,
             environment: environment(),
             defaultCalendarID: settings.defaultCalendarID,
             defaultReminderListID: settings.defaultReminderListID)
@@ -570,7 +573,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Log.info("ignored key \(key)")
         case .pending(let selection):
             Log.info("pending: \(selection.pathDescription)")
-        case .fire(let selection):
+        case .fire(let selection, _):
             let summary = ActionSummary(selection: selection, config: config)
             var line = "FIRE: \(summary.verb) · \(summary.subject)"
             if !summary.details.isEmpty { line += " · " + summary.details.joined(separator: " · ") }

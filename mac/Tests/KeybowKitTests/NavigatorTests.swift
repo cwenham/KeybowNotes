@@ -50,7 +50,7 @@ final class NavigatorTests: XCTestCase {
         XCTAssertTrue(navigator.tick(at: start.addingTimeInterval(0.5)).isEmpty)
 
         let fired = navigator.tick(at: start.addingTimeInterval(1.0))
-        XCTAssertEqual(fired, [.fire(pending), .cleared(reason: .completed)])
+        XCTAssertEqual(fired, [.fire(pending, chosenAt: start), .cleared(reason: .completed)])
         XCTAssertEqual(navigator.path, [], "selection resets after firing")
     }
 

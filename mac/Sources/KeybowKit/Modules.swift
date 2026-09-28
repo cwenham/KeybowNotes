@@ -34,7 +34,13 @@ public protocol KeybowModule: AnyObject, Sendable {
     /// runs — or nil when it can.
     func problem(with request: ModuleRequest) -> String?
 
-    /// Does it.
+    /// True to run the moment its key is pressed, skipping the time to cancel:
+    /// for actions where the moment matters, like starting a stopwatch.
+    /// Fields here are as written, placeholders unfilled. `instant:` on the
+    /// node overrides it either way.
+    func firesAtOnce(_ request: ModuleRequest) -> Bool
+
+    /// Does it. `now` is when the key was pressed, which may be a moment ago.
     func run(_ request: ModuleRequest, now: Date) async -> ActionOutcome
 
     /// Values for {{placeholders}}, offered to every action. Names should start
@@ -47,6 +53,7 @@ public protocol KeybowModule: AnyObject, Sendable {
 
 extension KeybowModule {
     public func problem(with request: ModuleRequest) -> String? { nil }
+    public func firesAtOnce(_ request: ModuleRequest) -> Bool { false }
     public func values(now: Date) -> [String: String] { [:] }
     public func status(now: Date) -> ModuleStatus? { nil }
 }
@@ -115,11 +122,14 @@ public struct ModuleRequest: Equatable, Sendable {
     public let fields: [String: String]
     /// The labels chosen, from the top of the tree.
     public let labels: [String]
+    /// When its key was pressed.
+    public let time: Date
 
-    public init(type: String, fields: [String: String], labels: [String]) {
+    public init(type: String, fields: [String: String], labels: [String], time: Date = Date()) {
         self.type = type
         self.fields = fields
         self.labels = labels
+        self.time = time
     }
 
     public var leaf: String { labels.last ?? "" }

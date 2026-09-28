@@ -8,8 +8,9 @@ public enum NavigatorEvent: Equatable, Sendable {
     case invalidPress(key: Int)
     /// A leaf was chosen; the action runs when the commit delay elapses.
     case pending(ResolvedSelection)
-    /// Run this now.
-    case fire(ResolvedSelection)
+    /// Run this now. `chosenAt` is when its key was pressed — before the time
+    /// to cancel, if it had one — for actions where the moment matters.
+    case fire(ResolvedSelection, chosenAt: Date)
     case cleared(reason: ClearReason)
 
     public enum ClearReason: String, Equatable, Sendable {
@@ -36,6 +37,14 @@ public struct Navigator {
     public private(set) var tree: TreeKind?
     public private(set) var path: [Int] = []
     public private(set) var pendingSince: Date?
+    /// How long the pending leaf waits: the config's time to cancel, or none
+    /// for an action that runs at once.
+    public private(set) var pendingDelay: TimeInterval = 0
+
+    /// From the choice to the moment it runs.
+    public var pendingWindow: ClosedRange<Date>? {
+        pendingSince.map { $0...$0.addingTimeInterval(pendingDelay) }
+    }
 
     private let config: KeybowConfig
     private var heldSince: [Int: Date] = [:]
@@ -115,9 +124,9 @@ public struct Navigator {
         // action it had just chosen. Cancelling within the window is done by
         // pressing another key; long press is for abandoning a partial path.
         if let pending = pendingSelection, let since = pendingSince,
-           now.timeIntervalSince(since) >= config.commitDelay {
+           now.timeIntervalSince(since) >= pendingDelay {
             reset()
-            events.append(.fire(pending))
+            events.append(.fire(pending, chosenAt: since))
             events.append(.cleared(reason: .completed))
         }
 
@@ -156,13 +165,15 @@ public struct Navigator {
         var events: [NavigatorEvent] = [.selectionChanged(resolved)]
 
         if resolved.node.isLeaf {
-            if config.commitDelay > 0 {
+            let delay = config.commitDelay(for: resolved)
+            if delay > 0 {
                 pendingSelection = resolved
                 pendingSince = now
+                pendingDelay = delay
                 events.append(.pending(resolved))
             } else {
                 reset()
-                events.append(.fire(resolved))
+                events.append(.fire(resolved, chosenAt: now))
                 events.append(.cleared(reason: .completed))
             }
         }

@@ -79,7 +79,7 @@ public enum OutlineCompiler {
         "start", "duration", "alertMinutes", "calendar", "calendarId", "notes", "show",
         "due", "list", "to", "body", "subject",
         "app", "bundleId", "open", "url", "target", "name", "input", "via", "text",
-        "shortcut", "query", "playlist", "album", "artist", "shuffle",
+        "shortcut", "query", "playlist", "album", "artist", "shuffle", "instant",
     ]
     /// A built-in action field, or one a module adds.
     public static func isActionField(_ key: String) -> Bool {
@@ -101,7 +101,7 @@ public enum OutlineCompiler {
     }
 
     static let numericFields: Set<String> = ["alertMinutes", "guards.maxBodyBytes"]
-    static let booleanFields: Set<String> = ["createIfMissing", "show", "guards.refuseInlineImages", "shuffle"]
+    static let booleanFields: Set<String> = ["createIfMissing", "show", "guards.refuseInlineImages", "shuffle", "instant"]
     static let numericDefaults: Set<String> = [
         "commitDelayMs", "idleTimeoutMs", "longPressCancelMs", "dates.todayOffsetMinutes", "dates.roundToMinutes",
     ]

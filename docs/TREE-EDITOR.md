@@ -177,6 +177,10 @@ For the selected node:
   force and where it comes from; **Use Inherited** removes the node's own. Writes
   `colour: rrggbb`. Dragging in the colour panel is written once it settles, so
   it's one undo step.
+- **Run at once** — for every action: skip the time to cancel (`instant:`).
+  Left to inherit, it says what the key will do — "at once" for a stopwatch's
+  Start, "after 1 s" for most — and the preview notes a key that runs the
+  moment it's pressed.
 - **Module types** — a module's action types are in the Type menu with the
   built-in ones, and its fields show like theirs; a field with a few set
   values, like the stopwatch's *Do*, is a menu.

@@ -133,7 +133,7 @@ public enum ActionRunner {
             guard let module = ModuleRegistry.shared.module(handling: request.type) else {
                 throw RunError("Nothing here runs “\(request.type)” actions")
             }
-            return await module.run(request, now: Date())
+            return await module.run(request, now: request.time)
 
         case .runShortcut(let name, let input):
             try await runShortcut(name, input: input)

@@ -216,6 +216,10 @@ private struct NodeInspector: View {
                     Label("Needs \(summary.missing.joined(separator: ", "))", systemImage: "exclamationmark.triangle.fill")
                         .font(.caption).foregroundStyle(.orange)
                 }
+                if config.commitDelay > 0, config.commitDelay(for: selection) == 0 {
+                    Label("Runs the moment it's pressed", systemImage: "bolt.fill")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -251,6 +255,9 @@ private struct NodeInspector: View {
                 ForEach(fields, id: \.key) { spec in
                     fieldRow(spec)
                 }
+            }
+            if action != nil {
+                fieldRow(FieldSpec(key: "instant", title: "Run at once", kind: .flag))
             }
             if action?.type == "clock.timer" {
                 let shortcut = effectiveValue("shortcut")
@@ -306,6 +313,21 @@ private struct NodeInspector: View {
         }
     }
 
+    /// What a flag comes to when left to inherit. For Run at once, what the
+    /// key will actually do — a module can ask for its actions to run at once.
+    private func inheritedFlag(_ key: String) -> String {
+        if key == "instant", let tree, let config, node.isLeaf,
+           let selection = config.resolve(tree: tree, path: location.path) {
+            return config.commitDelay(for: selection) == 0 ? "at once" : "after \(Self.seconds(config.commitDelay))"
+        }
+        let value = effectiveValue(key)
+        return value.isEmpty ? "—" : value
+    }
+
+    private static func seconds(_ interval: TimeInterval) -> String {
+        interval == interval.rounded() ? "\(Int(interval)) s" : String(format: "%.1f s", interval)
+    }
+
     private func effectiveValue(_ key: String) -> String {
         guard let action else { return "" }
         let parts = key.split(separator: ".", maxSplits: 1).map(String.init)
@@ -347,7 +369,7 @@ private struct NodeInspector: View {
                     get: { own.map { ["true", "yes", "on", "1"].contains($0.lowercased()) ? "on" : "off" } ?? "inherit" },
                     set: { choice in setField(spec.key, choice == "inherit" ? nil : (choice == "on" ? "true" : "false")) }
                 )) {
-                    Text("Inherit (\(effectiveValue(spec.key).isEmpty ? "—" : effectiveValue(spec.key)))").tag("inherit")
+                    Text("Inherit (\(inheritedFlag(spec.key)))").tag("inherit")
                     Text("On").tag("on")
                     Text("Off").tag("off")
                 }

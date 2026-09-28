@@ -231,6 +231,21 @@ public struct KeybowConfig: Sendable {
         )
     }
 
+    /// How long a chosen leaf waits for a press that cancels it. `instant: true`
+    /// on the path skips the wait and `instant: false` keeps it; otherwise a
+    /// module may ask for its action to run at once — a stopwatch has to start
+    /// on the press, not a second later.
+    public func commitDelay(for selection: ResolvedSelection) -> TimeInterval {
+        guard let action = selection.action else { return commitDelay }
+        if case .bool(let instant)? = action.fields["instant"] { return instant ? 0 : commitDelay }
+        if let module = ModuleRegistry.shared.module(handling: action.type) {
+            let request = ModuleRequest(type: action.type, fields: action.fields.compactMapValues(\.stringValue),
+                                        labels: selection.labels)
+            if module.firesAtOnce(request) { return 0 }
+        }
+        return commitDelay
+    }
+
     /// The action a node's leaves would get from everything down to and
     /// including it — for a branch, what its leaves inherit; for a leaf, its
     /// action. For showing, not running: `resolve` is what runs.

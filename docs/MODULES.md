@@ -15,6 +15,7 @@ bar or the outline directly.
 |---|---|
 | Add **action types**, with outline keywords and fields | `manifest.actionTypes` |
 | Check an action before it runs, with a reason people can act on | `problem(with:)` |
+| Run at once on the press, skipping the time to cancel | `firesAtOnce(_:)` |
 | Say what a key will do, for the overlay and the tree editor | `summary(of:now:)` |
 | **Run** its actions | `run(_:now:)` |
 | Offer **{{placeholder}} values** to every action | `values(now:)` |
@@ -48,7 +49,12 @@ a module is a new target, a line there, and a dependency in `Package.swift`.
   every text field and hands over a `ModuleRequest`: the type, the fields, and
   the labels chosen. If `problem(with:)` returns a reason, the action is
   refused before anything runs, and the overlay says why.
+- **Timing.** A chosen leaf waits the time to cancel before it runs, unless
+  `firesAtOnce(_:)` says otherwise — then it runs on the key press itself.
+  `instant:` on a node overrides the module either way.
 - **Running.** `run(_:now:)` returns an `ActionOutcome`, shown like any other.
+  `now`, and the request's `time`, are when the key was pressed — before any
+  time to cancel — so a module that measures time measures from the press.
 - **Values.** `values(now:)` is asked whenever an action runs or is described,
   so any action can use them: `[Notes, title: "Worked {{stopwatch}}"]`. A
   module's names start with its id. The tree's own values win over a module's.
@@ -80,6 +86,8 @@ dependency at all: another module's values are in every action's placeholders.
   `toggle`, `start`, `stop`, `lap` or `reset`. Without it, a leaf's label
   decides — *Start*, *Stop*, *Pause*, *Lap*, *Split*, *Reset* — and anything
   else toggles, so a lone `Stopwatch [Stopwatch]` key starts and stops it.
+- Start, stop and lap run on the press and are timed from it; Reset keeps the
+  time to cancel.
 - Values: `{{stopwatch}}` (3:12), `{{stopwatch.seconds}}` (192),
   `{{stopwatch.laps}}` (1:05, 2:07 — the time at each lap).
 - Status: shown while it has a time — running, or stopped and not yet reset —

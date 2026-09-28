@@ -325,7 +325,7 @@ private struct Planner {
                 fields[key] = text
             }
         }
-        return ModuleRequest(type: action.type, fields: fields, labels: selection.labels)
+        return ModuleRequest(type: action.type, fields: fields, labels: selection.labels, time: context.now)
     }
 
     // MARK: - Values

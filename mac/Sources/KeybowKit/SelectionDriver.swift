@@ -200,7 +200,7 @@ public final class SelectionDriver: @unchecked Sendable {
             currentRow: navigator.currentRow,
             options: options,
             colours: colours,
-            pending: navigator.pendingSince.map { $0...$0.addingTimeInterval(config.commitDelay) }
+            pending: navigator.pendingWindow
         )
         if snapshot != lastSnapshot {
             lastSnapshot = snapshot

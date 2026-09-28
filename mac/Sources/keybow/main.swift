@@ -150,7 +150,7 @@ func describe(_ event: NavigatorEvent) -> String {
         return "ignored key \(key) (not an option here)"
     case .pending(let selection):
         return "about to run \(selection.action?.type ?? "?") for \(selection.pathDescription) — press any key to cancel"
-    case .fire(let selection):
+    case .fire(let selection, _):
         var line = "FIRE \(selection.action?.type ?? "?") for \(selection.pathDescription)  [\(selection.tree.rawValue) tree]"
         for (key, value) in (selection.action?.fields ?? [:]).sorted(by: { $0.key < $1.key }) {
             line += "\n     \(key): \(value.stringValue ?? "\(value)")"

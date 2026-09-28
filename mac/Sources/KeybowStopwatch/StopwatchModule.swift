@@ -142,6 +142,13 @@ public final class StopwatchModule: KeybowModule, @unchecked Sendable {
         return "“\(word)” isn't something the stopwatch does: toggle, start, stop, lap or reset."
     }
 
+    /// Start, stop and lap happen on the press: a stopwatch that waited a
+    /// second to start would be a second out. Reset keeps the time to cancel,
+    /// so a stray press can't wipe a time.
+    public func firesAtOnce(_ request: ModuleRequest) -> Bool {
+        (Self.command(for: request) ?? .toggle) != .reset
+    }
+
     public func summary(of request: ModuleRequest, now: Date) -> ModuleSummary {
         let reading = reading(at: now)
         let time = Self.format(reading.elapsed)

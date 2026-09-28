@@ -185,6 +185,7 @@ private struct NodeInspector: View {
             }
             colourSection
             actionSection
+            leftoversSection
             valuesSection
             entrySection
             problemsSection
@@ -444,20 +445,102 @@ private struct NodeInspector: View {
     /// written as words (`5 min alert`, `worklog.md`, `https://…`); setting the
     /// pair replaces those.
     private func setField(_ key: String, _ value: String?) {
+        // A target word — a bare word under an app — is replaced by the pair
+        // too, rather than left behind beside it.
+        let targetWords = Set(annotated.compactMap { annotation, role -> String? in
+            if case .target = role, case .word(let word) = annotation { return word }
+            return nil
+        })
         model.edit("Set \(key)") { document in
-            if ["alertMinutes", "template", "url", "open"].contains(key), var current = document.node(id) {
+            if ["alertMinutes", "template", "url", "open", "target"].contains(key), var current = document.node(id) {
                 current.annotations.removeAll { annotation in
                     guard case .word(let word) = annotation else { return false }
                     let lower = word.lowercased()
                     switch key {
                     case "template": return lower.hasSuffix(".md")
                     case "url", "open": return word.contains("://")
+                    case "target": return targetWords.contains(word)
                     default: return OutlineCompiler.alertMinutes(lower) != nil
                     }
                 }
                 try document.setText(id, current.text)
             }
             try document.setPair(id, key: key, value: value)
+        }
+    }
+
+    // MARK: - Leftovers
+
+    /// Annotations that do nothing here, and have no field above to show them:
+    /// a field the action doesn't use — a target left from when this opened an
+    /// app — or a word that wasn't understood, kept as a note. Without this
+    /// they could only be found, and removed, by editing the line.
+    private var leftovers: [(annotation: Annotation, reason: String)] {
+        let type = action?.type
+        var used = Set((type.flatMap(fields(for:)) ?? []).map(\.key)).union(["type", "instant", "colour", "color"])
+        switch type {
+        case "app.open": used.insert("url")                    // opened when there's no Open
+        case "clock.timer": used.insert("due")                 // a reminder's due works too
+        default: break
+        }
+        let actionName = type.map { "“\(typeName($0))”" } ?? "this node"
+        return annotated.compactMap { annotation, role -> (Annotation, String)? in
+            switch (annotation, role) {
+            case (.word, .unknown):
+                return (annotation, "Not understood, so kept only as a note. It does nothing.")
+            case (.word, .target) where !used.contains("target"):
+                return (annotation, "A place in an app, but \(actionName) doesn't open an app.")
+            case (.word, .link) where !used.contains("url") && !used.contains("open"):
+                return (annotation, "A link, but \(actionName) doesn't open links.")
+            case (.word, .template) where !used.contains("template"):
+                return (annotation, "A template, but \(actionName) doesn't use one.")
+            case (.word, .alert) where !used.contains("alertMinutes"):
+                return (annotation, "An alert, but \(actionName) doesn't have alerts.")
+            case (.pair(let key, _), .field) where type != nil && !used.contains(key):
+                return (annotation, "\(actionName) doesn't use \(key).")
+            default:
+                return nil
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var leftoversSection: some View {
+        let items = leftovers
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Not used here").font(.subheadline.weight(.semibold))
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Button {
+                            removeAnnotation(item.annotation)
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Remove it from this node.")
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(item.annotation.text)
+                                .font(.callout.monospaced())
+                                .lineLimit(2)
+                                .truncationMode(.middle)
+                                .textSelection(.enabled)
+                            Text(item.reason).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    private func removeAnnotation(_ annotation: Annotation) {
+        model.edit("Remove \(annotation.key ?? annotation.text)") { document in
+            guard var current = document.node(id), let index = current.annotations.firstIndex(of: annotation) else { return }
+            current.annotations.remove(at: index)
+            try document.setText(id, current.text)
         }
     }
 
@@ -753,6 +836,11 @@ struct DraftField: View {
     let commit: (String) -> Void
 
     @State private var draft = ""
+    /// The value the draft started from. Only a draft that differs from it —
+    /// something typed — is saved: the value may have changed some other way
+    /// meanwhile, by editing the line, and an untouched field mustn't put the
+    /// old one back.
+    @State private var original = ""
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -770,14 +858,20 @@ struct DraftField: View {
                 }
             }
         }
-        .onAppear { draft = value }
-        .onChange(of: value) { _, newValue in if !focused { draft = newValue } }
+        .onAppear { draft = value; original = value }
+        .onChange(of: value) { _, newValue in
+            // Follow it unless something's been typed here.
+            if !focused || draft == original { draft = newValue }
+            original = newValue
+        }
         .onChange(of: focused) { _, isFocused in if !isFocused { save() } }
     }
 
     private func save() {
         let trimmed = draft.trimmingCharacters(in: .whitespaces)
-        if trimmed != value { commit(trimmed) }
+        guard trimmed != original.trimmingCharacters(in: .whitespaces) else { return }
+        original = trimmed
+        commit(trimmed)
     }
 }
 

@@ -85,6 +85,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
                     }
                     post(characters, code: code, flags: flags)
                     try? await Task.sleep(for: .milliseconds(300))
+                case "save":
+                    // As the Save button does; a menu shortcut needs the app in front.
+                    saveTree()
                 case "dump":
                     var text = OutlineWriter.text(model.document)
                     if case .node(let id)? = model.selection, let node = model.node(id) {

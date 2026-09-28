@@ -195,6 +195,10 @@ For the selected node:
   `[https://…]` — show as set here, just as their `key: value` forms do.
   Editing one writes the pair in place of the word. Links are underlined in the
   outline, in the link colour.
+- **Not used here** — anything in the node's brackets that does nothing and has
+  no field above: a field the action doesn't use (a `target:` left from when
+  the node opened an app), or a word that wasn't understood and was kept as a
+  note. Each says why, with a button to remove it.
 - **Problems** — everything the compiler said about this node.
 - **Tooltips** — resting the pointer on any field, or its label, says what it
   does, what can go in it, and gives an example. The wording is in

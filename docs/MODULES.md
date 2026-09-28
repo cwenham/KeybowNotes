@@ -20,6 +20,7 @@ bar or the outline directly.
 | **Run** its actions | `run(_:now:)` |
 | Offer **{{placeholder}} values** to every action | `values(now:)` |
 | Show what it's doing — on the overlay, in the menu bar, by pulsing keys | `status(now:)` |
+| Offer **commands in the menu bar's menu**, for things no key has been set up to do | `menuItems(now:)` / `performMenuItem(_:now:)` |
 | Keep **state** between runs of the app | `ModuleHost.load` / `save` |
 | Say its status changed on its own | `ModuleHost.statusChanged()` |
 
@@ -66,6 +67,10 @@ a module is a new target, a line there, and a dependency in `Package.swift`.
   moment, live, without asking again; `text` is shown otherwise. With
   `lightsKeys`, the idle keys that lead to the module's action types breathe
   in their own colours.
+- **Menu.** Each time the menu bar's menu opens, `menuItems(now:)` is asked
+  for commands; they're listed under the module's name, greyed out when not
+  enabled. Choosing one calls `performMenuItem(_:now:)`, and its outcome is
+  shown on the overlay.
 - **State.** `load` and `save` keep data per module between runs: in the app,
   in its preferences; on the command line, in memory only.
 
@@ -89,6 +94,9 @@ dependency at all: another module's values are in every action's placeholders.
   else toggles, so a lone `Stopwatch [Stopwatch]` key starts and stops it.
 - Start, stop and lap run on the press and are timed from it; Reset keeps the
   time to cancel.
+- The menu bar's menu has Stop, Lap and Reset under *Stopwatch*, usable while
+  it runs (Reset while it has a time), so it can always be stopped — even when
+  no key for that has been set up.
 - Values: `{{stopwatch}}` (3:12), `{{stopwatch.seconds}}` (192),
   `{{stopwatch.laps}}` (1:05, 2:07 — the time at each lap).
 - Status: shown while it has a time — running, or stopped and not yet reset —

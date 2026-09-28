@@ -641,7 +641,10 @@ Start, stop and lap happen **the moment the key is pressed**, with no time to
 cancel, and are timed from the press itself. Reset keeps the time to cancel,
 so a stray press can't wipe a time; `instant:` changes either.
 
-A lone `Stopwatch [Stopwatch]` key starts and stops it. While it has a time it
+A lone `Stopwatch [Stopwatch]` key starts and stops it. Whatever keys you set
+up, the menu bar's menu has Stop, Lap and Reset under *Stopwatch*, usable while
+it runs, so a stopwatch started from a key that only starts it can always be
+stopped. While it has a time it
 shows at the foot of the overlay and in the menu bar; while it runs, the key
 that leads to it breathes. It keeps running through a restart. Its time is a
 value for any action: `{{stopwatch}}` (3:12), `{{stopwatch.seconds}}` (192) and

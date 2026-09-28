@@ -15,6 +15,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var editorWindow: EditorWindowController?
     /// Keeps the menu bar's clock up to date while a module's clock runs.
     private var moduleClock: Timer?
+    /// Modules' commands go after this, rebuilt each time the menu opens.
+    private let moduleMenuAnchor = NSMenuItem.separator()
+    private var moduleMenuItems: [NSMenuItem] = []
 
     private let connectionItem = NSMenuItem(title: "Keybow: looking…", action: nil, keyEquivalent: "")
     private let configItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
@@ -487,7 +490,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         addItem(to: menu, "Settings…", #selector(openSettings), key: ",")
         addItem(to: menu, "Reload Config", #selector(reloadConfig), key: "r")
         addItem(to: menu, "Open Config Folder", #selector(openConfigFolder))
-        menu.addItem(.separator())
+        menu.addItem(moduleMenuAnchor)
 
         dryRunItem.action = #selector(toggleDryRun)
         dryRunItem.target = self
@@ -515,6 +518,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         updateAccessItem()
+        updateModuleMenuItems(in: menu)
+    }
+
+    /// Each module's commands, under its name, disabled when there's nothing
+    /// for them to do: the stopwatch's Stop, Lap and Reset.
+    private func updateModuleMenuItems(in menu: NSMenu) {
+        for item in moduleMenuItems { menu.removeItem(item) }
+        moduleMenuItems = []
+        var index = menu.index(of: moduleMenuAnchor) + 1
+        let now = Date()
+        for module in ModuleRegistry.shared.all {
+            let commands = module.menuItems(now: now)
+            guard !commands.isEmpty else { continue }
+            var items = [NSMenuItem.sectionHeader(title: module.manifest.name)]
+            for command in commands {
+                let item = NSMenuItem(title: command.title, action: #selector(runModuleMenuItem(_:)), keyEquivalent: "")
+                item.target = self
+                item.isEnabled = command.isEnabled
+                item.representedObject = [module.manifest.id, command.id]
+                item.indentationLevel = 1
+                items.append(item)
+            }
+            items.append(.separator())
+            for item in items {
+                menu.insertItem(item, at: index)
+                index += 1
+            }
+            moduleMenuItems += items
+        }
+    }
+
+    @objc private func runModuleMenuItem(_ sender: NSMenuItem) {
+        guard let ids = sender.representedObject as? [String], ids.count == 2,
+              let module = ModuleRegistry.shared.module(id: ids[0]),
+              let outcome = module.performMenuItem(ids[1], now: Date()) else { return }
+        Log.info("menu: \(module.manifest.name) \(ids[1]) — \(outcome.message)")
+        let symbol = module.manifest.actionTypes.first?.symbol ?? "puzzlepiece"
+        overlay?.flashNotice(outcome.message, symbol: symbol)
     }
 
     /// Shown only while there's something to do about it.

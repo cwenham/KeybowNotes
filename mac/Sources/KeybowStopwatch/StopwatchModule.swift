@@ -181,6 +181,22 @@ public final class StopwatchModule: KeybowModule, @unchecked Sendable {
         return perform(command, at: now)
     }
 
+    /// Stop, lap and reset without a key for them: a stopwatch started from a
+    /// key that only starts it can't otherwise be stopped.
+    public func menuItems(now: Date) -> [ModuleMenuItem] {
+        let reading = reading(at: now)
+        return [
+            ModuleMenuItem(id: Command.stop.rawValue, title: "Stop", isEnabled: reading.isRunning),
+            ModuleMenuItem(id: Command.lap.rawValue, title: "Lap", isEnabled: reading.isRunning),
+            ModuleMenuItem(id: Command.reset.rawValue, title: "Reset",
+                           isEnabled: reading.isRunning || reading.elapsed > 0),
+        ]
+    }
+
+    public func performMenuItem(_ id: String, now: Date) -> ActionOutcome? {
+        Command(rawValue: id).map { perform($0, at: now) }
+    }
+
     /// `{{stopwatch}}` "3:12", `{{stopwatch.seconds}}` "192", `{{stopwatch.laps}}` "1:05, 2:07".
     public func values(now: Date) -> [String: String] {
         let reading = reading(at: now)

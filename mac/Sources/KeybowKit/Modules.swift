@@ -49,6 +49,14 @@ public protocol KeybowModule: AnyObject, Sendable {
 
     /// What it's doing in the background, or nil when there's nothing to show.
     func status(now: Date) -> ModuleStatus?
+
+    /// Commands for the menu bar's menu, asked each time it opens: a way to
+    /// do things for which no key has been set up — stopping a stopwatch that
+    /// was started from a key that only starts it.
+    func menuItems(now: Date) -> [ModuleMenuItem]
+
+    /// Does a menu command, and says what happened.
+    func performMenuItem(_ id: String, now: Date) -> ActionOutcome?
 }
 
 extension KeybowModule {
@@ -56,6 +64,23 @@ extension KeybowModule {
     public func firesAtOnce(_ request: ModuleRequest) -> Bool { false }
     public func values(now: Date) -> [String: String] { [:] }
     public func status(now: Date) -> ModuleStatus? { nil }
+    public func menuItems(now: Date) -> [ModuleMenuItem] { [] }
+    public func performMenuItem(_ id: String, now: Date) -> ActionOutcome? { nil }
+}
+
+/// A command a module offers in the menu bar's menu.
+public struct ModuleMenuItem: Equatable, Sendable {
+    /// Handed back to `performMenuItem` when it's chosen.
+    public let id: String
+    public let title: String
+    /// Shown either way, so it can be found; only usable when this is true.
+    public let isEnabled: Bool
+
+    public init(id: String, title: String, isEnabled: Bool) {
+        self.id = id
+        self.title = title
+        self.isEnabled = isEnabled
+    }
 }
 
 /// What a module adds to the outline language and the editor.

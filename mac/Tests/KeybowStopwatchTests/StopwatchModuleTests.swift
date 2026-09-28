@@ -77,6 +77,22 @@ final class StopwatchModuleTests: XCTestCase {
         XCTAssertFalse(stopped.lightsKeys)
     }
 
+    func testMenuCommandsAreUsableOnlyWhenTheyMeanSomething() {
+        let (stopwatch, _) = fresh()
+        func enabled(at seconds: TimeInterval) -> [String] {
+            stopwatch.menuItems(now: at(seconds)).filter(\.isEnabled).map(\.title)
+        }
+        XCTAssertEqual(stopwatch.menuItems(now: at(0)).map(\.title), ["Stop", "Lap", "Reset"], "always listed")
+        XCTAssertEqual(enabled(at: 0), [], "nothing to do before it's started")
+        stopwatch.perform(.start, at: at(0))
+        XCTAssertEqual(enabled(at: 10), ["Stop", "Lap", "Reset"])
+        XCTAssertEqual(stopwatch.performMenuItem("stop", now: at(30))?.message, "Stopwatch stopped at 0:30")
+        XCTAssertEqual(enabled(at: 40), ["Reset"], "stopped with a time: only reset")
+        XCTAssertEqual(stopwatch.performMenuItem("reset", now: at(40))?.message, "Stopwatch reset")
+        XCTAssertEqual(enabled(at: 50), [])
+        XCTAssertNil(stopwatch.performMenuItem("explode", now: at(50)))
+    }
+
     func testFormat() {
         XCTAssertEqual(StopwatchModule.format(0), "0:00")
         XCTAssertEqual(StopwatchModule.format(192.7), "3:12")

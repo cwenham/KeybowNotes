@@ -27,7 +27,8 @@ struct InspectorPane: View {
 
 /// The fields each action type uses, in the order they're shown.
 private struct FieldSpec {
-    enum Kind { case text, number, flag, choice([String]) }
+    /// `action`: an action of its own, run on an outcome — a display's OK.
+    enum Kind { case text, number, flag, choice([String]), action }
 
     let key: String
     let title: String
@@ -103,6 +104,7 @@ private func fields(for type: String) -> [FieldSpec]? {
         case .number: kind = .number
         case .flag: kind = .flag
         case .choice(let words): kind = .choice(words)
+        case .action: kind = .action
         }
         return FieldSpec(key: field.key, title: field.title, kind: kind, hint: field.hint, help: field.help)
     }
@@ -120,6 +122,22 @@ private let builtInTypeNames: [(String?, String)] = [
 
 private func typeName(_ type: String?) -> String {
     typeNames.first { $0.0 == type }?.1 ?? type ?? "—"
+}
+
+/// "okCancel" → "OK and Cancel", "ok" → "OK", "typing" → "Typing".
+private func choiceTitle(_ word: String) -> String {
+    let spaced = word.replacingOccurrences(of: "([a-z])([A-Z])", with: "$1 $2", options: .regularExpression)
+    let words = spaced.split(separator: " ").map { $0.lowercased() == "ok" ? "OK" : $0.capitalized }
+    return words.count == 2 ? words.joined(separator: " and ") : words.joined(separator: " ")
+}
+
+/// How an outcome's action is written: its keyword, if it has one.
+private func outcomeWord(for type: String) -> String {
+    let words = OutlineCompiler.actionTypeWords.filter { $0.value == type }.keys.sorted()
+    if let word = words.first(where: { !["clipboard", "paste", "browser", "type", "facetime"].contains($0) }) ?? words.first {
+        return word.split(separator: " ").map { $0.capitalized }.joined(separator: " ")
+    }
+    return ModuleRegistry.shared.actionType(type)?.keywords.first ?? type
 }
 
 private struct NodeInspector: View {
@@ -265,8 +283,12 @@ private struct NodeInspector: View {
                 .labelsHidden()
             }
             if let type = action?.type, let fields = fields(for: type) {
-                ForEach(fields, id: \.key) { spec in
+                ForEach(fields.filter { if case .action = $0.kind { return false }; return true }, id: \.key) { spec in
                     fieldRow(spec)
+                }
+                ForEach(fields.filter { if case .action = $0.kind { return outcomeShown($0.key) }; return false },
+                        id: \.key) { spec in
+                    outcomeSection(spec)
                 }
             }
             if action != nil {
@@ -395,12 +417,13 @@ private struct NodeInspector: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Picker(spec.title, selection: Binding(
                         get: { own.map { $0.lowercased() } ?? "" },
-                        set: { choice in setField(spec.key, choice.isEmpty ? nil : choice) }
+                        // Written as the module spells it: okCancel, not okcancel.
+                        set: { choice in setField(spec.key, choice.isEmpty ? nil : words.first { $0.lowercased() == choice } ?? choice) }
                     )) {
-                        Text(effectiveValue(spec.key).isEmpty ? "Inherit" : "Inherit (\(effectiveValue(spec.key)))").tag("")
-                        ForEach(words, id: \.self) { Text($0.capitalized).tag($0) }
+                        Text(effectiveValue(spec.key).isEmpty ? "Inherit" : "Inherit (\(choiceTitle(effectiveValue(spec.key))))").tag("")
+                        ForEach(words, id: \.self) { Text(choiceTitle($0)).tag($0.lowercased()) }
                         // A value written by hand that isn't one of the choices.
-                        if let own, !words.contains(own.lowercased()) { Text(own).tag(own.lowercased()) }
+                        if let own, !words.map({ $0.lowercased() }).contains(own.lowercased()) { Text(own).tag(own.lowercased()) }
                     }
                     .labelsHidden()
                     .fixedSize()
@@ -432,6 +455,104 @@ private struct NodeInspector: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Outcomes
+
+    /// A display's OK and Cancel sections show only with those buttons.
+    private func outcomeShown(_ key: String) -> Bool {
+        guard fields(for: action?.type ?? "")?.contains(where: { $0.key == "button" }) == true else { return true }
+        let buttons = effectiveValue("button").lowercased().filter { $0.isLetter }
+        return buttons == "both" || buttons.contains(key)
+    }
+
+    /// The type of the action held in `key`: `ok: Copy`, or `ok.type: …`.
+    private func outcomeType(_ key: String) -> String? {
+        (ownValue(key) ?? ownValue(key + ".type")).flatMap(OutlineCompiler.knownType)
+    }
+
+    /// What runs on an outcome: a type, like any action's, and its fields,
+    /// written as `ok: Copy` and `ok.text: …`.
+    @ViewBuilder
+    private func outcomeSection(_ spec: FieldSpec) -> some View {
+        let chosen = outcomeType(spec.key)
+        VStack(alignment: .leading, spacing: 8) {
+            InspectorRow(spec.title, help: spec.help.isEmpty ? nil : spec.help) {
+                Picker(spec.title, selection: Binding(
+                    get: { chosen },
+                    set: { type in setOutcomeType(spec.key, type) }
+                )) {
+                    Text("Nothing: just close").tag(String?.none)
+                    ForEach(Array(typeNames.enumerated()), id: \.offset) { _, entry in
+                        if let type = entry.0 {
+                            Text(entry.1).tag(Optional(type))
+                        }
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+            }
+            if let chosen, let fields = fields(for: chosen) {
+                ForEach(fields.filter { if case .action = $0.kind { return false }; return true }, id: \.key) { sub in
+                    outcomeFieldRow(sub, in: spec.key, type: chosen)
+                }
+                Text("{{displayed}} is the text shown\(["clipboard.copy", "text.insert", "text.insertDirect"].contains(chosen) ? ", and what's used with no text" : "").")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.leading, 10)
+        .padding(.vertical, 6)
+        .overlay(alignment: .leading) {
+            Rectangle().fill(.quaternary).frame(width: 2)
+        }
+    }
+
+    private func outcomeFieldRow(_ spec: FieldSpec, in holder: String, type: String) -> some View {
+        let key = holder + "." + spec.key
+        let own = ownValue(key)
+        let help = FieldHelp.field(spec.key, type: type) ?? (spec.help.isEmpty ? nil : spec.help)
+        return Group {
+            switch spec.kind {
+            case .flag:
+                InspectorRow(spec.title, help: help) {
+                    Picker(spec.title, selection: Binding(
+                        get: { own.map { ["true", "yes", "on", "1"].contains($0.lowercased()) ? "on" : "off" } ?? "default" },
+                        set: { choice in setField(key, choice == "default" ? nil : (choice == "on" ? "true" : "false")) }
+                    )) {
+                        Text("Default").tag("default")
+                        Text("On").tag("on")
+                        Text("Off").tag("off")
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
+            case .choice(let words):
+                InspectorRow(spec.title, help: help) {
+                    Picker(spec.title, selection: Binding(
+                        get: { own.map { $0.lowercased() } ?? "" },
+                        set: { choice in setField(key, choice.isEmpty ? nil : words.first { $0.lowercased() == choice } ?? choice) }
+                    )) {
+                        Text("Default").tag("")
+                        ForEach(words, id: \.self) { Text(choiceTitle($0)).tag($0.lowercased()) }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
+            default:
+                DraftField(title: spec.title, value: own ?? "", placeholder: "", note: "", hint: spec.hint,
+                           multiline: ["body", "entry", "notes", "text"].contains(spec.key), help: help) { value in
+                    setField(key, value.isEmpty ? nil : value)
+                }
+            }
+        }
+    }
+
+    /// Names the outcome's type by its keyword, `ok: Copy`; nothing removes it.
+    private func setOutcomeType(_ key: String, _ type: String?) {
+        model.edit(type == nil ? "Remove \(key)" : "Set \(key)") { document in
+            try document.setPair(id, key: key + ".type", value: nil)
+            try document.setPair(id, key: key, value: type.map(outcomeWord(for:)))
         }
     }
 
@@ -499,8 +620,17 @@ private struct NodeInspector: View {
                 return (annotation, "A template, but \(actionName) doesn't use one.")
             case (.word, .alert) where !used.contains("alertMinutes"):
                 return (annotation, "An alert, but \(actionName) doesn't have alerts.")
-            case (.pair(let key, _), .field) where type != nil && !used.contains(key):
-                return (annotation, "\(actionName) doesn't use \(key).")
+            case (.pair(let key, _), .field) where type != nil:
+                // `ok.text`: used when the action run on OK uses text.
+                if let held = OutlineCompiler.heldField(key), used.contains(held.holder) {
+                    let heldType = outcomeType(held.holder)
+                    let heldUsed = Set((heldType.flatMap(fields(for:)) ?? []).map(\.key)).union(["type"])
+                    guard !heldUsed.contains(held.field) else { return nil }
+                    return (annotation, heldType == nil
+                        ? "\(held.holder) runs nothing, so \(held.field) does nothing."
+                        : "“\(typeName(heldType))” on \(held.holder) doesn't use \(held.field).")
+                }
+                return used.contains(key) ? nil : (annotation, "\(actionName) doesn't use \(key).")
             default:
                 return nil
             }

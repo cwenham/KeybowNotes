@@ -189,6 +189,16 @@ final class OverlayController {
                 for: outcome.succeeded && warnings.isEmpty ? 2.6 : 6)
     }
 
+    /// A display is up: the "running" line gives way to it, unless a new
+    /// choice has begun.
+    func stepAside() {
+        guard model.snapshot.isIdle, model.working == nil else { return }
+        hide(after: 0)
+    }
+
+    /// The screen the overlay shows on, for anything shown beside it.
+    var screen: NSScreen { targetScreen() }
+
     func showRefused(_ reason: String, summary: ActionSummary) {
         present(.refused(reason, summary: summary), for: 6)
     }
@@ -355,7 +365,7 @@ final class OverlayController {
         }
     }
 
-    private static func roundedMask(radius: CGFloat) -> NSImage {
+    static func roundedMask(radius: CGFloat) -> NSImage {
         let edge = radius * 2 + 1
         let image = NSImage(size: NSSize(width: edge, height: edge), flipped: false) { rect in
             NSColor.black.setFill()

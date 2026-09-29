@@ -46,6 +46,10 @@ change your mind — press any key — before the action runs.
   app you're using — by pasting, or directly, without touching the clipboard.
 - **Stopwatch**: start, stop, lap and reset from the keys; it shows in the HUD and
   the menu bar, and its key breathes while it runs.
+- **Display**: show a template or text on screen — a quote, today's notes, a status
+  page — in a panel sized to fit, Markdown or HTML. It fades by itself, or waits
+  for OK or Cancel, and each can run an action of its own: copy what was shown,
+  file it as a note.
 
 **Values** — anything an action writes can include `{{placeholders}}`: the labels
 along the path, a contact's number, the date in any format, **where your Mac is**,
@@ -105,7 +109,7 @@ has that does nothing is flagged, with a button to remove it.
 
 ![The tree editor with a calendar event selected: its title, start, duration and alert, each showing where it comes from](docs/images/tree-editor-event.png)
 
-**Modules** — the stopwatch, the Claude blocks and data sources are modules: separate code that
+**Modules** — the stopwatch, the Claude blocks, data sources, location, quotes and displays are modules: separate code that
 plugs in through one interface, adding actions, template blocks, values, settings
 and menu commands. See [docs/MODULES.md](docs/MODULES.md).
 

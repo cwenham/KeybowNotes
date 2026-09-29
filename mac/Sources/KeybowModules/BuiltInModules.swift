@@ -1,5 +1,6 @@
 import KeybowAI
 import KeybowData
+import KeybowDisplay
 import KeybowKit
 import KeybowLocation
 import KeybowQuotes
@@ -15,5 +16,6 @@ public enum BuiltInModules {
         ModuleRegistry.shared.register(DataModule(), host: host)
         ModuleRegistry.shared.register(LocationModule(), host: host)
         ModuleRegistry.shared.register(QuoteModule(), host: host)
+        ModuleRegistry.shared.register(DisplayModule(), host: host)
     }
 }

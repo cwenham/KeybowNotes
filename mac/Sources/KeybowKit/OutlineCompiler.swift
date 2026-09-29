@@ -89,9 +89,38 @@ public enum OutlineCompiler {
         "app", "bundleId", "open", "url", "target", "name", "input", "via", "text",
         "shortcut", "query", "playlist", "album", "artist", "shuffle", "instant",
     ]
-    /// A built-in action field, or one a module adds.
+    /// The types built in, for checking a type named in a pair.
+    public static let builtInTypes: Set<String> = [
+        "notes.create", "notes.append", "calendar.createEvent", "reminders.create", "messages.compose",
+        "mail.compose", "phone.call", "app.open", "url.open", "clipboard.copy", "text.insert",
+        "text.insertDirect", "clock.timer", "maps.search", "music.play", "shortcut",
+    ]
+
+    /// A built-in action field, or one a module adds — or a field of an action
+    /// held in one: `ok.text`.
     public static func isActionField(_ key: String) -> Bool {
-        actionFields.contains(key) || ModuleRegistry.shared.fields.contains { $0.key == key }
+        actionFields.contains(key) || ModuleRegistry.shared.fields.contains { $0.key == key } || heldField(key) != nil
+    }
+
+    /// True for a field that holds an action of its own: a display's `ok`.
+    public static func holdsAction(_ key: String) -> Bool {
+        ModuleRegistry.shared.fields.contains { $0.key == key && $0.kind == .action }
+    }
+
+    /// `ok.text` → ("ok", "text"), when `ok` holds an action.
+    public static func heldField(_ key: String) -> (holder: String, field: String)? {
+        let parts = key.split(separator: ".", maxSplits: 1).map(String.init)
+        guard parts.count == 2, holdsAction(parts[0]) else { return nil }
+        return (parts[0], parts[1])
+    }
+
+    /// A type, from a keyword or its full name: `Copy` → clipboard.copy.
+    /// Nil for one that nothing here runs.
+    public static func knownType(_ word: String) -> String? {
+        let text = word.trimmingCharacters(in: .whitespaces)
+        if let type = actionType(forKeyword: text) { return type }
+        if builtInTypes.contains(text) || ModuleRegistry.shared.actionType(text) != nil { return text }
+        return nil
     }
 
     /// The type a keyword names, built in or from a module.
@@ -323,18 +352,29 @@ private struct Compiler {
             case (.pair(_, let value), .colour(let valid)):
                 if valid { colour = value } else { note(.error, "“\(value)” isn't a colour; use rrggbb.") }
             case (.pair(let key, let value), .field):
+                // `ok.url`: a field of the action run on OK, typed and checked as `url`.
+                let held = OutlineCompiler.heldField(key)
+                let fieldKey = held?.field ?? key
                 // Blocks: allowed here, and readable?
                 if value.contains("{{#"), let block = TemplateBlocks.names(in: value).first {
-                    if ActionPlanner.blockFreeFields.contains(key) {
+                    if ActionPlanner.blockFreeFields.contains(fieldKey) {
                         note(.error, "{{#\(block)}} can't go in \(key): a reply there could change where the action goes.")
                     }
                     for problem in TemplateBlocks.problems(in: value) { note(.warning, problem) }
                 }
                 if key == "type" {
                     declare(value)
-                } else if OutlineCompiler.isNumericField(key), let number = Double(value) {
+                } else if OutlineCompiler.holdsAction(key) || (held != nil && fieldKey == "type") {
+                    // `ok: Copy` — the action run on OK, by keyword or full name.
+                    let holder = held?.holder ?? key
+                    if let type = OutlineCompiler.knownType(value) {
+                        set(holder + ".type", .string(type))
+                    } else {
+                        note(.warning, "Nothing here runs “\(value)” actions; \(holder) does nothing.")
+                    }
+                } else if OutlineCompiler.isNumericField(fieldKey), let number = Double(value) {
                     set(key, .number(number))
-                } else if OutlineCompiler.isBooleanField(key) {
+                } else if OutlineCompiler.isBooleanField(fieldKey) {
                     set(key, .bool(["true", "yes", "on", "1"].contains(value.lowercased())))
                 } else {
                     set(key, .string(value))

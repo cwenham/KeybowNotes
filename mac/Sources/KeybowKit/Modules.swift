@@ -230,13 +230,20 @@ public struct ModuleActionType: Sendable {
     /// An SF Symbol for the overlay.
     public let symbol: String
     public let fields: [ModuleField]
+    /// Takes a template or text, like Copy: the planner fills it in whole —
+    /// the `template` file, else `text`, else the label — trims it, and hands
+    /// it over as the request's `text`. Values placed into an HTML document
+    /// are escaped as HTML.
+    public let takesText: Bool
 
-    public init(type: String, title: String, keywords: [String], symbol: String, fields: [ModuleField]) {
+    public init(type: String, title: String, keywords: [String], symbol: String, fields: [ModuleField],
+                takesText: Bool = false) {
         self.type = type
         self.title = title
         self.keywords = keywords
         self.symbol = symbol
         self.fields = fields
+        self.takesText = takesText
     }
 }
 
@@ -247,6 +254,11 @@ public struct ModuleField: Sendable {
         case flag
         /// One of a few words, offered as a menu.
         case choice([String])
+        /// An action of its own, run on an outcome — a display's OK: written
+        /// `ok: Copy` for its type and `ok.text: …` for its fields, and chosen
+        /// in the editor like any action. The module never sees it; it names
+        /// it in its outcome's `followUp`, and the host runs it.
+        case action
     }
 
     public let key: String
@@ -331,6 +343,41 @@ public struct ModuleStatus: Equatable, Sendable {
     }
 }
 
+/// Something for the host to put on screen, above everything, until it's
+/// dismissed: text in a panel sized to fit it, perhaps with buttons.
+public struct ModuleDisplay: Equatable, Sendable {
+    public enum Content: Equatable, Sendable {
+        case markdown(String)
+        /// A document of its own, shown as a web page would be.
+        case html(String)
+    }
+
+    public enum Button: String, CaseIterable, Sendable {
+        case ok, cancel
+    }
+
+    /// How it went away.
+    public enum Result: Equatable, Sendable {
+        case ok
+        /// The Cancel button, or Esc when there is one.
+        case cancel
+        /// Faded, closed, Esc without a Cancel button, or replaced by another.
+        case dismissed
+    }
+
+    public let content: Content
+    /// None: it fades by itself.
+    public let buttons: [Button]
+    /// Seconds before it fades, when it has no buttons.
+    public let fadeAfter: TimeInterval
+
+    public init(content: Content, buttons: [Button] = [], fadeAfter: TimeInterval = 10) {
+        self.content = content
+        self.buttons = buttons
+        self.fadeAfter = fadeAfter
+    }
+}
+
 /// What the host offers a module.
 public protocol ModuleHost: AnyObject, Sendable {
     /// Saved between runs of the app, per module: in the app, the module's
@@ -354,6 +401,9 @@ public protocol ModuleHost: AnyObject, Sendable {
     /// own, like Data Sources' API keys. Nil removes it. Says why, if it
     /// couldn't.
     func setSecret(_ value: String?, _ key: String, for module: String) -> String?
+    /// Shows something until it's dismissed, and says how it was. One at a
+    /// time: a new one replaces the last, which is then `.dismissed`.
+    func display(_ display: ModuleDisplay) async -> ModuleDisplay.Result
 }
 
 extension ModuleHost {
@@ -363,6 +413,7 @@ extension ModuleHost {
     public func setSecret(_ value: String?, _ key: String, for module: String) -> String? {
         "This host can't keep secrets"
     }
+    public func display(_ display: ModuleDisplay) async -> ModuleDisplay.Result { .dismissed }
 }
 
 /// Keeps modules' state in memory only: for tools and tests, where nothing
@@ -377,6 +428,17 @@ public final class MemoryModuleHost: ModuleHost, @unchecked Sendable {
     }
 
     public var templatesFolder: URL? { lock.withLock { folder } }
+
+    /// What was shown, last first; and how the next is dismissed.
+    public private(set) var displayed: [ModuleDisplay] = []
+    public var displayResult: ModuleDisplay.Result = .dismissed
+
+    public func display(_ display: ModuleDisplay) async -> ModuleDisplay.Result {
+        lock.withLock {
+            displayed.insert(display, at: 0)
+            return displayResult
+        }
+    }
 
     public func load(_ key: String, for module: String) -> Data? {
         lock.withLock { stored["\(module).\(key)"] }

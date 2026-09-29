@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var store: ConfigStore
     private var driver: SelectionDriver?
     private var overlay: OverlayController?
+    private let displays = DisplayController()
     private var statusItem: NSStatusItem?
     private var settingsWindow: SettingsWindowController?
     private var editorWindow: EditorWindowController?
@@ -78,6 +79,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         settings.onChange = { [weak self] change in self?.settingsChanged(change) }
         Modules.host.onChange = { [weak self] in self?.refreshModules() }
         Modules.host.templatesFolder = store.templatesDirectory
+        displays.screen = { [weak overlay] in overlay?.screen ?? NSScreen.main ?? NSScreen.screens[0] }
+        displays.onShow = { [weak overlay] in overlay?.stepAside() }
+        Modules.host.onDisplay = { [displays] display in await displays.show(display) }
         refreshModules()
 
         Log.info("KeybowNotes \(versionDescription) running with \(store.url.path)\(dryRun ? " (dry run)" : "")")
@@ -271,7 +275,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// `chosenAt` is when the key was pressed: the action's "now", so a
     /// stopwatch starts on the press, not when the overlay has caught up.
-    private func fire(_ selection: ResolvedSelection, chosenAt: Date = Date()) {
+    /// `values` join what the action can use: a display's `{{displayed}}`,
+    /// for the action its OK runs.
+    private func fire(_ selection: ResolvedSelection, chosenAt: Date = Date(), values: [String: String] = [:]) {
         guard let overlay else { return }
         let path = selection.pathDescription
 
@@ -283,7 +289,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         var context = ActionContext(
             templatesDirectory: store.templatesDirectory,
             now: chosenAt,
-            environment: environment(),
+            environment: environment().merging(values) { _, given in given },
             defaultCalendarID: settings.defaultCalendarID,
             defaultReminderListID: settings.defaultReminderListID)
 
@@ -434,7 +440,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // The system log is kept on disk and readable by any admin, so the
         // selected text, the clipboard and anything copied stay out of it.
         var isPrivate = !ActionPlanner.placeholders(for: selection, context: context)
-            .isDisjoint(with: ["selection", "clipboard"])
+            .isDisjoint(with: ["selection", "clipboard", "displayed"])
 
         let planned: PlannedAction
         do {
@@ -486,8 +492,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 + (isPrivate ? " (details not logged)" : ": \(outcome.message)" + (outcome.detail.map { " — \($0)" } ?? ""))
             outcome.succeeded ? Log.info(line) : Log.error(line)
             for warning in planned.warnings where !isPrivate { Log.info("  warning: \(warning)") }
-            overlay.showFinished(outcome, summary: summary, warnings: planned.warnings)
+            if let next = outcome.followUp {
+                self.follow(next, of: selection, values: outcome.values)
+            } else if !outcome.isQuiet {
+                overlay.showFinished(outcome, summary: summary, warnings: planned.warnings)
+            }
         }
+    }
+
+    /// Runs the node's own `ok` or `cancel` action, as though its key had just
+    /// been pressed — or nothing, when it has none.
+    private func follow(_ key: String, of selection: ResolvedSelection, values: [String: String]) {
+        guard let next = selection.action?.nestedAction(key) else { return }
+        Log.info("  then \(key): \(next.type)")
+        var fields = next.fields
+        // Copy, Insert and the like, given no text: what was shown.
+        if fields["text"] == nil, fields["template"] == nil { fields["text"] = .string("{{displayed}}") }
+        fire(selection.with(action: ActionSpec(type: next.type, fields: fields)), values: values)
     }
 
     /// The first event or reminder asks for access. This app never comes to the

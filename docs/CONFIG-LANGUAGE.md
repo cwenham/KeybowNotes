@@ -144,6 +144,7 @@ An annotation is either a **word** or a **pair**.
 | `Maps` | search in Maps | `"type": "maps.search"` |
 | `Music` | play a playlist or album in Music | `"type": "music.play"` |
 | `Stopwatch` | KeybowNotes' own stopwatch (a module) | `"type": "stopwatch"` |
+| `Display`, `Show` | show text on screen (a module) | `"type": "display"` |
 | `append` | add to a running note rather than make a new one | `"type": "notes.append"` |
 | `new`, `create` | make a new note | `"type": "notes.create"` |
 | `something.md` | a template (§8) | `"template": "something.md"` |
@@ -742,6 +743,65 @@ copying something incomplete.
    1. Rudy Rudolph
 ```
 
+### `display` — show text on screen
+
+A module. Shows a template or text in a panel above everything, sized to fit
+it — for a quote, today's notes, a forecast, anything worth a glance without
+opening an app.
+
+| Field | |
+|---|---|
+| `template` | A file to show, filled in when the key is pressed. |
+| `text` | What to show, when there's no template. With neither, the leaf's label. |
+| `button` | `ok`, `cancel` or `okCancel`: buttons that close it. Without one, it fades by itself. |
+| `fade` | How long it stays when it has no buttons: `15 sec`, `2 min`, or a number of seconds. Without it, long enough to read — about three words a second, from six seconds to a minute. |
+| `ok`, `cancel` | An action to run when that button is chosen (below). |
+
+```
+1. Glance [Display]
+   1. Quote [text: "{{quote file=quotes.md}}", fade: 20 sec]
+   2. Today [today.md]
+   3. Status [status.html, button: ok]
+2. Idea [Display, text: "{{#ai}}One idea for {{selection}}{{/ai}}", button: okCancel, ok: Copy]
+```
+
+- **Markdown**, unless it's an **HTML document** — text that begins
+  `<!DOCTYPE html>`, `<html>`, an XML declaration (`<?xml … encoding=…?>`) or a
+  `<meta>` tag — which is shown as a web page, in its own styles, over the
+  panel's dark background. What's shown is trimmed of blank lines and spaces
+  first. Values placed into an HTML document are escaped, so a quote with a `<`
+  or `&` in it stays text; Markdown takes them as written.
+- **Scripts don't run.** The text can hold values from outside — the selection,
+  an API's response, Claude's reply — so a page's JavaScript is off.
+- **Links open in your default browser**, when you click them. Nothing else
+  makes the panel go anywhere.
+- **Esc closes it**, from whatever app you're in (this needs the Accessibility
+  access that `{{selection}}` and Insert use), and so does its ✕ button. With a
+  Cancel button, Esc is Cancel. It never takes the focus from what you're
+  doing; click it first to use Return for OK.
+- **One at a time:** a new display replaces the last.
+- **Its size** follows the text: as wide as the longest line, up to 620 points
+  (or half the screen), and as tall as it needs, up to 70% of the screen — and
+  it scrolls beyond that. It appears on the overlay's screen, above the middle.
+
+**On OK and Cancel**, the display can run an action of its own, as though its
+key had been pressed. Name its type with the button's name — by keyword, like
+`[Copy]`, or in full — and give its fields after a dot:
+
+```
+Idea [Display, text: "…", button: okCancel,
+      ok: Copy,
+      cancel: Notes, cancel.folder: Rejected, cancel.title: "Not this: {{displayed}}"]
+```
+
+`{{displayed}}` is the text that was shown, as it reads — an HTML document
+without its tags. An action that takes text — Copy, Insert, Direct Insert — and
+is given none uses it, so `ok: Copy` copies what was shown. The action runs for
+the same key, so `{{leaf}}` and the rest are what they were. Closing it any
+other way — ✕, Esc without a Cancel button, fading, being replaced — runs
+nothing. In the tree editor, *When OK is chosen* and *When Cancel is chosen*
+appear once the buttons are set, each with its own Type menu and fields.
+
 ---
 
 ## 6. Values: `{{placeholders}}`
@@ -1103,7 +1163,7 @@ the app; edit it only while KeybowNotes isn't running.
 **Outline words:** `Notes`, `Calendar`, `Reminders`, `Messages`, `Mail`, `Call`,
 `FaceTime`, `Link`, `Browser`, `Copy`, `Clipboard`, `Insert`, `Paste`, `Direct Insert`, `Type`,
 `Timer`, `Maps`, `Music`,
-`Stopwatch` (and any other module's keywords),
+`Stopwatch`, `Display`, `Show` (and any other module's keywords),
 `append`, `new`, `create`, `… alert`, `….md`, `@…`, and the app names the
 compiler knows.
 
@@ -1116,11 +1176,11 @@ action fields listed in §2.
 **Action types:** `notes.create`, `notes.append`, `calendar.createEvent`,
 `reminders.create`, `messages.compose`, `mail.compose`, `phone.call`, `app.open`,
 `url.open`, `clipboard.copy`, `text.insert`, `text.insertDirect`, `clock.timer`, `maps.search`, `music.play`, `shortcut`,
-and from modules, `stopwatch`.
+and from modules, `stopwatch` and `display`.
 
 **Computed values:** `leaf`, `parent`, `level1`–`level4`, `path`, `folderPath`,
 `parentPath`, `tree`, `contact.*`, `project.*`, `selection`, `clipboard`, `frontApp`,
-`stopwatch`, `stopwatch.*`, `api.*`, `location`, `location.*`, `quote`, `date`,
+`stopwatch`, `stopwatch.*`, `api.*`, `location`, `location.*`, `quote`, `displayed`, `date`,
 `time`, `datetime`, `weekday`, `isoWeek`, and `when` by convention.
 
 **Tree names:** `main`, `row2`, `row3`, `bottom`.

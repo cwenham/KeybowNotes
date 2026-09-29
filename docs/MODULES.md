@@ -27,6 +27,9 @@ bar or the outline directly.
 | **Fetch values** when an action needs them — `{{api.weather}}`, `{{quote file="q.md"}}` | `manifest.fetches`, `fetch(_:params:now:)`, `valuesNeeded(toFetch:)`, `standIn(forValue:)`, `fetchSubject(for:)` |
 | Read files the tree names, beside its templates | `ModuleHost.templatesFolder` |
 | Add **settings** to the Settings window, secrets kept in the Keychain | `manifest.settings`, `ModuleHost.setting` / `secret` |
+| **Show something on screen** until it's dismissed, with OK and Cancel | `ModuleHost.display(_:)` |
+| Take a **template or text** whole, like Copy | `ModuleActionType.takesText` |
+| Have the host **run a follow-up action** of the node's own — a display's OK | a field of kind `.action`; `ActionOutcome.then(_:values:)` |
 | Keep secrets of its own making in the Keychain | `ModuleHost.setSecret` |
 | Say its status changed on its own | `ModuleHost.statusChanged()` |
 
@@ -41,6 +44,7 @@ KeybowAI             a module: {{#ai}} blocks, and Claude for other modules
 KeybowData           a module: data sources, using KeybowAI to write rules
 KeybowLocation       a module: where the Mac is, from Location Services
 KeybowQuotes         a module: {{quote}}, portions of a file
+KeybowDisplay        a module: the display action
 KeybowModules        the list of built-in modules
 KeybowNotesApp       registers them at launch; shows their status
 keybow               registers them too, so their keywords compile
@@ -227,6 +231,31 @@ dependency at all: another module's values are in every action's placeholders.
   `NSLocationUsageDescription` in its Info.plist; it isn't signed with the
   hardened runtime, which would also need the
   `com.apple.security.personal-information.location` entitlement.
+
+## Display
+
+`mac/Sources/KeybowDisplay/DisplayModule.swift`, action type `display`,
+keywords `Display` and `Show`.
+
+- `takesText`: the planner hands it the template, text or label whole, filled
+  in and trimmed, as `text` — with values HTML-escaped when the text is an HTML
+  document (`NotesHTML.isDocument`).
+- `run` asks the host to `display` it — Markdown or an HTML document, with its
+  buttons and a time to fade — and waits. OK or Cancel returns
+  `.then("ok")` or `.then("cancel")`, with `displayed`; anything else is
+  `.quiet`, so the overlay doesn't report a display that's been and gone.
+- `ok` and `cancel` are fields of kind `.action`. The outline writes one as
+  `ok: Copy` and `ok.text: …`, compiled to `"ok": {"type": "clipboard.copy",
+  "text": …}`; the module never sees it. The host finds it with
+  `ActionSpec.nestedAction("ok")` and fires it for the same selection
+  (`ResolvedSelection.with(action:)`), adding the outcome's values — `{{displayed}}`,
+  and `text: {{displayed}}` when it has no text or template. The editor draws a
+  Type menu and fields for each, shown once the buttons include it.
+- In the app, `DisplayController` draws it: a non-activating HUD panel with a
+  WebKit view, scripts off, links out to the browser, sized by measuring the
+  page (without a scroll bar, which would take width), Esc watched with a
+  global key monitor. A development build can answer OK or Cancel by itself
+  with `KEYBOW_DEBUG_DISPLAY_ANSWER`.
 
 ## Quotes
 

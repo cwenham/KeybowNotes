@@ -49,6 +49,7 @@ private final class KeyedHost: ModuleHost, @unchecked Sendable {
     func load(_ key: String, for module: String) -> Data? { host.load(key, for: module) }
     func save(_ data: Data?, as key: String, for module: String) { host.save(data, as: key, for: module) }
     var templatesFolder: URL? { host.templatesFolder }
+    func display(_ display: ModuleDisplay) async -> ModuleDisplay.Result { await host.display(display) }
     func statusChanged() { host.statusChanged() }
     func copy(_ text: String) { host.copy(text) }
     func setting(_ key: String, for module: String) -> String? { host.setting(key, for: module) }
@@ -113,6 +114,18 @@ final class AppModuleHost: ModuleHost, @unchecked Sendable {
 
     func save(_ data: Data?, as key: String, for module: String) {
         if let problem = state.save(data, as: key, for: module) { Log.error("state: \(problem)") }
+    }
+
+    /// Set by the app: puts a module's display on screen.
+    var onDisplay: (@MainActor (ModuleDisplay) async -> ModuleDisplay.Result)? {
+        get { lock.withLock { displayer } }
+        set { lock.withLock { displayer = newValue } }
+    }
+    private var displayer: (@MainActor (ModuleDisplay) async -> ModuleDisplay.Result)?
+
+    func display(_ display: ModuleDisplay) async -> ModuleDisplay.Result {
+        guard let show = onDisplay else { return .dismissed }
+        return await show(display)
     }
 
     /// Set by the app from the tree in use.

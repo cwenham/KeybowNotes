@@ -386,14 +386,15 @@ private struct Planner {
             guard let module = ModuleRegistry.shared.module(handling: action.type) else {
                 throw ActionPlanError.unsupported(action.type)
             }
-            let request = moduleRequest()
+            let request = try moduleRequest()
             if let problem = module.problem(with: request) { throw ActionPlanError.module(problem) }
             return .module(request)
         }
     }
 
-    /// Every text field, with its placeholders filled in.
-    private mutating func moduleRequest() -> ModuleRequest {
+    /// Every text field, with its placeholders filled in — and for a type
+    /// that takes text, that text whole, as `text`.
+    private mutating func moduleRequest() throws -> ModuleRequest {
         var fields: [String: String] = [:]
         for (key, value) in action.fields {
             if case .string = value {
@@ -402,7 +403,29 @@ private struct Planner {
                 fields[key] = text
             }
         }
+        if ModuleRegistry.shared.actionType(action.type)?.takesText == true {
+            fields["text"] = try wholeText()
+        }
         return ModuleRequest(type: action.type, fields: fields, labels: selection.labels, time: context.now)
+    }
+
+    /// The template file, else `text`, else the label, filled in and trimmed.
+    /// Values placed into an HTML document are escaped, so "A & B" stays text.
+    private mutating func wholeText() throws -> String {
+        var raw = selection.labels.last ?? ""
+        if let name = action.string("template"), !name.isEmpty {
+            guard let url = Self.templateURL(name, in: context.templatesDirectory) else {
+                throw ActionPlanError.templateNotFound(name)
+            }
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+                throw ActionPlanError.templateNotFound(url.path)
+            }
+            raw = text
+        } else if let text = action.string("text"), !text.isEmpty {
+            raw = text
+        }
+        let encode: ((String) -> String)? = NotesHTML.isDocument(raw) ? NotesHTML.escape : nil
+        return expanded(raw, encode: encode).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - Values

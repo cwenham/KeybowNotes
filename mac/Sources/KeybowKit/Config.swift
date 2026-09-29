@@ -54,6 +54,28 @@ public struct ActionSpec: Equatable, Sendable {
     public func string(_ key: String) -> String? {
         fields[key]?.stringValue
     }
+
+    /// An action held in one of this one's fields — a display's `ok` — or nil
+    /// when there's none, or it names no type. `find.byName` inside it becomes
+    /// `find: {byName}`, as it would be in an action of its own.
+    public func nestedAction(_ key: String) -> ActionSpec? {
+        guard case .object(let object)? = fields[key], let type = object["type"]?.stringValue, !type.isEmpty else {
+            return nil
+        }
+        var nested: [String: JSONValue] = [:]
+        for (field, value) in object where field != "type" {
+            let parts = field.split(separator: ".", maxSplits: 1).map(String.init)
+            if parts.count == 2 {
+                var inner: [String: JSONValue] = [:]
+                if case .object(let existing)? = nested[parts[0]] { inner = existing }
+                inner[parts[1]] = value
+                nested[parts[0]] = .object(inner)
+            } else {
+                nested[field] = value
+            }
+        }
+        return ActionSpec(type: type, fields: nested)
+    }
 }
 
 /// The four trees the keypad can hold. The first key pressed decides which one
@@ -338,6 +360,11 @@ public struct ResolvedSelection: Equatable, @unchecked Sendable {
 
     /// "Work / Meeting / 1:1"
     public var pathDescription: String { labels.joined(separator: " / ") }
+
+    /// The same choice, doing something else: a display's follow-up.
+    public func with(action: ActionSpec) -> ResolvedSelection {
+        ResolvedSelection(tree: tree, path: path, labels: labels, params: params, action: action, node: node)
+    }
 }
 
 public enum ConfigError: Error, CustomStringConvertible {

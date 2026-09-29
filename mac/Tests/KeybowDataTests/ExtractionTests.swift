@@ -93,6 +93,15 @@ final class ExtractionTests: XCTestCase {
         XCTAssertThrowsError(try ExtractionRule(kind: .xPath, expression: "//span[").value(in: page))
     }
 
+    func testHTMLWithoutACharsetKeepsItsCharacters() throws {
+        let page = Data("<html><body><p id='t'>Café — 12 °C</p></body></html>".utf8)
+        XCTAssertEqual(try ExtractionRule(kind: .xPath, expression: "//p[@id='t']").value(in: page, contentType: "text/html"),
+                       "Café — 12 °C")
+        let latin1 = try XCTUnwrap("<html><body><p id='t'>Café</p></body></html>".data(using: .isoLatin1))
+        XCTAssertEqual(try ExtractionRule(kind: .xPath, expression: "//p[@id='t']")
+            .value(in: latin1, contentType: "text/html; charset=ISO-8859-1"), "Café", "the charset it names")
+    }
+
     func testRegexTakesTheFirstGroupOrTheWholeMatch() throws {
         let text = Data("Next train: 09:42 to London. Following: 10:15.".utf8)
         XCTAssertEqual(try ExtractionRule(kind: .regex, expression: #"Next train: (\d\d:\d\d)"#).value(in: text), "09:42")

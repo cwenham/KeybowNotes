@@ -41,7 +41,11 @@ public struct ExtractionRule: Codable, Equatable, Hashable, Sendable {
             let html = (contentType ?? "").contains("html") || Self.looksLikeHTML(body)
             let document: XMLDocument
             do {
-                document = try XMLDocument(data: body, options: html ? [.documentTidyHTML] : [])
+                // HTML is tidied from its text, not its bytes: tidying bytes
+                // guesses their encoding, and without a charset it guesses wrong.
+                document = html
+                    ? try XMLDocument(xmlString: Self.text(of: body, contentType: contentType), options: [.documentTidyHTML])
+                    : try XMLDocument(data: body, options: [])
             } catch {
                 throw ExtractionError("The response isn't XML or HTML that can be read: \(error.localizedDescription)")
             }
@@ -74,6 +78,29 @@ public struct ExtractionRule: Codable, Equatable, Hashable, Sendable {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: ", ")
+    }
+
+    /// The body as text, in the charset its Content-Type names, else UTF-8.
+    static func text(of body: Data, contentType: String?) -> String {
+        if let charset = charset(in: contentType) {
+            let encoding = CFStringConvertIANACharSetNameToEncoding(charset as CFString)
+            if encoding != kCFStringEncodingInvalidId,
+               let text = String(data: body, encoding: String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(encoding))) {
+                return text
+            }
+        }
+        return String(data: body, encoding: .utf8) ?? String(decoding: body, as: UTF8.self)
+    }
+
+    /// "text/html; charset=ISO-8859-1" → "ISO-8859-1".
+    static func charset(in contentType: String?) -> String? {
+        for part in (contentType ?? "").split(separator: ";") {
+            let pair = part.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            if pair.count == 2, pair[0].lowercased() == "charset" {
+                return pair[1].trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            }
+        }
+        return nil
     }
 
     static func looksLikeHTML(_ body: Data) -> Bool {

@@ -61,26 +61,120 @@ final class DataModuleTests: XCTestCase {
 
     func testARuleThatStopsWorkingIsMarkedUntilItWorksAgain() async throws {
         let transport = StubDataTransport()
-        let data = module([weather()], transport: transport)
+        var fixed = weather()
+        fixed.url = "https://api.example.com/current/london"
+        fixed.sampleValues = [:]
+        let data = module([fixed], transport: transport)
         transport.body = Data(#"{"now": {"temperature": 15}}"#.utf8)
-        await assertModuleError({ try await data.fetch(["api.weather"], params: ["city": "York"], now: self.now) },
+        await assertModuleError({ try await data.fetch(["api.weather"], params: [:], now: self.now) },
                                 "“weather” didn't find its value",
                                 detail: "The API may have changed. Open Data Sources in the menu bar and use Find It Again.")
         XCTAssertEqual(data.source(named: "weather")?.broken, "Its rule found nothing in the latest response.")
         XCTAssertEqual(data.menuItems(now: now).map(\.title), ["Edit Data Sources…", "⚠︎ weather needs fixing"])
 
         transport.body = Data("<html>Service unavailable</html>".utf8)
-        await assertModuleError({ try await data.fetch(["api.weather"], params: ["city": "York"], now: self.now) },
+        await assertModuleError({ try await data.fetch(["api.weather"], params: [:], now: self.now) },
                                 "“weather” didn't find its value")
         XCTAssertEqual(data.source(named: "weather")?.broken, "The response isn't JSON, so a JSONPath can't read it.")
 
         transport.body = Data(#"{"current": {"temp_c": 16}}"#.utf8)
         let value = try await data.test(try XCTUnwrap(data.source(named: "weather")))
         XCTAssertEqual(value, "16")
-        XCTAssertEqual(transport.requests.last?.url?.query, "city=London", "a test uses the sample values")
         XCTAssertNil(data.source(named: "weather")?.broken)
         XCTAssertEqual(data.source(named: "weather")?.lastValue, "16")
         XCTAssertEqual(data.menuItems(now: now).map(\.title), ["Edit Data Sources…"])
+    }
+
+    func testASearchThatFindsNothingIsntABrokenRule() async throws {
+        let transport = StubDataTransport()
+        let data = module([weather()], transport: transport)       // its URL takes {{city}}
+        transport.body = Data(#"{"current": {}}"#.utf8)
+        await assertModuleError({ try await data.fetch(["api.weather city={{selection}}"], params: ["selection": "Atlantis"],
+                                                       now: self.now) },
+                                "“weather” found nothing",
+                                detail: "Nothing for city “Atlantis”. If there should be, the API may have changed: "
+                                    + "try Test Now in Data Sources.")
+        XCTAssertNil(data.source(named: "weather")?.broken, "a place with no weather isn't a broken rule")
+
+        // A response it can't read at all still is.
+        transport.body = Data("<html>Service unavailable</html>".utf8)
+        await assertModuleError({ try await data.fetch(["api.weather"], params: ["city": "York"], now: self.now) },
+                                "“weather” didn't find its value")
+        XCTAssertNotNil(data.source(named: "weather")?.broken)
+
+        // And so is nothing for the sample's values, which should find something.
+        transport.body = Data(#"{"current": {"temp_c": 9}}"#.utf8)
+        _ = try await data.test(try XCTUnwrap(data.source(named: "weather")))
+        transport.body = Data(#"{"current": {}}"#.utf8)
+        await assertModuleError({ try await data.test(try XCTUnwrap(data.source(named: "weather"))) },
+                                "“weather” didn't find its value")
+        XCTAssertEqual(data.source(named: "weather")?.broken, "Its rule found nothing in the latest response.")
+        XCTAssertEqual(transport.requests.last?.url?.query, "city=London", "a test uses the sample values")
+    }
+
+    // MARK: - Values given where it's used
+
+    func testAnAttributeGivesTheURLItsValue() async throws {
+        let transport = StubDataTransport()
+        let data = module([weather()], transport: transport)
+        let name = "api.weather city={{selection}}"
+        let values = try await data.fetch([name], params: ["city": "York", "selection": "Leeds"], now: now)
+        XCTAssertEqual(values, [name: "14.2"])
+        XCTAssertEqual(transport.requests.last?.url?.query, "city=Leeds", "over the tree's own city")
+        XCTAssertEqual(data.valuesNeeded(toFetch: [name]), ["selection"], "not {{city}}: the attribute gives it")
+        XCTAssertEqual(data.valuesNeeded(toFetch: ["api.weather"]), ["city"])
+        XCTAssertEqual(data.standIn(forValue: name), "‹weather›")
+        XCTAssertEqual(data.standIn(forValue: "api.weather.raw city='{{clipboard}}'"), "‹weather response›")
+    }
+
+    func testEachDistinctURLIsFetchedOnce() async throws {
+        let transport = StubDataTransport()
+        let data = module([weather()], transport: transport)
+        let names = ["api.weather city={{selection}}", "api.weather city={{clipboard}}",
+                     "api.weather.raw city='{{selection}}'", "api.weather"]
+        let values = try await data.fetch(names, params: ["city": "York", "selection": "Leeds", "clipboard": "Hull"], now: now)
+        XCTAssertEqual(values.count, 4)
+        XCTAssertEqual(Set(transport.requests.compactMap { $0.url?.query }), ["city=Leeds", "city=Hull", "city=York"])
+        XCTAssertEqual(transport.requests.count, 3, "the value and the response for Leeds are one fetch")
+    }
+
+    func testAttributesThatCantBeUsedSayWhy() async {
+        let data = module([weather()])
+        await assertModuleError({ try await data.fetch(["api.weather town=Leeds"], params: [:], now: self.now) },
+                                "“weather”'s URL has no {{town}}", detail: "It uses {{city}}.")
+        await assertModuleError({ try await data.fetch(["api.weather city={{selection}}"], params: [:], now: self.now) },
+                                "“weather” needs a value for {{city}}",
+                                detail: "It's given {{selection}}, and nothing is selected.")
+        await assertModuleError({ try await data.fetch(["api.weather city={{topic}}"], params: [:], now: self.now) },
+                                "“weather” needs a value for {{city}}", detail: "It's given {{topic}}, which has no value.")
+    }
+
+    func testFromTheTreeThroughToTheAction() async throws {
+        let registry = ModuleRegistry()
+        let transport = StubDataTransport()
+        let data = DataModule(fetcher: DataFetcher(transport: transport))
+        data.openWindow = nil
+        registry.register(data, host: MemoryModuleHost())
+        var wiki = DataSource(name: "wikipedia", url: "https://en.wikipedia.org/w/api.php?list=search&srsearch={{term}}")
+        wiki.rule = ExtractionRule(kind: .jsonPath, expression: "$.current.temp_c")
+        data.save(wiki)
+
+        let (document, _) = OutlineParser.parse("""
+            1. Literal [Copy, text: "{{api.wikipedia}}", term: Ada Lovelace]
+            2. Selected [Copy, text: "{{api.wikipedia term={{selection}}}}"]
+            3. Quoted [Copy, text: "{{api.wikipedia term='{{clipboard}}'}}"]
+            """)
+        let config = try XCTUnwrap(OutlineCompiler.compile(document, locateApp: { _ in nil }).config)
+        for (path, query) in [(0, "Ada%20Lovelace"), (1, "Grace%20Hopper"), (2, "Alan%20Turing")] {
+            let selection = try XCTUnwrap(config.resolve(path: [path]))
+            var context = ActionContext(templatesDirectory: nil)
+            context.environment = ["selection": "Grace Hopper", "clipboard": "Alan Turing"]
+            let fetched = registry.fetchedNames(in: ActionPlanner.placeholders(for: selection, context: context))
+            let values = try await registry.fetch(fetched, params: ActionPlanner.values(for: selection, context: context), now: now)
+            context.environment.merge(values) { _, new in new }
+            XCTAssertEqual(try ActionPlanner.plan(selection, config: config, context: context).plan, .copyToClipboard("14.2"))
+            XCTAssertEqual(transport.requests.last?.url?.query, "list=search&srsearch=" + query)
+        }
     }
 
     func testSourcesAndKeysAreKept() async throws {

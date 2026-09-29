@@ -102,53 +102,103 @@ public final class DataModule: KeybowModule, @unchecked Sendable {
     @discardableResult
     public func test(_ source: DataSource) async throws -> String {
         let fetched = try await sample(source)
-        return try extract(source, from: fetched)
+        // The sample's values are ones that should find something.
+        return try extract(source, from: fetched, emptyIsBroken: true)
     }
 
     // MARK: - Fetching values
 
     public func fetch(_ names: [String], params: [String: String], now: Date) async throws -> [String: String] {
-        var wanted: [(name: String, source: DataSource, raw: Bool)] = []
+        /// One use of a source: its values, and which fetch answers it.
+        struct Use {
+            let name: String
+            let source: DataSource
+            let raw: Bool
+            let given: [String: String]
+            /// The same source with the same values is fetched once.
+            var fetch: String { source.id.uuidString + given.sorted { $0.key < $1.key }.map { " \($0.key)=\($0.value)" }.joined() }
+        }
+        var uses: [Use] = []
         for name in names {
-            let (sourceName, raw) = Self.parse(name)
+            let (sourceName, raw, attributes) = Self.parse(name)
             guard let source = source(named: sourceName) else {
                 throw ModuleError("There's no data source called “\(sourceName)”", "Add it in Data Sources, in the menu bar.")
             }
             if !raw, source.rule == nil {
                 throw ModuleError("“\(source.name)” has no rule yet", "Open Data Sources and use Find It.")
             }
-            wanted.append((name, source, raw))
+            uses.append(Use(name: name, source: source, raw: raw,
+                            given: try Self.values(of: attributes, for: source, params: params, now: now)))
         }
 
-        // Each source fetched once, all at once.
-        let sources = Dictionary(wanted.map { ($0.source.id, $0.source) }, uniquingKeysWith: { first, _ in first })
-        let responses = try await withThrowingTaskGroup(of: (UUID, Fetched).self) { group in
-            for source in sources.values {
-                let key = key(for: source.id)
-                group.addTask { [fetcher] in (source.id, try await fetcher.fetch(source, params: params, key: key, now: now)) }
+        // All at once, each distinct URL once.
+        let responses = try await withThrowingTaskGroup(of: (String, Fetched).self) { group in
+            var started = Set<String>()
+            for use in uses where started.insert(use.fetch).inserted {
+                let key = key(for: use.source.id)
+                let values = params.merging(use.given) { _, given in given }
+                group.addTask { [fetcher] in (use.fetch, try await fetcher.fetch(use.source, params: values, key: key, now: now)) }
             }
-            var responses: [UUID: Fetched] = [:]
-            for try await (id, fetched) in group { responses[id] = fetched }
+            var responses: [String: Fetched] = [:]
+            for try await (fetch, fetched) in group { responses[fetch] = fetched }
             return responses
         }
 
         var values: [String: String] = [:]
-        for item in wanted {
-            guard let fetched = responses[item.source.id] else { continue }
-            values[item.name] = item.raw ? fetched.text : try extract(item.source, from: fetched)
+        for use in uses {
+            guard let fetched = responses[use.fetch] else { continue }
+            values[use.name] = use.raw ? fetched.text
+                : try extract(use.source, from: fetched, given: use.given, emptyIsBroken: use.source.urlNames.isEmpty)
+        }
+        return values
+    }
+
+    /// What a use's attributes give its URL — `term={{selection}}`, filled in —
+    /// each for a placeholder the URL has.
+    static func values(of attributes: [String: String], for source: DataSource, params: [String: String],
+                       now: Date) throws -> [String: String] {
+        var values: [String: String] = [:]
+        for (key, text) in attributes.sorted(by: { $0.key < $1.key }) {
+            guard source.urlNames.contains(key) else {
+                let names = source.urlNames.sorted().map { "{{\($0)}}" }
+                throw ModuleError("“\(source.name)”'s URL has no {{\(key)}}",
+                                  names.isEmpty ? "It takes no values." : "It uses " + names.joined(separator: ", ") + ".")
+            }
+            let expanded = Template.expand(text, params: params, now: now)
+            if let missing = expanded.missing.first {
+                throw ModuleError("“\(source.name)” needs a value for {{\(key)}}",
+                                  missing == "selection" ? "It's given {{selection}}, and nothing is selected."
+                                      : "It's given {{\(missing)}}, which has no value.")
+            }
+            values[key] = expanded.text
         }
         return values
     }
 
     /// The rule's value, or — if it finds nothing — the source marked broken
-    /// and an error that says where to fix it.
-    private func extract(_ source: DataSource, from fetched: Fetched) throws -> String {
+    /// and an error that says where to fix it. A source whose URL takes values
+    /// may rightly find nothing for some — a search with no results — so
+    /// unless `emptyIsBroken`, finding nothing only stops the action; a
+    /// response the rule can't read at all still marks it.
+    private func extract(_ source: DataSource, from fetched: Fetched, given: [String: String] = [:],
+                         emptyIsBroken: Bool) throws -> String {
         guard let rule = source.rule else { throw ModuleError("“\(source.name)” has no rule yet", "Use Find It first.") }
         var reason: String?
         var value = ""
         do {
             value = try rule.value(in: fetched.body, contentType: fetched.contentType)
-            if value.isEmpty { reason = "Its rule found nothing in the latest response." }
+            if value.isEmpty {
+                if !emptyIsBroken {
+                    // The values go in the detail, which the log never gets: they can be the selection.
+                    let asked = given.sorted { $0.key < $1.key }.map { "\($0.key) “\($0.value)”" }.joined(separator: ", ")
+                    throw ModuleError("“\(source.name)” found nothing",
+                                      (asked.isEmpty ? "Nothing" : "Nothing for \(asked)")
+                                          + ". If there should be, the API may have changed: try Test Now in Data Sources.")
+                }
+                reason = "Its rule found nothing in the latest response."
+            }
+        } catch let error as ModuleError {
+            throw error
         } catch {
             reason = "\(error)"
         }
@@ -166,18 +216,25 @@ public final class DataModule: KeybowModule, @unchecked Sendable {
         return value
     }
 
-    /// `api.weather` → ("weather", false); `api.weather.raw` → ("weather", true).
-    static func parse(_ name: String) -> (source: String, raw: Bool) {
-        var rest = name.hasPrefix(id + ".") ? String(name.dropFirst(id.count + 1)) : name
+    /// `api.weather` → ("weather", false, [:]); `api.weather.raw` →
+    /// ("weather", true, [:]); `api.wikipedia term={{selection}}` →
+    /// ("wikipedia", false, [term: {{selection}}]).
+    static func parse(_ name: String) -> (source: String, raw: Bool, attributes: [String: String]) {
+        let call = Template.operatorCall(name)
+        let base = call?.name ?? name
+        var rest = base.hasPrefix(id + ".") ? String(base.dropFirst(id.count + 1)) : base
         let raw = rest.hasSuffix(".raw")
         if raw { rest = String(rest.dropLast(4)) }
-        return (rest, raw)
+        return (rest, raw, call?.attributes ?? [:])
     }
 
+    /// The URL's values its attributes don't give, and whatever those use.
     public func valuesNeeded(toFetch names: [String]) -> Set<String> {
         var needed = Set<String>()
         for name in names {
-            if let source = source(named: Self.parse(name).source) { needed.formUnion(source.urlNames) }
+            let (sourceName, _, attributes) = Self.parse(name)
+            if let source = source(named: sourceName) { needed.formUnion(source.urlNames.subtracting(attributes.keys)) }
+            for value in attributes.values { needed.formUnion(Template.names(in: value)) }
         }
         return needed
     }
@@ -189,7 +246,7 @@ public final class DataModule: KeybowModule, @unchecked Sendable {
     }
 
     public func standIn(forValue name: String) -> String {
-        let (source, raw) = Self.parse(name)
+        let (source, raw, _) = Self.parse(name)
         return raw ? "‹\(source) response›" : "‹\(source)›"
     }
 

@@ -34,6 +34,36 @@ final class TemplateOperatorTests: XCTestCase {
         XCTAssertEqual(expanded.text, "Q and Stoics")
     }
 
+    func testAPlaceholderInsideNeedsNoQuotes() throws {
+        let template = "{{api.wikipedia term={{selection}}}} and {{leaf}}"
+        XCTAssertEqual(Template.names(in: template), ["api.wikipedia term={{selection}}", "leaf"])
+        XCTAssertEqual(Template.operatorCall("api.wikipedia term={{selection}}")?.attributes, ["term": "{{selection}}"])
+        XCTAssertEqual(Template.expand(template, params: ["api.wikipedia term={{selection}}": "Found", "leaf": "Wiki"]).text,
+                       "Found and Wiki")
+        XCTAssertEqual(Template.operatorCall("quote file=q.md heading={{leaf}}")?.attributes,
+                       ["file": "q.md", "heading": "{{leaf}}"])
+    }
+
+    func testSpacesAndBarsInsideAPlaceholderBelongToIt() throws {
+        let name = "api.w term={{contact.name|no one}} lang=en"
+        let template = "{{\(name)|nothing found}}"
+        XCTAssertEqual(Template.names(in: template), [name])
+        XCTAssertEqual(Template.operatorCall(name)?.attributes, ["term": "{{contact.name|no one}}", "lang": "en"])
+        XCTAssertEqual(Template.expand(template, params: [:]).text, "nothing found", "the fallback is the one outside")
+    }
+
+    func testItNestsAsDeepAsItNeeds() throws {
+        let name = "api.w term={{quote file=q.txt heading={{leaf}}}}"
+        XCTAssertEqual(Template.names(in: "Look up {{\(name)}}."), [name])
+        XCTAssertEqual(Template.operatorCall(name)?.attributes["term"], "{{quote file=q.txt heading={{leaf}}}}")
+        XCTAssertEqual(Template.names(in: "{{quote file=q.txt heading={{leaf}}}}"), ["quote file=q.txt heading={{leaf}}"])
+    }
+
+    func testBlockTagsAndPlainPlaceholdersAreAsTheyWere() {
+        XCTAssertEqual(TemplateBlocks.names(in: "{{#ai model=opus-5.5}}Hi {{leaf}}{{/ai}}"), ["ai"])
+        XCTAssertEqual(Template.expand("{{a}}}} {{b|x}}", params: ["a": "A"]).text, "A}} x")
+    }
+
     func testAnUnclosedQuoteIsReported() {
         let result = Template.expand(#"{{quote file="q.md}} rest"#, params: [:])
         XCTAssertEqual(result.problems, ["“{{quote” has no closing }} — check its quotes."])

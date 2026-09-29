@@ -188,8 +188,11 @@ dependency at all: another module's values are in every action's placeholders.
 `mac/Sources/KeybowData/`, module id `api`.
 
 - Fetches `{{api.<name>}}` — the value a source's rule finds — and
-  `{{api.<name>.raw}}`, the whole response. Each source a key uses is fetched
-  once, all at the same time, through a transport that refuses redirects to
+  `{{api.<name>.raw}}`, the whole response. Attributes give the URL's
+  placeholders values for that use, `{{api.wikipedia term={{selection}}}}`:
+  filled in from the action's values, checked against the URL's placeholders,
+  and named in `valuesNeeded(toFetch:)` so the host reads `{{selection}}`
+  first. Each distinct URL a key needs is fetched once, all at the same time, through a transport that refuses redirects to
   another host, so a key never follows one. https only (plain http for
   `localhost`), 20 seconds, 5 MB at most.
 - A **rule** (`Extraction.swift`) is a JSONPath (the parts of RFC 9535 rules
@@ -205,7 +208,10 @@ dependency at all: another module's values are in every action's placeholders.
   the response, and Claude's explanation says what is.
 - **When a rule stops working** the fetch throws, the source is marked broken
   with why, and the menu bar's menu says so, until a test or a key press finds
-  the value again, or a new rule is written.
+  the value again, or a new rule is written. For a source whose URL takes
+  values, finding nothing at a key press isn't counted — a search can rightly
+  find nothing — only a response the rule can't read, or nothing found for the
+  sample values in a test.
 - Its own window, from *Edit Data Sources…* in the menu: sources, keys (in the
   Keychain, as `api.key.<id>`), caching, the description, Find It with Claude,
   Test Now, and a rule of your own.

@@ -936,6 +936,34 @@ window, and as *⚠︎ weather needs fixing* in the menu bar's menu. **Find It
 Again** asks Claude for a new rule from the description you kept; **Test Now**
 tries the current one.
 
+For a source whose URL takes values — a search — finding nothing can be the
+right answer: a word with no Wikipedia page. So for one of those, finding
+nothing stops the action with *“wikipedia” found nothing*, and the values it
+was given, but doesn't mark the source. A response the rule can't read at all
+still does, and so does finding nothing with the sample values, in **Test Now**.
+
+**Giving the URL its values where it's used.** A URL's placeholders are filled
+from the key being pressed — its own values, `{{selection}}`, and the rest. To
+decide at the key which value goes in, give it as an **attribute**, named after
+the URL's placeholder:
+
+```
+Look up [Display]
+   1. Selection [text: "{{api.wikipedia term={{selection}}}}"]
+   2. Clipboard [text: "{{api.wikipedia term={{clipboard}}}}"]
+   3. Ada [text: "{{api.wikipedia term='Ada Lovelace'}}"]
+```
+
+- The value can be words, in quotes if they have spaces, or placeholders —
+  quoted or not, and as deep as needed: `term={{quote file=topics.txt}}`.
+- It's used for that one placeholder, over any value the key has of that name.
+  A name the URL doesn't use is a mistake: *“wikipedia”'s URL has no {{search}}
+  — It uses {{term}}.* A placeholder with no value — nothing selected — stops
+  the action and says so.
+- `.raw` takes them too: `{{api.wikipedia.raw term={{selection}}}}`.
+- The same source can be used more than once in one action with different
+  values; each distinct URL is fetched once, and kept as long as the source says.
+
 - **`{{api.weather.raw}}`** is the whole response, for an `{{#ai}}` block to
   read: `{{#ai}}In one line, what's the news here? {{api.news.raw}}{{/ai}}`. It
   needs no rule.
@@ -1021,8 +1049,8 @@ It takes three attributes:
   quotes or none, so as not to need `\"`.
 - **Placeholders in attributes** are filled in from the key being pressed, so
   one branch can serve several lists: `Quote [Copy, text: "{{quote
-  file=quotes.md heading='{{leaf}}'}}"]` with leaves *Stoics* and *Poets*.
-  A placeholder there must be in quotes.
+  file=quotes.md heading={{leaf}}}}"]` with leaves *Stoics* and *Poets*.
+  Quotes around a placeholder are optional.
 - **In sequence,** the place in each list — each file and heading — is kept in
   `state.json` (§9), so it carries on after a restart. A list that has grown
   or shrunk carries on from the same place, or starts again if it's past the end.

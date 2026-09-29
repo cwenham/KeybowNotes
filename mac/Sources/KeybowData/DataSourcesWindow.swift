@@ -316,7 +316,8 @@ private struct SourceDetail: View {
             ForEach(model.problems(with: source), id: \.self) { problem in
                 Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)
             }
-            Text("Use it as {{api.\(source.name)}} — or {{api.\(source.name).raw}} for the whole response, to give an {{#ai}} block.")
+            Text("Use it as {{api.\(source.name)}} — or {{api.\(source.name).raw}} for the whole response, to give an {{#ai}} block."
+                 + (source.urlNames.sorted().first.map { " Give its URL a value where it's used: {{api.\(source.name) \($0)={{selection}}}}." } ?? ""))
                 .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
         }
     }

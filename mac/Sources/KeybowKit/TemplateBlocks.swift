@@ -65,7 +65,7 @@ struct TemplateDocument {
             let inside = rest[start.upperBound...]
             let opensBlock = inside.first == "#"
             let isOperator = !opensBlock && Self.isOperator(inside)
-            guard let end = Self.tagEnd(in: inside, quoted: opensBlock || isOperator) else {
+            guard let end = Self.tagEnd(in: inside, quoted: opensBlock || isOperator, nested: isOperator) else {
                 // An unclosed brace is left as written — but a tag with
                 // attributes that never ends is surely a mistake, like a stray quote.
                 if opensBlock {
@@ -216,10 +216,13 @@ struct TemplateDocument {
     }
 
     /// The `}}` that ends a tag. In a tag with attributes, one inside quotes
-    /// doesn't count: `{{#ai note="}}"}}`, `{{quote heading="{{leaf}}"}}`.
-    private static func tagEnd(in text: Substring, quoted: Bool) -> Range<Substring.Index>? {
+    /// doesn't count: `{{#ai note="}}"}}`, `{{quote heading="{{leaf}}"}}`. In
+    /// an operator's, nor does one closing a placeholder inside it:
+    /// `{{api.wikipedia term={{selection}}}}`.
+    private static func tagEnd(in text: Substring, quoted: Bool, nested: Bool = false) -> Range<Substring.Index>? {
         guard quoted else { return text.range(of: "}}") }
         var quote: Character?
+        var depth = 0
         var index = text.startIndex
         while index < text.endIndex {
             let character = text[index]
@@ -227,9 +230,38 @@ struct TemplateDocument {
                 if character == open { quote = nil }
             } else if character == "\"" || character == "'" {
                 quote = character
+            } else if nested, character == "{", text[index...].hasPrefix("{{") {
+                depth += 1
+                index = text.index(index, offsetBy: 2)
+                continue
             } else if character == "}", text[index...].hasPrefix("}}") {
-                return index..<text.index(index, offsetBy: 2)
+                if depth == 0 { return index..<text.index(index, offsetBy: 2) }
+                depth -= 1
+                index = text.index(index, offsetBy: 2)
+                continue
             }
+            index = text.index(after: index)
+        }
+        return nil
+    }
+
+    /// How deep in `{{ }}` each point of `text` is, outside quotes: for
+    /// finding a space or `|` that belongs to the tag, not a placeholder in it.
+    static func outsideBraces(_ text: Substring, where test: (Character) -> Bool) -> Substring.Index? {
+        var depth = 0
+        var index = text.startIndex
+        while index < text.endIndex {
+            if text[index...].hasPrefix("{{") {
+                depth += 1
+                index = text.index(index, offsetBy: 2)
+                continue
+            }
+            if depth > 0, text[index...].hasPrefix("}}") {
+                depth -= 1
+                index = text.index(index, offsetBy: 2)
+                continue
+            }
+            if depth == 0, test(text[index]) { return index }
             index = text.index(after: index)
         }
         return nil
@@ -267,9 +299,11 @@ struct TemplateDocument {
                 attributes[key] = String(value)
                 rest = rest.dropFirst(value.count + 2)
             } else {
-                let value = rest.prefix { !$0.isWhitespace }
-                attributes[key] = String(value)
-                rest = rest.dropFirst(value.count)
+                // To the next space — but not one inside a placeholder:
+                // `term={{contact.name|no one}}`.
+                let end = outsideBraces(rest, where: \.isWhitespace) ?? rest.endIndex
+                attributes[key] = String(rest[..<end])
+                rest = rest[end...]
             }
         }
         return .success((name, attributes))

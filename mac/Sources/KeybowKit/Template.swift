@@ -72,28 +72,30 @@ public enum Template {
         return (call.0, call.1)
     }
 
-    /// A placeholder's name and fallback, split at the first `|` — outside
-    /// quotes, in an operator's attributes.
+    /// A placeholder's name and fallback, split at the first `|` — in an
+    /// operator's, outside quotes and outside any placeholder in its
+    /// attributes: `{{api.w term={{contact.name|me}}|none}}` falls back to "none".
     static func split(_ body: String) -> (name: String, fallback: String?) {
-        let isOperator = TemplateDocument.isOperator(Substring(body))
-        var quote: Character?
-        for index in body.indices {
-            let character = body[index]
-            if isOperator {
+        let text = Substring(body)
+        let bar: Substring.Index?
+        if TemplateDocument.isOperator(text) {
+            var quote: Character?
+            bar = TemplateDocument.outsideBraces(text) { character in
                 if let open = quote {
                     if character == open { quote = nil }
-                    continue
+                    return false
                 }
                 if character == "\"" || character == "'" {
                     quote = character
-                    continue
+                    return false
                 }
+                return character == "|"
             }
-            if character == "|" {
-                return (body[..<index].trimmingCharacters(in: .whitespaces), String(body[body.index(after: index)...]))
-            }
+        } else {
+            bar = text.firstIndex(of: "|")
         }
-        return (body.trimmingCharacters(in: .whitespaces), nil)
+        guard let bar else { return (body.trimmingCharacters(in: .whitespaces), nil) }
+        return (text[..<bar].trimmingCharacters(in: .whitespaces), String(text[text.index(after: bar)...]))
     }
 
     /// True for text that is one placeholder and nothing else: `{{selection}}`.

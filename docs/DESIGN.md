@@ -486,7 +486,7 @@ should explain a refusal rather than failing silently.
 | Contacts | The tree editor's *Look Up in Contacts*; asked for when first used |
 | Network (Anthropic API) | `{{#ai}}` blocks: prompts go to `api.anthropic.com` with an API key from the Keychain. No permission prompt; the key is the gate |
 | Location Services | `{{location}}` and its parts, including in a data source's URL. Asked for when first needed. The app isn't under the hardened runtime; if it were, it would also need the `com.apple.security.personal-information.location` entitlement |
-| Accessibility | `text.insert`: pressing ⌘V in the app in front. `text.insertDirect`: setting the selected text, or typing. `{{selection}}`: reading the selected text, and sending ⌘C to apps that won't share it. A display: seeing Esc pressed in another app. Asked for when first needed, or from Settings → Selected Text |
+| Accessibility | `text.insert`: pressing ⌘V in the app in front. `text.insertDirect`: setting the selected text, or typing. `{{selection}}`: reading the selected text, and sending ⌘C to apps that won't share it. Asked for when first needed, or from Settings → Selected Text |
 
 `url.open`, `clipboard.copy` and `maps.search` need nothing. `clock.timer` needs
 a helper shortcut, *KeybowNotes Timer*, that the person makes once in Shortcuts:

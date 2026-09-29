@@ -259,8 +259,9 @@ keywords `Display` and `Show`.
   Type menu and fields for each, shown once the buttons include it.
 - In the app, `DisplayController` draws it: a non-activating HUD panel with a
   WebKit view, scripts off, links out to the browser, sized by measuring the
-  page (without a scroll bar, which would take width), Esc watched with a
-  global key monitor. A development build can answer OK or Cancel by itself
+  page (without a scroll bar, which would take width), and holding Esc as a
+  hot key while it's up (`EscapeKey`), which needs no permission — watching
+  keys typed into other apps would need Accessibility or Input Monitoring. A development build can answer OK or Cancel by itself
   with `KEYBOW_DEBUG_DISPLAY_ANSWER`.
 
 ## Quotes

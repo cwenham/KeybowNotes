@@ -6,8 +6,8 @@ import WebKit
 /// to its text, on the overlay's screen. Markdown is drawn in the HUD's own
 /// style; an HTML document as a web page would be, but with its scripts off.
 /// Links open in the default browser. It never takes focus: Esc closes it
-/// from any app, when KeybowNotes has Accessibility access, and a click lets
-/// it take keys itself.
+/// from any app — taken as a hot key while it's up, which needs no
+/// permission — and a click lets it take keys itself.
 @MainActor
 final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// The widest a display gets: text wider than this wraps.
@@ -29,6 +29,7 @@ final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate {
     private var continuation: CheckedContinuation<ModuleDisplay.Result, Never>?
     private var fadeTask: Task<Void, Never>?
     private var monitors: [Any] = []
+    private var escapeKey: EscapeKey?
     private var loaded = false
 
     /// Shows it, replacing any other, and waits for it to go away.
@@ -239,6 +240,11 @@ final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate {
         fadeTask = nil
         for monitor in monitors { NSEvent.removeMonitor(monitor) }
         monitors = []
+        if let escapeKey {
+            escapeKey.release()
+            Log.info("display: Esc released")
+        }
+        escapeKey = nil
         if let panel {
             let web = webView
             NSAnimationContext.runAnimationGroup({ context in
@@ -260,8 +266,14 @@ final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     /// Esc from anywhere — seen, not taken, and only with Accessibility
     /// access — and Esc or Return once it has keys itself.
+    /// Esc, from whatever app is in front: held as a hot key while this is up,
+    /// so the app in front doesn't also get it. Should another app hold Esc,
+    /// keys typed elsewhere are watched instead — which macOS allows only with
+    /// Accessibility or Input Monitoring access — and Esc once it has keys.
     private func watchKeys() {
-        if let global = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
+        escapeKey = EscapeKey { [weak self] in self?.escape() }
+        Log.info(escapeKey == nil ? "display: Esc is held by another app; watching keys instead" : "display: holding Esc")
+        if escapeKey == nil, let global = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
             guard event.keyCode == 53 else { return }
             MainActor.assumeIsolated { self?.escape() }
         }) {

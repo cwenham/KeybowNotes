@@ -775,10 +775,11 @@ opening an app.
   an API's response, Claude's reply — so a page's JavaScript is off.
 - **Links open in your default browser**, when you click them. Nothing else
   makes the panel go anywhere.
-- **Esc closes it**, from whatever app you're in (this needs the Accessibility
-  access that `{{selection}}` and Insert use), and so does its ✕ button. With a
-  Cancel button, Esc is Cancel. It never takes the focus from what you're
-  doing; click it first to use Return for OK.
+- **Esc closes it**, from whatever app you're in, and so does its ✕ button.
+  While a display is up, Esc is its own — the app in front doesn't also get it —
+  and it's handed back as soon as the display goes. With a Cancel button, Esc
+  is Cancel. It never takes the focus from what you're doing; click it first to
+  use Return for OK.
 - **One at a time:** a new display replaces the last.
 - **Its size** follows the text: as wide as the longest line, up to 620 points
   (or half the screen), and as tall as it needs, up to 70% of the screen — and

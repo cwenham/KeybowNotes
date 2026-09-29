@@ -65,12 +65,30 @@ where an action goes — links, phone numbers, apps — so text you select can't
 it there. Claude Opus 5.5 at low effort by default; your API key stays in the
 Keychain.
 
-**Values from APIs** — add an API in *Data Sources*, describe the value you want
-from it — *the current temperature in Celsius* — and Claude writes a rule to find it,
-once. After that `{{api.weather}}` fetches the API and applies the rule on your Mac
-on every key press: no model in the loop, with responses kept as long as you choose.
-If the API changes and the rule stops working, the key says so and Claude can find
-it again. API keys stay in the Keychain.
+**Values from APIs** — bring a live value from a web API into whatever a key writes
+or opens: the temperature, an exchange rate, the next train, a parcel's status. In
+*Data Sources*, from the menu bar, give the API's address and its key if it needs
+one, then describe the value you want in your own words — *today's sunset time where
+I am*. Claude reads a sample of the response and writes a rule that finds the value —
+a JSONPath, an XPath or a regular expression — which the app tries on the sample
+before showing you what it finds.
+
+<img src="docs/images/data-sources.png" width="640" alt="The Data Sources window: a list of sources on the left; on the right, the sunset source's URL with its latitude and longitude placeholders, sample values, the description of the value wanted, and Claude's suggested rule, $.daily.sunset[0], with the value it finds and buttons to use or discard it">
+
+That's the only time Claude is asked. From then on, each key press fetches the API
+and applies the rule on your Mac — no model in the loop, and responses kept for as
+long as you choose:
+
+```
+1. Outside [lat: 51.51, lon: -0.13]
+   1. Sunset [Insert, text: "Sunset today: {{api.sunset}}"]
+```
+
+The URL's placeholders — `{{lat}}` and `{{lon}}` here — come from the tree, like any
+other value. A fetched value may go in a link or a phone number, since a fixed rule
+picks it, not a model. If the API changes and the rule stops finding its value, the
+key says so, the menu bar flags the source, and Claude can find it again from your
+description. API keys stay in the Keychain and go only to their own API.
 
 **Four trees** — the row you press first chooses the tree: row 1 runs down through
 all four rows, rows 2 and 3 are shorter trees of their own, and row 4 runs upwards.

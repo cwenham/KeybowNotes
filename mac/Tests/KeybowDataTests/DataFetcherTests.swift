@@ -129,15 +129,21 @@ final class DataFetcherTests: XCTestCase {
         let failing = source("https://api.example.com/data")
         func fetch() async throws -> Any { try await fetcher.fetch(failing, params: [:], key: nil) }
 
+        transport.body = Data()
         transport.status = 401
         await assertModuleError(fetch, "“weather” answered HTTP 401", detail: "Check its API key in Data Sources.")
         transport.status = 404
-        await assertModuleError(fetch, "“weather” answered HTTP 404", detail: "Check its URL.")
+        await assertModuleError(fetch, "“weather” answered HTTP 404", detail: "Check its URL, and the values that go into it.")
         transport.status = 429
         await assertModuleError(fetch, "“weather” answered HTTP 429", detail: "It's had too many requests; a longer cache may help.")
         transport.status = 500
-        transport.body = Data("Internal trouble".utf8)
-        await assertModuleError(fetch, "“weather” answered HTTP 500", detail: "Internal trouble")
+        transport.body = Data("Internal trouble\n".utf8)
+        await assertModuleError(fetch, "“weather” answered HTTP 500", detail: "It says: “Internal trouble”")
+        transport.status = 403
+        transport.body = Data(#"{"status": "NOT_AUTHORIZED", "request_id": "abc", "message": "You are not entitled to this data."}"#.utf8)
+        await assertModuleError(fetch, "“weather” answered HTTP 403",
+                                detail: "It says: “You are not entitled to this data.” "
+                                    + "Check its API key, and that your plan with the API includes what's asked for.")
         transport.status = 302
         await assertModuleError(fetch, "“weather” redirected to another server")
 
@@ -154,6 +160,25 @@ final class DataFetcherTests: XCTestCase {
         } catch {
             XCTAssertTrue(error is CancellationError)
         }
+    }
+
+    func testWhatAServerSaysIsReadFromTheUsualPlaces() {
+        func said(_ body: String, key: String? = nil) -> String? {
+            DataFetcher.serverMessage(in: Data(body.utf8), key: key)
+        }
+        XCTAssertEqual(said(#"{"message": "Unknown API Key"}"#), "Unknown API Key")
+        XCTAssertEqual(said(#"{"error": {"code": 403, "message": "Plan limit"}}"#), "Plan limit")
+        XCTAssertEqual(said(#"{"error": "invalid_token", "error_description": "The token expired"}"#), "The token expired")
+        XCTAssertEqual(said(#"{"errors": [{"title": "Bad city", "detail": "No city called Atlantis"}]}"#), "No city called Atlantis")
+        XCTAssertEqual(said(#"{"errors": ["Missing parameter: q"]}"#), "Missing parameter: q")
+        XCTAssertEqual(said(#"{"status": "NOT_AUTHORIZED"}"#), "NOT_AUTHORIZED")
+        XCTAssertNil(said(#"{"ok": false}"#))
+        XCTAssertNil(said("<!DOCTYPE html><html><body><h1>403 Forbidden</h1></body></html>"), "not a whole page")
+        XCTAssertNil(said("  \n "))
+        XCTAssertEqual(said("Rate limited.\nTry again\n"), "Rate limited. Try again")
+        XCTAssertEqual(said(#"{"message": "Unknown API key k-123 for this account"}"#, key: "k-123"),
+                       "Unknown API key ‹key› for this account", "the key isn't shown or logged")
+        XCTAssertEqual(said(String(repeating: "x", count: 500))?.count, 301)
     }
 
     func testRedirectsStayOnTheSameServer() async {

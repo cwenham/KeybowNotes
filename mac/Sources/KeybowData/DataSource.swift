@@ -173,14 +173,18 @@ public final class DataFetcher: @unchecked Sendable {
                               "It isn't followed, so your key stays with the server it's for.")
         }
         guard (200..<300).contains(status) else {
-            let hint: String
+            let hint: String?
             switch status {
-            case 401, 403: hint = "Check its API key in Data Sources."
-            case 404: hint = "Check its URL."
+            case 401: hint = "Check its API key in Data Sources."
+            case 403: hint = "Check its API key, and that your plan with the API includes what's asked for."
+            case 404: hint = "Check its URL, and the values that go into it."
             case 429: hint = "It's had too many requests; a longer cache may help."
-            default: hint = String(decoding: data.prefix(200), as: UTF8.self)
+            default: hint = nil
             }
-            throw ModuleError("“\(source.name)” answered HTTP \(status)", hint)
+            // The server's own reason first: it knows why.
+            let said = Self.serverMessage(in: data, key: key).map { "It says: “\($0)”" }
+            let detail = [said, hint].compactMap { $0 }.joined(separator: " ")
+            throw ModuleError("“\(source.name)” answered HTTP \(status)", detail.isEmpty ? nil : detail)
         }
         guard data.count <= Self.maximumSize else {
             throw ModuleError("“\(source.name)” sent more than 5 MB", "That's too much to read for one value.")
@@ -188,6 +192,46 @@ public final class DataFetcher: @unchecked Sendable {
         let fetched = Fetched(body: data, contentType: http?.value(forHTTPHeaderField: "Content-Type"), at: now)
         if source.cacheSeconds > 0 { lock.withLock { cache[cacheKey] = fetched } }
         return fetched
+    }
+
+    /// What a server said about a failure, if it said something readable: a
+    /// JSON error's message, or a short plain-text body — not an HTML page.
+    /// Never the key, should the server repeat it.
+    static func serverMessage(in data: Data, key: String?) -> String? {
+        var text: String?
+        if let json = try? JSONSerialization.jsonObject(with: data) {
+            text = message(inJSON: json)
+        } else if !ExtractionRule.looksLikeHTML(data) {
+            text = String(decoding: data.prefix(1000), as: UTF8.self)
+        }
+        guard var message = text?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty else { return nil }
+        message = message.split(whereSeparator: \.isNewline).joined(separator: " ")
+        if let key, !key.isEmpty { message = message.replacingOccurrences(of: key, with: "‹key›") }
+        return message.count > 300 ? String(message.prefix(300)) + "…" : message
+    }
+
+    /// The fields APIs put their error messages in, likeliest first.
+    private static let messageFields = ["message", "error_description", "detail", "error_message", "status_message",
+                                        "error", "errors", "description", "title", "status"]
+
+    private static func message(inJSON json: Any) -> String? {
+        if let list = json as? [Any] {
+            return list.first.flatMap { ($0 as? String) ?? message(inJSON: $0) }
+        }
+        guard let object = json as? [String: Any] else { return nil }
+        for field in messageFields {
+            switch object[field] {
+            case let text as String where !text.isEmpty:
+                return text
+            case let nested as [String: Any]:
+                if let text = message(inJSON: nested) { return text }
+            case let list as [Any]:
+                if let text = message(inJSON: list) { return text }
+            default:
+                continue
+            }
+        }
+        return nil
     }
 
     /// Forgets a source's responses: its URL or key changed.

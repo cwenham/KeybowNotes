@@ -839,7 +839,9 @@ Data Sources…* in the menu bar's menu:
 - **An API key**, if it needs one — sent as a Bearer token, in a header of its
   own (`X-API-Key` unless you name another) or as a query parameter (`key`
   unless you name another). It's kept in the Keychain, sent only to that
-  source's server, and never to Claude.
+  source's server, and never to Claude. It isn't a placeholder — there's no
+  `{{key}}` — so leave it out of the URL: for `?apiKey=…`, choose *In the URL's
+  query* and name the parameter `apiKey`.
 - **How long to keep a response:** from every time to a day. Each URL is kept
   apart, so `{{city}}` London and York are two responses.
 - **The value you want,** in your own words: *the current temperature, in
@@ -876,6 +878,9 @@ tries the current one.
   many of its values the key uses.
 - The window never shows a key once saved; removing a source removes its key.
   Responses are never written to the log, and neither are values.
+- **When an API refuses** — a wrong key, a plan that doesn't cover the data, a
+  bad URL — the overlay and the window show its status and what the API said
+  about it, with a hint; the log gets only the status.
 - **Previews** show a stand-in, `‹weather›`, and fetch nothing.
 
 ### Where values come from

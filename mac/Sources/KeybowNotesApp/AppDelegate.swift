@@ -377,8 +377,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Log.info("  cancelled while waiting")
             overlay.handle(.cleared(reason: .cancelled))
         } catch let error as ModuleError {
-            // A module's own words; they don't quote the prompt.
-            Log.error("  FAILED while waiting: \(error)")
+            // Only the headline is logged: the detail can quote a server, and
+            // a server can quote back what it was sent — the selection, say.
+            Log.error("  FAILED while waiting: \(error.message)")
             overlay.showFinished(.failure(error.message, error.detail), summary: summary, warnings: [])
         } catch {
             Log.error("  FAILED while waiting: \(error)")

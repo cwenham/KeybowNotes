@@ -40,10 +40,8 @@ final class DataSourcesWindowController: NSWindowController, NSWindowDelegate {
            let source = model.selected {
             model.findIt(source)
         }
-        // A menu-bar app isn't active, so its window would open behind others.
-        NSApp.activate()
         showWindow(nil)
-        window?.makeKeyAndOrderFront(nil)
+        window?.bringToFront()
     }
 
     func windowWillClose(_ notification: Notification) {

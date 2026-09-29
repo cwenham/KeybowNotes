@@ -120,10 +120,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     func show() {
-        // A menu-bar app isn't active, so its window would open behind others.
-        NSApp.activate()
         showWindow(nil)
-        window?.makeKeyAndOrderFront(nil)
+        window?.bringToFront()
         installKeyMonitor()
         runDebugScript()
     }

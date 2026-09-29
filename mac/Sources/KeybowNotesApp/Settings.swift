@@ -158,9 +158,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             window.setFrameAutosaveName("KeybowNotesSettings")
             self.window = window
         }
-        // A menu-bar app isn't active, so its window would open behind others.
-        NSApp.activate()
-        window?.makeKeyAndOrderFront(nil)
+        window?.bringToFront()
     }
 
     func windowWillClose(_ notification: Notification) {

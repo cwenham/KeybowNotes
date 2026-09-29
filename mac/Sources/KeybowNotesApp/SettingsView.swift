@@ -1,6 +1,7 @@
 import AppKit
 import KeybowKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @Bindable var settings: AppSettings
@@ -236,9 +237,9 @@ struct SettingsView: View {
 
     private func chooseConfig() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.json]
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText, .json]
         panel.directoryURL = settings.configURL.deletingLastPathComponent()
-        panel.message = "Choose a KeybowNotes config file. Its templates folder should sit beside it."
+        panel.message = "Choose a KeybowNotes tree — an outline, like tree.md. Its templates folder should sit beside it."
         if panel.runModal() == .OK, let url = panel.url {
             settings.configPath = url.path == ConfigStore.defaultURL.path ? "" : url.path
         }

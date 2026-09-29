@@ -41,6 +41,10 @@ public struct OutlineCompilation: Sendable {
     /// The config the JSON loads to — nil if it didn't, with the reason.
     public let config: KeybowConfig?
     public let configError: String?
+    /// What loading left out because it didn't fit — a list that makes a
+    /// branch too deep for its tree, say — though the outline had no mistake
+    /// to mark on a line.
+    public let leftOut: [String]
     public let nodes: [UUID: OutlineNodeInfo]
     /// Things decided that a person should check.
     public let inferences: [String]
@@ -156,14 +160,15 @@ public enum OutlineCompiler {
         let json = compiler.run()
         var config: KeybowConfig?
         var configError: String?
+        var leftOut: [String] = []
         do {
-            config = try KeybowConfig.parse(Data(json.utf8))
+            config = try KeybowConfig.parse(Data(json.utf8)) { leftOut.append($0) }
         } catch let error as ConfigError {
             configError = error.description
         } catch {
             configError = "\(error)"
         }
-        return OutlineCompilation(json: json, config: config, configError: configError, nodes: compiler.infos,
+        return OutlineCompilation(json: json, config: config, configError: configError, leftOut: leftOut, nodes: compiler.infos,
                                   inferences: compiler.inferences, todo: compiler.todo, warnings: compiler.warnings)
     }
 }
@@ -231,7 +236,7 @@ private struct Compiler {
     // MARK: Nodes
 
     private mutating func compile(_ node: OutlineNode, slot: Int, path: [Int], tree: TreeKind?, list: String?,
-                                  context inherited: Context, colour paletteColour: String?) -> OrderedJSON {
+                                  context inherited: Context, colour paletteColour: String?) -> OrderedJSON? {
         var context = inherited
         var action: [(String, OrderedJSON)] = []
         var nested: [(String, [(String, OrderedJSON)])] = []
@@ -368,8 +373,13 @@ private struct Compiler {
         if let colour { fields.append(("colour", .string(colour))) }
         if !params.isEmpty { fields.append(("params", .object(params))) }
         if !action.isEmpty { fields.append(("action", .object(action))) }
+        // A branch with nothing left under it — its list doesn't exist, or a
+        // mistake took every item under it — is left out, rather than become a
+        // leaf running an action it was never meant to.
+        var emptied = document.lostChildren.contains(node.id) && !node.hasChildren
         if let listReference {
             fields.append(("children", .string("@" + listReference)))
+            if !listNames.contains(listReference) { emptied = true }
         } else if node.hasChildren {
             let children = node.children.enumerated().compactMap { childSlot, child -> OrderedJSON? in
                 guard let child else { return nil }
@@ -377,11 +387,12 @@ private struct Compiler {
                                context: context, colour: nil)
             }
             fields.append(("children", .array(children)))
+            if children.isEmpty { emptied = true }
         }
 
         infos[node.id] = OutlineNodeInfo(tree: tree, listName: list, path: path, roles: roles,
                                          diagnostics: diagnostics, actionType: context.type)
-        return .object(fields)
+        return emptied ? nil : .object(fields)
     }
 
     private mutating func leafValues(_ node: OutlineNode, context: Context, declaredHere: Bool,
@@ -415,7 +426,9 @@ private struct Compiler {
         case "app.open":
             guard let app = context.app else { return }
             if has("open") || has("url") || has("project") { return }
-            let justTheApp = declaredHere && (Self.normalised(node.label) == Self.normalised(app.name)
+            // `Notes [app: Notes]` names the app on the leaf itself, as a type would.
+            let appHere = node.annotations.contains { if case .pair(let key, _) = $0 { return key == "app" }; return false }
+            let justTheApp = (declaredHere || appHere) && (Self.normalised(node.label) == Self.normalised(app.name)
                 || node.annotations.contains { if case .word(let w) = $0 { return Self.normalised(w) == Self.normalised(node.label) }; return false })
             if justTheApp { return }
             if app.isService {

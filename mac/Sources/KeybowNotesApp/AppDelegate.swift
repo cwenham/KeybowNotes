@@ -83,6 +83,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let problem = store.problem {
             Log.error("config problem: \(problem)")
             overlay.flashNotice("Config problem — see Settings", symbol: "exclamationmark.triangle")
+        } else if store.mistakes.mistakeCount > 0 {
+            logMistakes()
+            overlay.flashNotice(mistakesNotice, symbol: "exclamationmark.triangle")
         }
         if !options.simulated.isEmpty { simulate(options.simulated, pace: options.pace) }
         if options.showSettings { showSettings() }
@@ -161,7 +164,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         applyConfig()
         Log.info("config reloaded")
-        overlay?.flashNotice("Config reloaded", symbol: "arrow.clockwise")
+        if store.mistakes.mistakeCount == 0 {
+            overlay?.flashNotice("Config reloaded", symbol: "arrow.clockwise")
+        } else {
+            logMistakes()
+            overlay?.flashNotice(mistakesNotice, symbol: "exclamationmark.triangle")
+        }
+    }
+
+    private var mistakesNotice: String {
+        let count = store.mistakes.mistakeCount
+        return "Tree loaded, with \(count) mistake\(count == 1 ? "" : "s") — see the editor"
+    }
+
+    /// Lines only: a message can quote a label, and labels can be names.
+    private func logMistakes() {
+        let lines = store.mistakes.errors.map { String($0.line) }.joined(separator: ", ")
+        Log.info("config has \(store.mistakes.mistakeCount) mistake(s)\(lines.isEmpty ? "" : ", at lines \(lines)"); the rest is in use")
     }
 
     private func applyConfig() {
@@ -216,14 +235,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func updateConfigStatus() {
         configItem.title = "Config: \(store.url.lastPathComponent)"
-        if let problem = store.problem {
+        if let problem = store.problem ?? store.mistakes.describe(in: store.url) {
             problemItem.title = "⚠︎ " + (problem.count > 90 ? String(problem.prefix(90)) + "…" : problem)
             problemItem.toolTip = problem
             problemItem.isHidden = false
         } else {
             problemItem.isHidden = true
         }
-        settings.configProblem = store.problem
+        settings.configProblem = store.problem ?? store.mistakes.describe(in: store.url)
         settings.configSummary = store.problem == nil ? summary(of: store.config) : ""
         let file = store.config
         settings.fileTimings = (file.commitDelay, file.idleTimeout, file.longPressCancel)
@@ -721,11 +740,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openEditor() { showEditor() }
 
-    /// The tree editor, on `tree.md` beside the config in use.
+    /// The tree editor, on the tree in use — or on `tree.md` beside a
+    /// compiled JSON config given for testing.
     private func showEditor() {
-        let outline = store.url.deletingLastPathComponent().appendingPathComponent("tree.md")
+        let outline = ConfigFile.isOutline(store.url)
+            ? store.url : store.url.deletingLastPathComponent().appendingPathComponent("tree.md")
         if editorWindow == nil || editorWindow?.model.outlineURL != outline {
-            editorWindow = EditorWindowController(outlineURL: outline, configURL: store.url)
+            editorWindow = EditorWindowController(outlineURL: outline)
+        }
+        // Saving is loading: the app picks the tree up at once, not at the next look.
+        editorWindow?.model.onSaved = { [weak self] in
+            guard let self, self.store.url == outline else { return }
+            self.store.reload()
         }
         editorWindow?.show()
     }

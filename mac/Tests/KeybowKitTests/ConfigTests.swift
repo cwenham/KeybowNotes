@@ -302,16 +302,21 @@ final class ConfigTests: XCTestCase {
         """, containing: "newer than this app")
     }
 
-    func testShippedExampleConfigIsValid() throws {
-        // The example is the starting point for a real config, so it must parse.
+    func testTheShippedDemoTreeCompilesCleanly() throws {
+        // Installed on first run: it's the starting point for a real tree.
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()   // KeybowKitTests
             .deletingLastPathComponent()   // Tests
             .deletingLastPathComponent()   // mac
-            .appendingPathComponent("config.example.json")
-        let config = try KeybowConfig.load(from: url)
-        XCTAssertEqual(config.version, 2)
-        XCTAssertNotNil(config.tree[0])
-        XCTAssertFalse(config.roots(.bottom).allSatisfy { $0 == nil }, "the example should show a side tree")
+            .appendingPathComponent("tree.demo.md")
+        let anyApp: (String) -> OutlineConverter.AppMatch? = { .init(name: $0, installed: true, isService: false) }
+        let loaded = try ConfigFile.load(url, locateApp: anyApp)
+        XCTAssertEqual(loaded.errors, [])
+        for tree in TreeKind.allCases {
+            XCTAssertFalse(loaded.config.roots(tree).allSatisfy { $0 == nil }, "the demo shows every tree: \(tree)")
+        }
+        let (document, _) = OutlineParser.parse(try String(contentsOf: url, encoding: .utf8))
+        let compiled = OutlineCompiler.compile(document, locateApp: anyApp)
+        XCTAssertEqual(compiled.todo, ["contacts: “Sam Sample” needs phone"], "only the gap left on purpose")
     }
 }

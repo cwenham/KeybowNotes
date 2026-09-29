@@ -255,6 +255,9 @@ public struct OutlineDocument: Equatable, Sendable {
     public var projects: [OutlineEntry] = []
     /// `commitDelayMs: 1000`, `dates.defaultTime: 09:00`…
     public var defaults: [Annotation] = []
+    /// Items that had an item under them skipped for a mistake. One with
+    /// nothing left under it is still a branch, not a leaf with an action.
+    public var lostChildren: Set<UUID> = []
 
     public init() {}
 
@@ -371,9 +374,15 @@ public enum OutlineParser {
                 continue
             }
 
+            func skipped() {
+                stack.append((indent, nil))
+                if !parentPath.isEmpty, let parent = node(at: parentPath, in: container, of: document) {
+                    document.lostChildren.insert(parent.id)
+                }
+            }
             guard (1...KeybowProtocol.columns).contains(number) else {
                 diagnostics.append(.init(.error, line: lineNumber, "Item \(number): keys are numbered 1 to 4."))
-                stack.append((indent, nil))
+                skipped()
                 continue
             }
             let slot = number - 1
@@ -382,12 +391,12 @@ public enum OutlineParser {
             if case .tree(let kind) = container, path.count > kind.levels {
                 diagnostics.append(.init(.error, line: lineNumber,
                                          "Too deep: the \(kind.rawValue) tree has \(kind.levels) levels."))
-                stack.append((indent, nil))
+                skipped()
                 continue
             }
             if node(at: path, in: container, of: document) != nil {
                 diagnostics.append(.init(.error, line: lineNumber, "A second item \(number) at the same level."))
-                stack.append((indent, nil))
+                skipped()
                 continue
             }
             let (label, annotations) = OutlineNode.split(body)

@@ -1,5 +1,5 @@
-Templates for `config.demo.json`. Relative template names in a config are looked
-up in a `templates` folder next to the config file.
+Templates for `tree.demo.md`. Relative template names in a tree are looked up
+in a `templates` folder next to the tree's file.
 
 Templates are Markdown: `#`/`##`/`###` headings, `-` bullets (a bare `-` is an
 empty one to fill in), `1.` numbered lists, `**bold**`, `*italic*` and

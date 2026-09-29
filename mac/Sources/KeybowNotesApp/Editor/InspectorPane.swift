@@ -240,6 +240,9 @@ private struct NodeInspector: View {
         } else if model.compilation.config == nil {
             Label("The outline doesn't compile yet; see the problems.", systemImage: "exclamationmark.triangle")
                 .font(.caption).foregroundStyle(.orange)
+        } else if let left = model.compilation.leftOut.first {
+            Label("Left out when loaded: \(left)", systemImage: "exclamationmark.triangle")
+                .font(.caption).foregroundStyle(.orange)
         }
     }
 

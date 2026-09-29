@@ -14,7 +14,6 @@ enum EditorSelection: Hashable {
 @MainActor @Observable
 final class EditorModel {
     let outlineURL: URL
-    let configURL: URL
     var templatesDirectory: URL { outlineURL.deletingLastPathComponent().appendingPathComponent("templates") }
 
     private(set) var document: OutlineDocument
@@ -37,9 +36,8 @@ final class EditorModel {
     @ObservationIgnored private var messageTask: Task<Void, Never>?
     @ObservationIgnored private let locateApp: (String) -> OutlineConverter.AppMatch?
 
-    init(outlineURL: URL, configURL: URL) {
+    init(outlineURL: URL) {
         self.outlineURL = outlineURL
-        self.configURL = configURL
         // App lookups hit the disk; the editor asks the same few names often.
         var cache: [String: OutlineConverter.AppMatch?] = [:]
         locateApp = { name in
@@ -145,8 +143,11 @@ final class EditorModel {
 
     // MARK: - Saving
 
-    /// Writes the outline, and the config compiled from it if that compiles
-    /// cleanly. The outline is the source, so it's saved even with errors.
+    /// Called after a save, so the app loads the tree at once.
+    @ObservationIgnored var onSaved: (() -> Void)?
+
+    /// Writes the outline, which is the config: the app compiles it as it
+    /// loads it. It's saved even with mistakes; what they touch is left out.
     @discardableResult
     func save() -> Bool {
         let text = OutlineWriter.text(document)
@@ -163,17 +164,17 @@ final class EditorModel {
         readProblems = []
 
         let errors = compilation.diagnostics.filter { $0.severity == .error }
-        if compilation.config != nil && errors.isEmpty {
-            do {
-                try compilation.json.write(to: configURL, atomically: true, encoding: .utf8)
-                saveStatus = "Saved. KeybowNotes is using it."
-            } catch {
-                saveStatus = "Saved the outline, but couldn't write the config: \(error.localizedDescription)"
-            }
+        if compilation.config == nil {
+            saveStatus = "Saved, but it doesn't compile, so KeybowNotes is still using the previous version."
+        } else if errors.isEmpty, let left = compilation.leftOut.first {
+            saveStatus = "Saved. KeybowNotes is using it, but left out \(left)"
+        } else if errors.isEmpty {
+            saveStatus = "Saved. KeybowNotes is using it."
         } else {
-            let count = max(errors.count, 1)
-            saveStatus = "Saved the outline. It has \(count) error\(count == 1 ? "" : "s"), so KeybowNotes is still using the previous version."
+            let count = errors.count
+            saveStatus = "Saved. KeybowNotes is using it, apart from the \(count == 1 ? "mistake" : "\(count) mistakes") marked here."
         }
+        onSaved?()
         return true
     }
 }

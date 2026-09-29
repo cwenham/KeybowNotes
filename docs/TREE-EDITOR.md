@@ -12,8 +12,8 @@ made there are written back into the outline as syntax. A diagram of the keypad
 shows where the node sits and what the keys will look like.
 
 **The outline stays the single source of truth.** The editor reads `tree.md`,
-changes it, and writes it back; `config.json` is compiled from it on save. Nothing
-the editor knows is kept anywhere but the outline.
+changes it, and writes it back, and the app compiles the same file as it loads
+it. Nothing the editor knows is kept anywhere but the outline.
 
 ---
 
@@ -243,12 +243,10 @@ tree then becomes something you can feel as well as see.
 
 ## Files
 
-- The editor opens **`tree.md`** beside the config the app is using.
-- **Save** writes `tree.md` in the outline's standard form, then compiles it. If
-  it compiles without errors, `config.json` is replaced and the running app
-  reloads it. If not, the outline is still saved — it is the source — but
-  `config.json` is left as it was, and the editor says the app is still running
-  the previous version until the errors are fixed.
+- The editor opens the **`tree.md`** the app is using.
+- **Save** writes `tree.md` in the outline's standard form, and the app loads it
+  at once. With mistakes, the app runs the rest of the tree, leaving out what
+  each mistake touches, and the editor says so; the mistakes stay marked in place.
 - An **edited** marker shows unsaved changes; closing the window with unsaved
   changes asks whether to save.
 - If `tree.md` changes on disk while it's open — edited by hand — the editor

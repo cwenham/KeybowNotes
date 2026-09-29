@@ -141,13 +141,23 @@ The full language — outline syntax, keywords, JSON fields, inheritance, every
 action's fields, placeholders and dates — is in
 [CONFIG-LANGUAGE.md](CONFIG-LANGUAGE.md). This section gives the design.
 
-**The outline is the configuration**: `tree.md`, written by hand or in the tree
-editor ([TREE-EDITOR.md](TREE-EDITOR.md)). The app runs JSON compiled from it,
-`config.json`, reloaded on change; nothing edits the JSON directly. Both live in
-`~/Library/Application Support/KeybowNotes/`. **The real configuration is never
-committed**: it holds personal categories, names, phone numbers and paths, and
-the repository is public. [`mac/config.example.json`](../mac/config.example.json)
-shows the compiled form.
+**The outline is the configuration**: `tree.md` in
+`~/Library/Application Support/KeybowNotes/`, written by hand or in the tree
+editor ([TREE-EDITOR.md](TREE-EDITOR.md)). The app compiles it as it loads it —
+at launch, and whenever the file changes — so there is one file, and what the
+editor shows is what runs. **The real configuration is never committed**: it
+holds personal categories, names, phone numbers and paths, and the repository
+is public. [`mac/tree.demo.md`](../mac/tree.demo.md), made-up, is installed on
+first run.
+
+The compiled form is JSON, kept only in memory. It used to be a file of its
+own, `config.json`, written by the editor only when the outline compiled
+cleanly, so that a broken save couldn't break the keypad. That meant two files
+that could disagree — a hand edit to `tree.md` did nothing until it was
+compiled — and a keypad quietly running something the editor didn't show.
+Instead, a mistake costs only what it touches: the compiler and the loader
+leave out the node it's in (and a branch left with nothing under it), the rest
+runs, and the app says how many mistakes there are.
 
 ### Writing it as an outline
 
@@ -165,7 +175,7 @@ shows the compiled form.
 ```
 
 ```bash
-keybow convert tree.md -o ~/Library/Application\ Support/KeybowNotes/config.json
+keybow convert tree.md        # prints the compiled JSON, and what it guessed
 ```
 
 - **Numbers are key positions**, 1–4 left to right; indentation is nesting.

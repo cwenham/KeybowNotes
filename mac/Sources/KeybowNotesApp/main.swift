@@ -7,7 +7,7 @@ import KeybowKit
 // Normally launched as KeybowNotes.app (see mac/scripts/build-app.sh). From a
 // terminal, for development:
 //
-//   swift run keybownotes [--config file.json] [--screen cursor|main] [--dry-run]
+//   swift run keybownotes [--config tree.md] [--screen cursor|main] [--dry-run]
 //                         [--show-settings] [--show-data-sources] [--edit-tree] [--simulate "4 8 12"] [--pace 1.2]
 //                         [--debug-snapshots dir]
 //

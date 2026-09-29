@@ -43,8 +43,8 @@ fi
 cp "$OUT/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 # Installed into ~/Library/Application Support/KeybowNotes on first run, when
-# there is no config yet.
-cp config.demo.json "$APP/Contents/Resources/config.demo.json"
+# there is no tree yet.
+cp tree.demo.md "$APP/Contents/Resources/tree.demo.md"
 cp -R templates "$APP/Contents/Resources/templates"
 
 echo "==> Signing"

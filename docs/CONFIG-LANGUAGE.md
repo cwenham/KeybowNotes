@@ -9,15 +9,15 @@ offered on each row, what the final choice does, and with what values.
 
 **The outline is the configuration.** It is a numbered list, the way you'd
 sketch a tree by hand, with keywords and settings in square brackets — written
-by hand or in the tree editor. The app runs a JSON file **compiled** from it;
-the JSON is never edited, and says nothing the outline can't.
+by hand or in the tree editor — and it lives at
+`~/Library/Application Support/KeybowNotes/tree.md`. The app **compiles** it as
+it reads it, at launch and whenever the file changes: saved from the editor, it
+reloads at once; saved from any other editor, within a couple of seconds.
 
-```bash
-keybow convert tree.md -o ~/Library/Application\ Support/KeybowNotes/config.json
-```
-
-The running app notices the JSON has changed and reloads it within a couple of
-seconds. The tree editor compiles on every save.
+A mistake costs only what it touches: the app runs the rest of the tree, and
+says how many mistakes there are in the menu, the Settings window and the
+overlay. A branch that a mistake leaves with nothing under it is left out
+too, rather than become a leaf with an action it was never meant to have.
 
 ---
 
@@ -92,8 +92,9 @@ KeybowNotes template hierarchy              ← before the first item: kept as w
   is indented less. Tabs count as four spaces.
 - **Mistakes don't stop the reading.** A key number outside 1–4, a number used
   twice at one level, or an item deeper than its tree allows is reported with
-  its line, and skipped along with everything beneath it. `keybow convert`
-  refuses to write a config while any remain; the editor shows them in place.
+  its line, and skipped along with everything beneath it. The app runs the rest;
+  the editor shows them in place, and `keybow convert` refuses to write JSON
+  while any remain.
 
 ### Sections
 
@@ -283,9 +284,11 @@ refers to, and keeps the original as `tree.md.bak`.
 }
 ```
 
-This is what the outline compiles to, and what the app loads. It's described
-here because it is what every rule below is expressed in, and because the
-compiler's output is readable when something needs checking. Every section is
+This is what the outline compiles to, in memory, as the app loads it. No file
+of it is kept; it's described here because it is what every rule below is
+expressed in, and because it's readable when something needs checking —
+`keybow convert tree.md` prints it. The app and the `keybow` command also load
+a `.json` file of it as it is, which tests and tools use. Every section is
 optional. A version 1 file, with a single `"tree": [ … ]`, loads as the main
 tree.
 

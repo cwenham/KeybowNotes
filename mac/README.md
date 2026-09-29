@@ -48,19 +48,20 @@ key — that dialog can open behind other windows and isn't in Exposé or the Do
 
 Once installed it runs like any menu-bar app:
 
-- **Config** is `~/Library/Application Support/KeybowNotes/config.json`, with
-  templates in `templates/` beside it. On first run with no config, the example
-  is installed there. Edits are picked up within a couple of seconds; a config
-  with a mistake is reported in the menu and the previous one stays in use.
+- **The tree** is `~/Library/Application Support/KeybowNotes/tree.md`, with
+  templates in `templates/` beside it. On first run with no tree, the example
+  (`tree.demo.md`) is installed there. The app compiles it as it loads it; edits
+  are picked up within a couple of seconds, or at once from the editor. A
+  mistake is reported in the menu, and costs only the part of the tree it's in.
 - **One copy only** — two would compete for the Keybow, so a second refuses to start.
-- **Edit Tree…** (⌘E from the menu) opens the tree editor on `tree.md` beside
-  the config: an outliner with the keypad's rules built in, an inspector that
-  edits a node's settings as syntax, and a drawing of the keys. Saving compiles
-  `config.json`. See [docs/TREE-EDITOR.md](../docs/TREE-EDITOR.md).
+- **Edit Tree…** (⌘E from the menu) opens the tree editor on `tree.md`: an
+  outliner with the keypad's rules built in, an inspector that edits a node's
+  settings as syntax, and a drawing of the keys. Saving puts it in use at once.
+  See [docs/TREE-EDITOR.md](../docs/TREE-EDITOR.md).
 - **Settings** (⌘, from the menu): Open at login, dry run, key brightness, which
   screen the overlay uses, timings, the default calendar and reminders list, and
-  which config file to load. Settings belong to this Mac and live in
-  UserDefaults; the tree stays in the config file. A timing slider overrides the
+  which tree to load. Settings belong to this Mac and live in
+  UserDefaults; the tree stays in its file. A timing slider overrides the
   file's value only once moved, and says which is in force.
 - **Logs** go to the unified log. From a terminal (zsh has its own `log`, hence the path):
 
@@ -75,14 +76,15 @@ Once installed it runs like any menu-bar app:
 ### Running from the package, for development
 
 ```bash
-swift run keybownotes --config config.demo.json
+swift run keybownotes --config tree.demo.md
 ```
 
 A menu-bar app (no Dock icon) that drives the Keybow and shows a HUD overlay:
 which tree you are in, the path so far, the next row's choices laid out where
 they sit on the keypad, a mirror of the key lights, the commit countdown, then
-the action running and its result. `config.demo.json` has made-up trees in all
-four positions; its templates are in `templates/`.
+the action running and its result. `tree.demo.md` has made-up trees in all
+four positions; its templates are in `templates/`. `--config` also takes a
+compiled `.json` file.
 
 Run from a terminal, macOS attributes permission prompts to the terminal app
 rather than KeybowNotes; each app you drive asks once.
@@ -123,9 +125,9 @@ swift build
 Config commands:
 
 ```bash
-./.build/debug/keybow convert tree.md -o config.json   # outline → config
-./.build/debug/keybow tree config.json                 # print the trees and each leaf's action
-./.build/debug/keybow run config.json                  # drive the Keybow; prints, runs nothing
+./.build/debug/keybow convert tree.md                  # print the JSON it compiles to
+./.build/debug/keybow tree tree.md                     # print the trees and each leaf's action
+./.build/debug/keybow run tree.md                      # drive the Keybow; prints, runs nothing
 ```
 
 The config language — the outline syntax and its keywords, the JSON form, how a

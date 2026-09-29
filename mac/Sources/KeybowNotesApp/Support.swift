@@ -37,7 +37,7 @@ enum SingleInstance {
     }
 }
 
-/// Finds, loads and watches the config file.
+/// Finds, loads and watches the config: `tree.md`, compiled as it's read.
 @MainActor
 final class ConfigStore {
     nonisolated static var supportDirectory: URL {
@@ -45,7 +45,7 @@ final class ConfigStore {
             .appendingPathComponent("Library/Application Support/KeybowNotes")
     }
 
-    nonisolated static var defaultURL: URL { supportDirectory.appendingPathComponent("config.json") }
+    nonisolated static var defaultURL: URL { supportDirectory.appendingPathComponent("tree.md") }
 
     /// Keeps the keys dark until a usable config exists.
     static let empty = try! KeybowConfig.parse(Data(#"{ "trees": {} }"#.utf8))
@@ -55,6 +55,8 @@ final class ConfigStore {
     /// Why the file couldn't be used, if it couldn't. The previous config, if
     /// any, stays in force.
     private(set) var problem: String?
+    /// Mistakes in a tree that otherwise loaded: what they touch is left out.
+    private(set) var mistakes = ConfigFile.Loaded(config: ConfigStore.empty, errors: [])
     /// Called after a reload, successful or not.
     var onChange: (() -> Void)?
 
@@ -68,12 +70,12 @@ final class ConfigStore {
         load()
     }
 
-    /// On first run there is no config, so put the bundled example and its
+    /// On first run there is no tree, so put the bundled example and its
     /// templates where the app looks. Returns what was done, if anything.
     static func installDefaultsIfNeeded() -> String? {
         let manager = FileManager.default
         guard !manager.fileExists(atPath: defaultURL.path),
-              let bundled = Bundle.main.url(forResource: "config.demo", withExtension: "json") else { return nil }
+              let bundled = Bundle.main.url(forResource: "tree.demo", withExtension: "md") else { return nil }
         do {
             try manager.createDirectory(at: supportDirectory, withIntermediateDirectories: true)
             try manager.copyItem(at: bundled, to: defaultURL)
@@ -82,7 +84,7 @@ final class ConfigStore {
                !manager.fileExists(atPath: templates.path) {
                 try manager.copyItem(at: bundledTemplates, to: templates)
             }
-            return "Installed the example config at \(defaultURL.path)"
+            return "Installed the example tree at \(defaultURL.path)"
         } catch {
             return "Couldn't install the example config: \(error.localizedDescription)"
         }
@@ -112,7 +114,9 @@ final class ConfigStore {
     private func load() {
         lastModified = modificationDate()
         do {
-            config = try KeybowConfig.load(from: url)
+            let loaded = try ConfigFile.load(url)
+            config = loaded.config
+            mistakes = loaded
             problem = nil
         } catch let error as ConfigError {
             problem = error.description

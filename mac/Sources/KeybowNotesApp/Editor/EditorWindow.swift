@@ -8,8 +8,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     private let coordinator: OutlineCoordinator
     private var keyMonitor: Any?
 
-    init(outlineURL: URL, configURL: URL) {
-        model = EditorModel(outlineURL: outlineURL, configURL: configURL)
+    init(outlineURL: URL) {
+        model = EditorModel(outlineURL: outlineURL)
         coordinator = OutlineCoordinator(model: model)
 
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1020, height: 700),

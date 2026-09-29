@@ -23,19 +23,19 @@ usage: keybow <command>
                      <spec> is 1-16 rrggbb values, separated by spaces or commas;
                      the last one fills the remaining keys
   demo               light each key in turn, top-left to bottom-right
-  tree [config]      load a config file and print the trees it describes
-  run [config]       drive the Keybow from a config: lights, selection, and the
+  tree [tree.md]     load a tree and print what it describes
+  run [tree.md]      drive the Keybow from a tree: lights, selection, and the
                      action each completed path would run (nothing is executed yet)
-  convert <outline> [-o config.json]
-                     turn a numbered outline into a config, listing what it
-                     guessed and what still needs filling in
+  convert <outline> [-o file.json]
+                     print the JSON an outline compiles to — what the app runs —
+                     listing what it guessed and what still needs filling in
   upgrade-outline <outline>
                      rewrite an older outline in the current syntax: [brackets]
                      instead of (parentheses), plus # contacts and # projects
                      sections to fill in. Keeps a .bak copy.
 
-The config defaults to ~/Library/Application Support/KeybowNotes/config.json,
-falling back to ./config.example.json.
+The tree defaults to ~/Library/Application Support/KeybowNotes/tree.md,
+falling back to ./tree.demo.md. A compiled .json file works too.
 """
 
 func fail(_ message: String) -> Never {
@@ -97,15 +97,22 @@ func configURL(_ arguments: [String]) -> URL {
         return URL(fileURLWithPath: (given as NSString).expandingTildeInPath)
     }
     let installed = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/KeybowNotes/config.json")
+        .appendingPathComponent("Library/Application Support/KeybowNotes/tree.md")
     if FileManager.default.fileExists(atPath: installed.path) { return installed }
-    return URL(fileURLWithPath: "config.example.json")
+    return URL(fileURLWithPath: "tree.demo.md")
 }
 
 func loadConfig(_ arguments: [String]) -> (KeybowConfig, URL) {
     let url = configURL(arguments)
     do {
-        return (try KeybowConfig.load(from: url), url)
+        let loaded = try ConfigFile.load(url)
+        for mistake in loaded.errors {
+            FileHandle.standardError.write(Data("\(url.lastPathComponent):\(mistake.line): \(mistake.message)\n".utf8))
+        }
+        for left in loaded.leftOut {
+            FileHandle.standardError.write(Data("\(url.lastPathComponent): left out: \(left)\n".utf8))
+        }
+        return (loaded.config, url)
     } catch let error as ConfigError {
         fail("config error in \(url.lastPathComponent): \(error.description)")
     } catch {
@@ -246,7 +253,7 @@ case "convert":
         output = rest[flag + 1]
         rest.removeSubrange(flag...(flag + 1))
     }
-    guard let input = rest.first else { fail("usage: keybow convert <outline> [-o config.json]") }
+    guard let input = rest.first else { fail("usage: keybow convert <outline> [-o file.json]") }
     let outlineURL = URL(fileURLWithPath: (input as NSString).expandingTildeInPath)
     let text: String
     do {

@@ -352,6 +352,10 @@ public enum ConfigError: Error, CustomStringConvertible {
     case badColour(at: String, value: String)
     case defaultActionNeedsType
     case unsupportedVersion(Int)
+    /// An outline that compiles to nothing that loads.
+    case doesNotCompile(String)
+    /// Everything under a branch was left out, so it is too.
+    case nothingLeftUnder(at: String)
 
     public var description: String {
         switch self {
@@ -378,6 +382,10 @@ public enum ConfigError: Error, CustomStringConvertible {
             return "defaults.action must have a \"type\""
         case .unsupportedVersion(let version):
             return "config version \(version) is newer than this app understands"
+        case .doesNotCompile(let detail):
+            return "the tree doesn't compile: \(detail)"
+        case .nothingLeftUnder(let location):
+            return "\(location): everything under it was left out, so it is too"
         }
     }
 }
@@ -478,7 +486,12 @@ extension KeybowConfig {
         return try parse(data)
     }
 
-    public static func parse(_ data: Data) throws -> KeybowConfig {
+    /// Strict unless `skipped` is given. Then whatever doesn't fit — a node
+    /// too deep for its tree, a list that doesn't exist, two nodes on one
+    /// key, a colour that isn't one — is left out, with what's wrong passed
+    /// to `skipped`, and the rest loads: one mistake in a tree costs only
+    /// what it touches.
+    public static func parse(_ data: Data, skipped: ((String) -> Void)? = nil) throws -> KeybowConfig {
         let raw: RawConfig
         do {
             raw = try JSONDecoder().decode(RawConfig.self, from: data)
@@ -490,8 +503,16 @@ extension KeybowConfig {
         guard version <= supportedVersion else { throw ConfigError.unsupportedVersion(version) }
 
         let defaults = raw.defaults ?? [:]
-        let defaultColour = try colour(from: defaults["colour"]?.stringValue ?? defaults["color"]?.stringValue,
-                                       at: "defaults.colour") ?? KeyColour(red: 32, green: 32, blue: 32)
+        let fallbackColour = KeyColour(red: 32, green: 32, blue: 32)
+        let defaultColour: KeyColour
+        do {
+            defaultColour = try colour(from: defaults["colour"]?.stringValue ?? defaults["color"]?.stringValue,
+                                       at: "defaults.colour") ?? fallbackColour
+        } catch let error as ConfigError {
+            guard let skipped else { throw error }
+            skipped(error.description)
+            defaultColour = fallbackColour
+        }
 
         func seconds(_ key: String, fallback: TimeInterval) -> TimeInterval {
             guard case .number(let milliseconds)? = defaults[key] else { return fallback }
@@ -510,10 +531,13 @@ extension KeybowConfig {
 
         var defaultAction = builtInDefaultAction
         if case .object(var fields)? = defaults["action"] {
-            guard let type = fields.removeValue(forKey: "type")?.stringValue else {
+            if let type = fields.removeValue(forKey: "type")?.stringValue {
+                defaultAction = ActionSpec(type: type, fields: fields)
+            } else if let skipped {
+                skipped(ConfigError.defaultActionNeedsType.description)
+            } else {
                 throw ConfigError.defaultActionNeedsType
             }
-            defaultAction = ActionSpec(type: type, fields: fields)
         }
 
         // Built-in per-type defaults, with the config's own laid over the top.
@@ -529,11 +553,15 @@ extension KeybowConfig {
         var rawTrees: [TreeKind: [RawNode]] = [:]
         if let single = raw.tree { rawTrees[.main] = single }
         for (name, nodes) in raw.trees ?? [:] {
-            guard let kind = TreeKind(name: name) else { throw ConfigError.unknownTree(name) }
+            guard let kind = TreeKind(name: name) else {
+                guard let skipped else { throw ConfigError.unknownTree(name) }
+                skipped(ConfigError.unknownTree(name).description)
+                continue
+            }
             rawTrees[kind] = nodes
         }
 
-        let builder = TreeBuilder(lists: raw.lists ?? [:])
+        let builder = TreeBuilder(lists: raw.lists ?? [:], skipped: skipped)
         var trees: [TreeKind: [TreeNode?]] = [:]
         for (kind, nodes) in rawTrees {
             trees[kind] = try builder.slots(from: nodes, at: kind.rawValue, tree: kind, depth: 1, inheritedColour: nil)
@@ -571,11 +599,13 @@ extension KeybowConfig {
 /// Builds validated trees from the raw JSON, expanding list references.
 private struct TreeBuilder {
     let lists: [String: [RawNode]]
+    /// Given, a node that doesn't fit is left out and reported here.
+    let skipped: ((String) -> Void)?
 
     /// Places nodes into the four key positions of a row.
     func slots(from nodes: [RawNode], at location: String, tree: TreeKind, depth: Int,
                inheritedColour: KeyColour?) throws -> [TreeNode?] {
-        guard nodes.count <= KeybowProtocol.columns else {
+        guard nodes.count <= KeybowProtocol.columns || skipped != nil else {
             throw ConfigError.tooManyNodes(at: location, count: nodes.count)
         }
 
@@ -583,32 +613,45 @@ private struct TreeBuilder {
         var nextFree = 0
         for (index, raw) in nodes.enumerated() {
             let here = "\(location)[\(index)] (\"\(raw.label)\")"
-            guard depth <= tree.levels else { throw ConfigError.tooDeep(at: here, tree: tree) }
+            do {
+                guard depth <= tree.levels else { throw ConfigError.tooDeep(at: here, tree: tree) }
 
-            let position: Int
-            if let explicit = raw.key {
-                guard (0..<KeybowProtocol.columns).contains(explicit) else {
-                    throw ConfigError.keyOutOfRange(at: here, key: explicit)
+                let position: Int
+                if let explicit = raw.key {
+                    guard (0..<KeybowProtocol.columns).contains(explicit) else {
+                        throw ConfigError.keyOutOfRange(at: here, key: explicit)
+                    }
+                    position = explicit
+                } else {
+                    position = nextFree
+                    guard position < KeybowProtocol.columns else {
+                        throw ConfigError.tooManyNodes(at: location, count: nodes.count)
+                    }
                 }
-                position = explicit
-            } else {
-                position = nextFree
-                guard position < KeybowProtocol.columns else {
-                    throw ConfigError.tooManyNodes(at: location, count: nodes.count)
+                guard placed[position] == nil else {
+                    throw ConfigError.duplicateKey(at: here, key: position)
                 }
+                placed[position] = try node(from: raw, at: here, tree: tree, depth: depth, inheritedColour: inheritedColour)
+                nextFree = max(nextFree, position + 1)
+            } catch let error as ConfigError {
+                // Leave this node, and what's under it, out; keep the rest.
+                guard let skipped else { throw error }
+                skipped(error.description)
             }
-            guard placed[position] == nil else {
-                throw ConfigError.duplicateKey(at: here, key: position)
-            }
-            placed[position] = try node(from: raw, at: here, tree: tree, depth: depth, inheritedColour: inheritedColour)
-            nextFree = max(nextFree, position + 1)
         }
         return placed
     }
 
     private func node(from raw: RawNode, at location: String, tree: TreeKind, depth: Int,
                       inheritedColour: KeyColour?) throws -> TreeNode {
-        let colour = try KeybowConfig.colour(from: raw.colour ?? raw.color, at: "\(location).colour") ?? inheritedColour
+        var colour = inheritedColour
+        do {
+            colour = try KeybowConfig.colour(from: raw.colour ?? raw.color, at: "\(location).colour") ?? inheritedColour
+        } catch let error as ConfigError {
+            // A bad colour costs the colour, not the node.
+            guard let skipped else { throw error }
+            skipped(error.description)
+        }
 
         var childNodes: [RawNode] = []
         var childLocation = "\(location).children"
@@ -632,6 +675,10 @@ private struct TreeBuilder {
         let children = childNodes.isEmpty
             ? KeybowConfig.emptyRow
             : try slots(from: childNodes, at: childLocation, tree: tree, depth: depth + 1, inheritedColour: colour)
+        // Still a branch, not a leaf with an action it was never meant to run.
+        if !childNodes.isEmpty, children.allSatisfy({ $0 == nil }) {
+            throw ConfigError.nothingLeftUnder(at: location)
+        }
 
         return TreeNode(label: raw.label, colour: colour, params: params, actionFields: action, children: children)
     }

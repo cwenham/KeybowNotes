@@ -48,6 +48,7 @@ private final class KeyedHost: ModuleHost, @unchecked Sendable {
 
     func load(_ key: String, for module: String) -> Data? { host.load(key, for: module) }
     func save(_ data: Data?, as key: String, for module: String) { host.save(data, as: key, for: module) }
+    var templatesFolder: URL? { host.templatesFolder }
     func statusChanged() { host.statusChanged() }
     func copy(_ text: String) { host.copy(text) }
     func setting(_ key: String, for module: String) -> String? { host.setting(key, for: module) }
@@ -87,15 +88,37 @@ final class AppModuleHost: ModuleHost, @unchecked Sendable {
     private let defaults = UserDefaults.standard
     private let lock = NSLock()
     private var scheduled = false
+    private var folder: URL?
 
-    private func key(_ key: String, _ module: String) -> String { "module.\(module).\(key)" }
+    /// Modules' state. A development build keeps its own, so trying things
+    /// never touches the app's.
+    let state = StateFile(url: ConfigStore.supportDirectory
+        .appendingPathComponent(Bundle.main.bundleIdentifier == nil ? "state-dev.json" : "state.json"))
+
+    /// Where state used to be kept: moved into `state.json` as it's read.
+    private func legacyKey(_ key: String, _ module: String) -> String { "module.\(module).\(key)" }
 
     func load(_ key: String, for module: String) -> Data? {
-        defaults.data(forKey: self.key(key, module))
+        if let data = state.load(key, for: module) { return data }
+        guard let legacy = defaults.data(forKey: legacyKey(key, module)) else { return nil }
+        // Moved, not copied — but only once it's safely in the file.
+        if let problem = state.save(legacy, as: key, for: module) {
+            Log.error("state: \(problem); kept \(module).\(key) in preferences")
+        } else {
+            defaults.removeObject(forKey: legacyKey(key, module))
+            Log.info("state: moved \(module).\(key) from preferences to \(state.url.lastPathComponent)")
+        }
+        return legacy
     }
 
     func save(_ data: Data?, as key: String, for module: String) {
-        if let data { defaults.set(data, forKey: self.key(key, module)) } else { defaults.removeObject(forKey: self.key(key, module)) }
+        if let problem = state.save(data, as: key, for: module) { Log.error("state: \(problem)") }
+    }
+
+    /// Set by the app from the tree in use.
+    var templatesFolder: URL? {
+        get { lock.withLock { folder } }
+        set { lock.withLock { folder = newValue } }
     }
 
     // MARK: Settings

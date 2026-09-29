@@ -413,6 +413,16 @@ the action uses it, through the accessibility API; apps that don't answer
 (Chrome, Electron) are sent ⌘C, with the clipboard restored straight after. In
 a link, placed values are percent-encoded — see CONFIG-LANGUAGE.md §6.
 
+### State
+
+`state.json`, beside `tree.md`, holds what KeybowNotes keeps between runs
+that is neither the tree nor a setting: the stopwatch's time, data sources,
+where each `{{quote}}` sequence has got to. Each module owns a part, under its
+id, and the app reads and writes the file for them all — whole, atomically, on
+every change — so no module can disturb another's. Settings stay in the app's
+preferences, where macOS keeps them, and secrets in the Keychain. A file that
+can't be read is set aside under another name, never overwritten.
+
 ### Data sources
 
 Values from APIs. Every API differs, and the value wanted may be deep in its

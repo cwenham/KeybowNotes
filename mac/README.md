@@ -53,6 +53,9 @@ Once installed it runs like any menu-bar app:
   (`tree.demo.md`) is installed there. The app compiles it as it loads it; edits
   are picked up within a couple of seconds, or at once from the editor. A
   mistake is reported in the menu, and costs only the part of the tree it's in.
+- **State** — the stopwatch, data sources and where each `{{quote}}` sequence
+  has got to — is kept in `state.json` beside the tree, each module in its own
+  part. Settings stay in the app's preferences, and secrets in the Keychain.
 - **One copy only** — two would compete for the Keybow, so a second refuses to start.
 - **Edit Tree…** (⌘E from the menu) opens the tree editor on `tree.md`: an
   outliner with the keypad's rules built in, an inspector that edits a node's

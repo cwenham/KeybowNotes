@@ -36,6 +36,25 @@ final class StopwatchModuleTests: XCTestCase {
         XCTAssertEqual(host.changes, 3)
     }
 
+    func testItsStateSurvivesTheStateFile() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("StopwatchState-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("state.json")
+
+        let stopwatch = StopwatchModule()
+        stopwatch.start(host: StateFileHost(StateFile(url: url)))
+        stopwatch.perform(.start, at: at(0.25))
+        stopwatch.perform(.lap, at: at(65.125))
+        stopwatch.perform(.stop, at: at(90.5))
+        stopwatch.perform(.start, at: at(100.75))
+
+        // As the app does at its next launch: a fresh module from the file.
+        let again = StopwatchModule()
+        again.start(host: StateFileHost(StateFile(url: url)))
+        XCTAssertEqual(again.reading(at: at(200)), stopwatch.reading(at: at(200)))
+        XCTAssertEqual(again.reading(at: at(200)).laps.count, 1)
+    }
+
     func testLapsAndReset() {
         let (stopwatch, _) = fresh()
         stopwatch.perform(.start, at: at(0))
@@ -252,4 +271,14 @@ final class StopwatchModuleTests: XCTestCase {
         XCTAssertEqual(lighting.colours(for: navigator, config: tree, now: trough)[0],
                        Lighting().colours(for: navigator, config: tree, now: trough)[0], "at rest, as dim as idle")
     }
+}
+
+/// Keeps a module's state in a real state.json, as the app does.
+private final class StateFileHost: ModuleHost, @unchecked Sendable {
+    let state: StateFile
+    init(_ state: StateFile) { self.state = state }
+    func load(_ key: String, for module: String) -> Data? { state.load(key, for: module) }
+    func save(_ data: Data?, as key: String, for module: String) { state.save(data, as: key, for: module) }
+    func statusChanged() {}
+    func copy(_ text: String) {}
 }

@@ -49,7 +49,7 @@ enum FieldHelp {
     private static let dataKeys: Set<String> = ["url", "to", "query", "input"]
     private static let dataLine = """
         {{api.weather}} is the value from the “weather” data source: Edit Data Sources… in the menu bar. \
-        {{location}} is where this Mac is.
+        {{location}} is where this Mac is. {{quote file='quotes.md'}} picks a paragraph or list item from a file.
         """
 
     private static let byKey: [String: String] = [

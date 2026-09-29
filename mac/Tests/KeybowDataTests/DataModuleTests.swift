@@ -103,6 +103,35 @@ final class DataModuleTests: XCTestCase {
         XCTAssertTrue(module(host: host).sources.isEmpty)
     }
 
+    func testSourcesSurviveTheStateFile() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("DataState-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("state.json")
+
+        var full = weather()
+        full.keyUse = .query
+        full.keyName = "appid"
+        full.ruleNote = "The current block's temperature — in °C."
+        full.cacheSeconds = 900
+        full.lastValue = "14.2"
+        full.lastChecked = Date(timeIntervalSinceReferenceDate: 780_000_000.123456)
+        full.broken = "Its rule found nothing in the latest response."
+        var bare = DataSource(name: "news", url: "https://api.example.com/news")
+        bare.rule = ExtractionRule(kind: .xPath, expression: "//item[1]/title")
+
+        let first = DataModule(fetcher: DataFetcher(transport: StubDataTransport()))
+        first.openWindow = nil
+        first.start(host: StateFileHost(StateFile(url: url)))
+        first.save(full)
+        first.save(bare)
+
+        // As the app does at its next launch: a fresh module from the file.
+        let again = DataModule(fetcher: DataFetcher(transport: StubDataTransport()))
+        again.openWindow = nil
+        again.start(host: StateFileHost(StateFile(url: url)))
+        XCTAssertEqual(again.sources, [full, bare])
+    }
+
     func testChangingAKeyForgetsKeptResponses() async throws {
         let transport = StubDataTransport()
         var kept = weather()
@@ -212,4 +241,14 @@ private final class FixedPlace: KeybowModule, @unchecked Sendable {
         let place = ["location.latitude": "48.8566", "location.longitude": "2.3522"]
         return place.filter { names.contains($0.key) }
     }
+}
+
+/// Keeps a module's state in a real state.json, as the app does.
+private final class StateFileHost: ModuleHost, @unchecked Sendable {
+    let state: StateFile
+    init(_ state: StateFile) { self.state = state }
+    func load(_ key: String, for module: String) -> Data? { state.load(key, for: module) }
+    func save(_ data: Data?, as key: String, for module: String) { state.save(data, as: key, for: module) }
+    func statusChanged() {}
+    func copy(_ text: String) {}
 }

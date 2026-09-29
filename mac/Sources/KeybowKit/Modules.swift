@@ -333,9 +333,13 @@ public struct ModuleStatus: Equatable, Sendable {
 
 /// What the host offers a module.
 public protocol ModuleHost: AnyObject, Sendable {
-    /// Saved between runs of the app, per module.
+    /// Saved between runs of the app, per module: in the app, the module's
+    /// part of `state.json`, which the app reads and writes for it.
     func load(_ key: String, for module: String) -> Data?
     func save(_ data: Data?, as key: String, for module: String)
+    /// The folder beside the tree that its templates — and other files it
+    /// names, like a `{{quote}}`'s — are found in. Nil where there's none.
+    var templatesFolder: URL? { get }
     /// The module's status or values changed outside an action it was asked
     /// to run: show it.
     func statusChanged()
@@ -353,6 +357,7 @@ public protocol ModuleHost: AnyObject, Sendable {
 }
 
 extension ModuleHost {
+    public var templatesFolder: URL? { nil }
     public func setting(_ key: String, for module: String) -> String? { nil }
     public func secret(_ key: String, for module: String) -> String? { nil }
     public func setSecret(_ value: String?, _ key: String, for module: String) -> String? {
@@ -365,8 +370,13 @@ extension ModuleHost {
 public final class MemoryModuleHost: ModuleHost, @unchecked Sendable {
     private let lock = NSLock()
     private var stored: [String: Data] = [:]
+    private var folder: URL?
 
-    public init() {}
+    public init(templatesFolder: URL? = nil) {
+        folder = templatesFolder
+    }
+
+    public var templatesFolder: URL? { lock.withLock { folder } }
 
     public func load(_ key: String, for module: String) -> Data? {
         lock.withLock { stored["\(module).\(key)"] }
@@ -444,9 +454,10 @@ public final class ModuleRegistry: @unchecked Sendable {
         module(handlingBlock: call.name)?.standIn(for: call) ?? "‹\(call.name)›"
     }
 
-    /// The module that fetches a value: `api.weather` → the one fetching "api".
+    /// The module that fetches a value: `api.weather` → the one fetching
+    /// "api"; `quote file="q.md"` → the one fetching "quote".
     public func module(fetching name: String) -> KeybowModule? {
-        let prefix = name.split(separator: ".", maxSplits: 1).first.map(String.init) ?? name
+        let prefix = String(name.prefix { $0 != "." && !$0.isWhitespace })
         return all.first { $0.manifest.fetches.contains(prefix) }
     }
 

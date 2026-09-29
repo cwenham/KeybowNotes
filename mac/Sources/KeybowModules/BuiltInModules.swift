@@ -2,6 +2,7 @@ import KeybowAI
 import KeybowData
 import KeybowKit
 import KeybowLocation
+import KeybowQuotes
 import KeybowStopwatch
 
 /// Every module built in, for each host — the app, the command line — to
@@ -13,5 +14,6 @@ public enum BuiltInModules {
         ModuleRegistry.shared.register(ClaudeModule(), host: host)
         ModuleRegistry.shared.register(DataModule(), host: host)
         ModuleRegistry.shared.register(LocationModule(), host: host)
+        ModuleRegistry.shared.register(QuoteModule(), host: host)
     }
 }

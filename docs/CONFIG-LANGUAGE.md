@@ -757,6 +757,7 @@ Any text in an action, and every template, can use placeholders:
 | `{{selection}}` | the text selected in the app in front when the key was pressed |
 | `{{api.weather}}` | a value fetched from an API, found by a rule Claude wrote once (below) |
 | `{{location.latitude}}` | where this Mac is (below) |
+| `{{quote file="quotes.md"}}` | a paragraph or list item from a file, at random or in turn (below) |
 
 A fallback in quotes is taken without them: `{{selection|"5 minute timer"}}`
 gives *5 minute timer*.
@@ -927,6 +928,54 @@ Journal [append, entry: "**{{datetime}}** at {{location}} — {{selection}}"]
   Location Services.
 - The place is never written to the log. **Previews** show `‹your latitude›`.
 
+### Quotes from a file: `{{quote file="…"}}`
+
+`{{quote}}` picks a **portion** of a text file each time a key uses it — a
+quote of the day, a fortune, a writing prompt, the next article on a reading
+list, where to go for lunch:
+
+```
+Today [Copy, text: "{{quote file='quotes.md' heading='Stoics'}}"]
+Read next [Link, url: "{{quote file=reading.md order=sequential}}"]
+Lunch [Maps, query: "{{quote file=lunch.txt}}"]
+```
+
+What a portion is depends on the file:
+
+| File | Portions |
+|---|---|
+| Plain text — `.txt`, or anything not below | each paragraph, between blank lines. A file with no blank lines gives one per line, and a `fortune` file — entries between lines holding only `%` — one per entry |
+| Markdown — `.md`, `.markdown` | each item of a bulleted (`-`, `*`, `+`) or numbered (`1.`, `1)`) list, with whatever is indented under it: a sub-bullet with the author stays with its quote. Code blocks are skipped |
+| HTML — `.html`, `.htm` | each item of a `<ul>` or `<ol>`, with any list inside it as lines of `- …` |
+
+It takes three attributes:
+
+| Attribute | |
+|---|---|
+| `file` | the file: in the templates folder beside `tree.md`, or a full or `~/` path. Required |
+| `heading` | Markdown and HTML only: just the items under this heading, down to the next heading of the same level or higher — so a heading takes in its subheadings. Matched ignoring case, spacing, `*`/`_` emphasis and a closing colon. Without it, every item in the file |
+| `order` | `random`, the default — never the same item twice running — or `sequential`: each in turn, from the top again once the list is done |
+
+- **Attributes** are written like a block's: `key="value"`, `key='value'`, or
+  `key=value` without spaces. Inside an outline's quoted value, use single
+  quotes or none, so as not to need `\"`.
+- **Placeholders in attributes** are filled in from the key being pressed, so
+  one branch can serve several lists: `Quote [Copy, text: "{{quote
+  file=quotes.md heading='{{leaf}}'}}"]` with leaves *Stoics* and *Poets*.
+  A placeholder there must be in quotes.
+- **In sequence,** the place in each list — each file and heading — is kept in
+  `state.json` (§9), so it carries on after a restart. A list that has grown
+  or shrunk carries on from the same place, or starts again if it's past the end.
+- **Once per press:** the same quote twice in one action is one pick.
+- **A fallback** comes after the attributes, as usual:
+  `{{quote file=fortunes.txt|No fortune today}}`.
+- **It may steer an action** — go in a `url`, a `to`, a Maps `query` — because
+  it comes from a file you wrote, not from a model.
+- **Mistakes stop the action and say what's wrong**: a file that isn't there, a
+  heading that isn't (with the ones that are), a heading asked of plain text.
+- **Previews** show `‹a quote from quotes.md, Stoics›` and pick nothing, so a
+  preview never moves a sequence on.
+
 ### Where values come from
 
 Highest priority first:
@@ -959,9 +1008,9 @@ Highest priority first:
    sent ⌘C instead, and the clipboard is put back straight after; that can be
    turned off in Settings. Neither the selection nor the clipboard is written to
    the system log.
-5. **Fetched:** `{{api.weather}}` and `{{api.weather.raw}}` from data sources, and
-   `{{location}}` and its parts from Location Services (above) — only when the
-   action uses them. A value one of them needs is fetched first: a source's URL
+5. **Fetched:** `{{api.weather}}` and `{{api.weather.raw}}` from data sources,
+   `{{location}}` and its parts from Location Services, and `{{quote …}}` from a
+   file (above) — only when the action uses them. A value one of them needs is fetched first: a source's URL
    gets the Mac's place.
 6. **Built-ins:**
 
@@ -1042,6 +1091,11 @@ window instead of the file. Two of them feed into the language:
   `idleTimeoutMs` or `longPressCancelMs`.
 - **Default calendar and reminders list** — used when an action names neither.
 
+What the app remembers between runs — the stopwatch, data sources, each
+`{{quote}}` sequence's place — is neither: it's kept in `state.json` beside
+`tree.md`, each module in its own part. It's JSON, and readable, but written by
+the app; edit it only while KeybowNotes isn't running.
+
 ---
 
 ## 10. Reserved words
@@ -1066,7 +1120,7 @@ and from modules, `stopwatch`.
 
 **Computed values:** `leaf`, `parent`, `level1`–`level4`, `path`, `folderPath`,
 `parentPath`, `tree`, `contact.*`, `project.*`, `selection`, `clipboard`, `frontApp`,
-`stopwatch`, `stopwatch.*`, `api.*`, `location`, `location.*`, `date`,
+`stopwatch`, `stopwatch.*`, `api.*`, `location`, `location.*`, `quote`, `date`,
 `time`, `datetime`, `weekday`, `isoWeek`, and `when` by convention.
 
 **Tree names:** `main`, `row2`, `row3`, `bottom`.

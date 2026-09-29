@@ -24,7 +24,8 @@ bar or the outline directly.
 | Keep **state** between runs of the app | `ModuleHost.load` / `save` |
 | Put text on the **clipboard** | `ModuleHost.copy` |
 | Reply to **template blocks** — `{{#ai}}…{{/ai}}` | `manifest.blocks`, `reply(to:)`, `standIn(for:)` |
-| **Fetch values** when an action needs them — `{{api.weather}}` | `manifest.fetches`, `fetch(_:params:now:)`, `valuesNeeded(toFetch:)`, `standIn(forValue:)`, `fetchSubject(for:)` |
+| **Fetch values** when an action needs them — `{{api.weather}}`, `{{quote file="q.md"}}` | `manifest.fetches`, `fetch(_:params:now:)`, `valuesNeeded(toFetch:)`, `standIn(forValue:)`, `fetchSubject(for:)` |
+| Read files the tree names, beside its templates | `ModuleHost.templatesFolder` |
 | Add **settings** to the Settings window, secrets kept in the Keychain | `manifest.settings`, `ModuleHost.setting` / `secret` |
 | Keep secrets of its own making in the Keychain | `ModuleHost.setSecret` |
 | Say its status changed on its own | `ModuleHost.statusChanged()` |
@@ -39,6 +40,7 @@ KeybowStopwatch      a module: depends on KeybowKit only
 KeybowAI             a module: {{#ai}} blocks, and Claude for other modules
 KeybowData           a module: data sources, using KeybowAI to write rules
 KeybowLocation       a module: where the Mac is, from Location Services
+KeybowQuotes         a module: {{quote}}, portions of a file
 KeybowModules        the list of built-in modules
 KeybowNotesApp       registers them at launch; shows their status
 keybow               registers them too, so their keywords compile
@@ -102,14 +104,24 @@ a module is a new target, a line there, and a dependency in `Package.swift`.
   before, and hands each round's values to the next; values that need each
   other are refused. A name the tree gives a value itself isn't fetched.
   `fetchSubject(for:)` names what's fetched for the overlay: *Fetching your
-  location and sunset…*. Fetched values aren't blocks: they may go in fields
+  location and sunset…* — shown only if the wait passes a third of a second.
+  A fetched name can carry **attributes**, like a block's opening tag:
+  `{{quote file="q.md" order=sequential}}` is the name `quote file="q.md"
+  order=sequential`, found by its first word; `Template.operatorCall` reads
+  the attributes back. Fetched values aren't blocks: they may go in fields
   that steer an action. Previews use `standIn(forValue:)`.
 - **Settings.** A module describes its settings — text, a secret, a choice, a
   flag — and the host draws them in its own section of the Settings window. The
   module reads them with `setting(_:for:)`, and secrets with `secret(_:for:)`,
   which the host keeps in the Keychain. A module never draws or stores them.
-- **State.** `load` and `save` keep data per module between runs: in the app,
-  in its preferences; on the command line, in memory only.
+- **State.** `load` and `save` keep data per module between runs. In the app
+  they're the module's part of `state.json`, beside `tree.md`, under
+  `modules.<id>.<key>`: the app reads and writes the file for every module,
+  whole and atomically, and a module never touches it. Data that's JSON is
+  kept as JSON, so the file can be read. State once kept in the app's
+  preferences is moved into it the first time it's loaded. A development build
+  keeps `state-dev.json`. On the command line, state is in memory only.
+  Settings aren't state: they stay in the preferences, with secrets in the Keychain.
 
 A module is called from any thread, so it keeps its state behind a lock.
 
@@ -215,6 +227,22 @@ dependency at all: another module's values are in every action's placeholders.
   `NSLocationUsageDescription` in its Info.plist; it isn't signed with the
   hardened runtime, which would also need the
   `com.apple.security.personal-information.location` entitlement.
+
+## Quotes
+
+`mac/Sources/KeybowQuotes/`, module id `quote`.
+
+- Fetches `{{quote file="…" heading="…" order=random|sequential}}`.
+  `TextPortions` splits a file into portions: paragraphs of plain text (or
+  lines, or `fortune` entries), items of Markdown lists, items of HTML lists —
+  tidied from the text, since tidying bytes without a charset garbles them —
+  and narrows Markdown and HTML to the items under a heading.
+- In sequence, `positions` in its state holds each list's next place, keyed by
+  file path and heading; at random, the last one given, which isn't given again
+  next time. Picks within one fetch are shared by list and order.
+- Attribute values are templates, filled in from the action's values;
+  `valuesNeeded(toFetch:)` names what's in them, so `{{selection}}` is read
+  first if they use it.
 
 ## Not yet
 

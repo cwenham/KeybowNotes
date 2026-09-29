@@ -49,7 +49,9 @@ change your mind — press any key — before the action runs.
 
 **Values** — anything an action writes can include `{{placeholders}}`: the labels
 along the path, a contact's number, the date in any format, **where your Mac is**,
-the **text selected in the app you're using**, or the clipboard. `{{selection}}` makes a key that looks up,
+the **text selected in the app you're using**, the clipboard, or a **quote from a
+file** — a paragraph or list item picked at random or in turn, for a quote of the
+day, a writing prompt or the next thing on a reading list. `{{selection}}` makes a key that looks up,
 quotes, files or rewrites whatever you've highlighted.
 
 **Ask Claude** — a template can hold `{{#ai}}…{{/ai}}` blocks. The text inside is

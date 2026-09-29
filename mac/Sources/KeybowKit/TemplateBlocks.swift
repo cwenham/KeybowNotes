@@ -64,12 +64,16 @@ struct TemplateDocument {
             if start.lowerBound > rest.startIndex { _ = add(.text(rest[..<start.lowerBound])) }
             let inside = rest[start.upperBound...]
             let opensBlock = inside.first == "#"
-            guard let end = Self.tagEnd(in: inside, quoted: opensBlock) else {
-                // An unclosed brace is left as written — but a block's opening
-                // tag that never ends is surely a mistake, like a stray quote.
+            let isOperator = !opensBlock && Self.isOperator(inside)
+            guard let end = Self.tagEnd(in: inside, quoted: opensBlock || isOperator) else {
+                // An unclosed brace is left as written — but a tag with
+                // attributes that never ends is surely a mistake, like a stray quote.
                 if opensBlock {
                     let name = inside.dropFirst().prefix { !$0.isWhitespace && $0 != "}" }
                     problems.append("“{{#\(name)” has no closing }} — check its quotes.")
+                } else if isOperator {
+                    let name = inside.drop { $0 == " " }.prefix { !$0.isWhitespace }
+                    problems.append("“{{\(name)” has no closing }} — check its quotes.")
                 }
                 _ = add(.text(rest[start.lowerBound...]))
                 rest = ""
@@ -197,8 +201,22 @@ struct TemplateDocument {
 
     // MARK: - Reading tags
 
-    /// The `}}` that ends a tag. In a block's opening tag, one inside quotes
-    /// doesn't count: `{{#ai note="}}"}}`.
+    /// True for a placeholder with attributes — an operator a module works
+    /// out: `quote file="quotes.md"`. A name, a space, then `key=`; plain
+    /// placeholders never have a space before their fallback's `|`.
+    static func isOperator(_ text: Substring) -> Bool {
+        var rest = text.drop { $0 == " " }
+        guard let first = rest.first, first.isLetter else { return false }
+        rest = rest.drop { $0.isLetter || $0.isNumber || "_.-".contains($0) }
+        guard let space = rest.first, space.isWhitespace else { return false }
+        rest = rest.drop { $0.isWhitespace }
+        guard let keyStart = rest.first, keyStart.isLetter else { return false }
+        rest = rest.drop { $0.isLetter || $0.isNumber || "_-".contains($0) }
+        return rest.drop { $0 == " " }.first == "="
+    }
+
+    /// The `}}` that ends a tag. In a tag with attributes, one inside quotes
+    /// doesn't count: `{{#ai note="}}"}}`, `{{quote heading="{{leaf}}"}}`.
     private static func tagEnd(in text: Substring, quoted: Bool) -> Range<Substring.Index>? {
         guard quoted else { return text.range(of: "}}") }
         var quote: Character?
@@ -221,7 +239,7 @@ struct TemplateDocument {
 
     /// `ai model="opus-5.5" effort=low` → ("ai", [model: opus-5.5, effort: low]).
     /// A bare word is an attribute with an empty value.
-    private static func opening(_ text: Substring) -> Result<(String, [String: String]), TagProblem> {
+    static func opening(_ text: Substring) -> Result<(String, [String: String]), TagProblem> {
         var rest = text.drop { $0 == " " }
         let name = String(rest.prefix { !$0.isWhitespace })
         guard let first = name.first, first.isLetter,

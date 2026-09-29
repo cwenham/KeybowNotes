@@ -77,9 +77,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         watch(store)
         settings.onChange = { [weak self] change in self?.settingsChanged(change) }
         Modules.host.onChange = { [weak self] in self?.refreshModules() }
+        Modules.host.templatesFolder = store.templatesDirectory
         refreshModules()
 
         Log.info("KeybowNotes \(versionDescription) running with \(store.url.path)\(dryRun ? " (dry run)" : "")")
+        if let problem = Modules.host.state.problem {
+            Log.error("state: \(problem)")
+        }
         if let problem = store.problem {
             Log.error("config problem: \(problem)")
             overlay.flashNotice("Config problem — see Settings", symbol: "exclamationmark.triangle")
@@ -150,6 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard url != store.url else { return }
         store.stopWatching()
         store = ConfigStore(url: url)
+        Modules.host.templatesFolder = store.templatesDirectory
         watch(store)
         Log.info("config file: \(url.path)")
         configChanged()
@@ -359,11 +364,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let askTitle = askers.count == 1 ? "Asking \(askers.first!)…" : "Waiting for replies…"
         let fetchTitle = "Fetching " + registry.fetchSubject(for: fetchedNames,
                                                             given: ActionPlanner.values(for: selection, context: context)) + "…"
-        overlay.showWorking(summary, path: selection.pathDescription,
-                            title: fetchedNames.isEmpty ? askTitle : fetchTitle) { [weak self] in
-            self?.cancelReplies()
+        // Shown only if the wait lasts: a quote from a file, or a kept
+        // response, is there before it would be seen.
+        let title = WaitTitle(fetchedNames.isEmpty ? askTitle : fetchTitle)
+        let showing = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            overlay.showWorking(summary, path: selection.pathDescription, title: title.text) { self?.cancelReplies() }
         }
-        defer { overlay.endWorking() }
+        defer {
+            showing.cancel()
+            overlay.endWorking()
+        }
         // Development builds only: press Cancel after a while, for testing.
         if Bundle.main.bundleIdentifier == nil,
            let after = Double(ProcessInfo.processInfo.environment["KEYBOW_DEBUG_CANCEL_AFTER"] ?? "") {
@@ -383,6 +395,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                 Date().timeIntervalSince(started)))
             }
             if !texts.isEmpty {
+                title.text = askTitle
                 overlay.updateWorking(title: askTitle)
                 let replies = try await TemplateBlocks.resolve(
                     texts, params: ActionPlanner.values(for: selection, context: context),
@@ -818,4 +831,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Log.info("cleared (\(reason.rawValue))")
         }
     }
+}
+
+/// What the wait is for, as it changes: read when the overlay shows it.
+@MainActor
+private final class WaitTitle {
+    var text: String
+    init(_ text: String) { self.text = text }
 }

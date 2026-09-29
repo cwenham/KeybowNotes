@@ -13,6 +13,8 @@ import Foundation
 ///   {{#ai}}…{{/ai}}        a block: its contents filled in, then handed to
 ///                          a module, whose reply takes its place (see
 ///                          TemplateBlocks)
+///   {{quote file="q.md"}}  an operator: a name with attributes, whose value a
+///                          module fetches before the action runs
 ///
 /// Anything missing without a fallback expands to nothing and is reported, so
 /// callers can refuse to act on — or at least warn about — an incomplete value.
@@ -52,11 +54,46 @@ public enum Template {
     }
 
     /// The names a template uses, without fallbacks or formats: "selection",
-    /// "contact.phone", "date" — inside blocks too.
+    /// "contact.phone", "date" — inside blocks too. An operator's name is the
+    /// whole of it, attributes and all: `quote file="quotes.md"`.
     public static func names(in template: String) -> Set<String> {
         Set(TemplateDocument(template).placeholderBodies.map { body in
-            body.prefix { $0 != "|" && $0 != ":" }.trimmingCharacters(in: .whitespaces)
+            let name = split(body).name
+            if TemplateDocument.isOperator(Substring(name)) { return name }
+            return name.prefix { $0 != ":" }.trimmingCharacters(in: .whitespaces)
         })
+    }
+
+    /// `quote file="quotes.md" order=sequential` → ("quote", [file: quotes.md,
+    /// order: sequential]). Nil for a plain name.
+    public static func operatorCall(_ name: String) -> (name: String, attributes: [String: String])? {
+        guard TemplateDocument.isOperator(Substring(name)),
+              case .success(let call) = TemplateDocument.opening(Substring(name)) else { return nil }
+        return (call.0, call.1)
+    }
+
+    /// A placeholder's name and fallback, split at the first `|` — outside
+    /// quotes, in an operator's attributes.
+    static func split(_ body: String) -> (name: String, fallback: String?) {
+        let isOperator = TemplateDocument.isOperator(Substring(body))
+        var quote: Character?
+        for index in body.indices {
+            let character = body[index]
+            if isOperator {
+                if let open = quote {
+                    if character == open { quote = nil }
+                    continue
+                }
+                if character == "\"" || character == "'" {
+                    quote = character
+                    continue
+                }
+            }
+            if character == "|" {
+                return (body[..<index].trimmingCharacters(in: .whitespaces), String(body[body.index(after: index)...]))
+            }
+        }
+        return (body.trimmingCharacters(in: .whitespaces), nil)
     }
 
     /// True for text that is one placeholder and nothing else: `{{selection}}`.
@@ -78,13 +115,7 @@ public enum Template {
 
     static func value(for body: String, params: [String: String], now: Date, calendar: Calendar,
                               locale: Locale, missing: inout [String]) -> String {
-        var name = body
-        var fallback: String?
-        if let bar = body.firstIndex(of: "|") {
-            name = String(body[..<bar])
-            fallback = String(body[body.index(after: bar)...])
-        }
-        name = name.trimmingCharacters(in: .whitespaces)
+        let (name, fallback) = split(body)
 
         if let given = params[name], !given.isEmpty {
             return given

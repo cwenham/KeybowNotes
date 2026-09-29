@@ -1,4 +1,5 @@
 import AppKit
+import KeybowAI
 import KeybowKit
 import KeybowModules
 
@@ -18,7 +19,40 @@ enum Modules {
         if Bundle.main.bundleIdentifier == nil, let debug {
             ModuleRegistry.shared.register(WaitModule(standingInForClaude: debug == "claude"), host: host)
         }
+        // Development builds only, on request: Claude answers every request
+        // with KEYBOW_DEBUG_CLAUDE_REPLY, with no request sent and no key —
+        // for trying and capturing Find It in Data Sources.
+        if Bundle.main.bundleIdentifier == nil, let reply = ProcessInfo.processInfo.environment["KEYBOW_DEBUG_CLAUDE_REPLY"] {
+            ModuleRegistry.shared.register(ClaudeModule(transport: ScriptedClaude(reply: reply)), host: KeyedHost(host))
+        }
     }
+}
+
+/// Replies as the Messages API would, with the same text every time.
+private struct ScriptedClaude: ClaudeTransport {
+    let reply: String
+
+    func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        try await Task.sleep(for: .seconds(1.5))
+        let body: [String: Any] = ["content": [["type": "text", "text": reply]], "stop_reason": "end_turn"]
+        return (try JSONSerialization.data(withJSONObject: body),
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+    }
+}
+
+/// The app's host, with a stand-in Claude key: ScriptedClaude needs none.
+private final class KeyedHost: ModuleHost, @unchecked Sendable {
+    let host: ModuleHost
+
+    init(_ host: ModuleHost) { self.host = host }
+
+    func load(_ key: String, for module: String) -> Data? { host.load(key, for: module) }
+    func save(_ data: Data?, as key: String, for module: String) { host.save(data, as: key, for: module) }
+    func statusChanged() { host.statusChanged() }
+    func copy(_ text: String) { host.copy(text) }
+    func setting(_ key: String, for module: String) -> String? { host.setting(key, for: module) }
+    func secret(_ key: String, for module: String) -> String? { key == "apiKey" ? "scripted" : host.secret(key, for: module) }
+    func setSecret(_ value: String?, _ key: String, for module: String) -> String? { host.setSecret(value, key, for: module) }
 }
 
 /// `{{#wait seconds=3}}text{{/wait}}` → "TEXT", after the wait. Not in the app.

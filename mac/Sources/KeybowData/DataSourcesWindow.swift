@@ -34,6 +34,12 @@ final class DataSourcesWindowController: NSWindowController, NSWindowDelegate {
 
     func show() {
         model.reload()
+        // Development builds only: Find It on the first source as the window
+        // opens, for screenshots.
+        if Bundle.main.bundleIdentifier == nil, ProcessInfo.processInfo.environment["KEYBOW_DEBUG_DATA_FIND"] != nil,
+           let source = model.selected {
+            model.findIt(source)
+        }
         // A menu-bar app isn't active, so its window would open behind others.
         NSApp.activate()
         showWindow(nil)
@@ -328,6 +334,7 @@ private struct SourceDetail: View {
             Text("Sample values")
         } footer: {
             Text("The URL's placeholders, filled in for fetching a sample here.").font(.caption).foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -411,6 +418,7 @@ private struct SourceDetail: View {
         } footer: {
             Text("Finding it sends a sample of the response and your description to Claude, once. Every key press after that applies the rule here, on this Mac.")
                 .font(.caption).foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -480,11 +488,17 @@ private struct SourceDetail: View {
         var body: some View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
+                // Plain, with a border drawn here: a rounded-border field
+                // wraps a long URL but stays one line tall, hiding the rest.
                 TextField(title, text: $text, prompt: Text(prompt), axis: .vertical)
                     .labelsHidden()
                     .multilineTextAlignment(.leading)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
                     .lineLimit(1...4)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
+                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color(nsColor: .separatorColor)))
             }
         }
     }

@@ -44,7 +44,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "KeybowNotesApp",
-            dependencies: ["KeybowKit", "KeybowModules"],
+            dependencies: ["KeybowKit", "KeybowAI", "KeybowModules"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(

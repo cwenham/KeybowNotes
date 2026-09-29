@@ -131,6 +131,35 @@ final class DataModuleTests: XCTestCase {
         XCTAssertEqual(DataModule.parse("api.next-train.raw").source, "next-train")
     }
 
+    func testAKeyPressLocatesTheMacBeforeFetchingASourceThatNeedsIt() async throws {
+        let registry = ModuleRegistry()
+        let transport = StubDataTransport()
+        let data = DataModule(fetcher: DataFetcher(transport: transport))
+        data.openWindow = nil
+        registry.register(data, host: MemoryModuleHost())
+        registry.register(FixedPlace(), host: MemoryModuleHost())
+        var sunset = weather()
+        sunset.name = "sunset"
+        sunset.url = "https://api.example.com/sun?lat={{location.latitude}}&lon={{location.longitude}}"
+        data.save(sunset)
+
+        XCTAssertEqual(registry.fetchSubject(for: ["api.sunset"]), "your location and sunset")
+        let values = try await registry.fetch(["api.sunset"], params: [:], now: now)
+        XCTAssertEqual(values["api.sunset"], "14.2")
+        XCTAssertEqual(transport.requests.first?.url?.query, "lat=48.8566&lon=2.3522")
+    }
+
+    func testASampleFindsValuesOtherModulesFetch() async throws {
+        ModuleRegistry.shared.register(FixedPlace(), host: MemoryModuleHost())
+        let transport = StubDataTransport()
+        var sunset = DataSource(name: "sunset", url: "https://api.example.com/sun?lat={{location.latitude}}&lon={{location.longitude}}&tz={{tz}}")
+        sunset.sampleValues = ["tz": "auto", "location.longitude": "-0.13"]
+        let data = module([sunset], transport: transport)
+        _ = try await data.sample(sunset)
+        XCTAssertEqual(transport.requests.first?.url?.query, "lat=48.8566&lon=-0.13&tz=auto",
+                       "the Mac's place where there's no sample value, the sample value where there is")
+    }
+
     func testTheRegistryRoutesApiNamesHere() async throws {
         let registry = ModuleRegistry()
         let transport = StubDataTransport()
@@ -169,5 +198,18 @@ final class DataModuleTests: XCTestCase {
         XCTAssertThrowsError(try ActionPlanner.blockTexts(for: guess, context: context)) {
             XCTAssertEqual($0 as? ActionPlanError, .blockNotAllowed(field: "url", block: "ai"))
         }
+    }
+}
+
+/// Always in Paris.
+private final class FixedPlace: KeybowModule, @unchecked Sendable {
+    let manifest = ModuleManifest(id: "location", name: "Location", fetches: ["location"])
+    func start(host: ModuleHost) {}
+    func summary(of request: ModuleRequest, now: Date) -> ModuleSummary { ModuleSummary(verb: "", subject: "") }
+    func run(_ request: ModuleRequest, now: Date) async -> ActionOutcome { .failure("") }
+    func fetchSubject(for names: [String]) -> String { "your location" }
+    func fetch(_ names: [String], params: [String: String], now: Date) async throws -> [String: String] {
+        let place = ["location.latitude": "48.8566", "location.longitude": "2.3522"]
+        return place.filter { names.contains($0.key) }
     }
 }

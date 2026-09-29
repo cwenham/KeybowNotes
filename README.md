@@ -48,8 +48,8 @@ change your mind — press any key — before the action runs.
   the menu bar, and its key breathes while it runs.
 
 **Values** — anything an action writes can include `{{placeholders}}`: the labels
-along the path, a contact's number, the date in any format, the **text selected in
-the app you're using**, or the clipboard. `{{selection}}` makes a key that looks up,
+along the path, a contact's number, the date in any format, **where your Mac is**,
+the **text selected in the app you're using**, or the clipboard. `{{selection}}` makes a key that looks up,
 quotes, files or rewrites whatever you've highlighted.
 
 **Ask Claude** — a template can hold `{{#ai}}…{{/ai}}` blocks. The text inside is
@@ -85,7 +85,8 @@ long as you choose:
 ```
 
 The URL's placeholders — `{{lat}}` and `{{lon}}` here — come from the tree, like any
-other value. A fetched value may go in a link or a phone number, since a fixed rule
+other value. Use `{{location.latitude}}` and `{{location.longitude}}` in the URL
+instead, and the source follows your laptop about. A fetched value may go in a link or a phone number, since a fixed rule
 picks it, not a model. If the API changes and the rule stops finding its value, the
 key says so, the menu bar flags the source, and Claude can find it again from your
 description. API keys stay in the Keychain and go only to their own API.
@@ -158,6 +159,7 @@ macOS asks the first time each is needed:
 | Calendar events and reminders | Calendars, Reminders |
 | `{{selection}}`, and typing text into other apps | Accessibility |
 | Looking people up in the editor | Contacts |
+| `{{location}}`, where your Mac is | Location Services |
 
 The app isn't sandboxed and isn't on the App Store: driving Notes, Mail and Music
 through AppleScript rules that out.

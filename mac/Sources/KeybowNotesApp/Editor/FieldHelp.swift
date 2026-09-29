@@ -47,7 +47,10 @@ enum FieldHelp {
     private static let blockLine = "An {{#ai}}…{{/ai}} block asks Claude, and its reply takes the block's place."
     /// Fields that steer the action but may still take a fetched value.
     private static let dataKeys: Set<String> = ["url", "to", "query", "input"]
-    private static let dataLine = "{{api.weather}} is the value from the “weather” data source: Edit Data Sources… in the menu bar."
+    private static let dataLine = """
+        {{api.weather}} is the value from the “weather” data source: Edit Data Sources… in the menu bar. \
+        {{location}} is where this Mac is.
+        """
 
     private static let byKey: [String: String] = [
         "template": """

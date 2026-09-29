@@ -308,7 +308,7 @@ private struct SourceDetail: View {
             TextField("Name", text: $source.name)
                 .help("How templates refer to it: {{api.name}} for the value, {{api.name.raw}} for the whole response.\nExample: weather")
             WideField(title: "URL", text: $source.url, prompt: "https://api.example.com/v1/current?city={{city}}")
-                .help("The address to fetch, over https. Placeholders take values from the key being pressed — {{selection}} too — and are encoded as in any link.\nExample: https://api.example.com/v1/current?city={{city}}")
+                .help("The address to fetch, over https. Placeholders take values from the key being pressed — {{selection}} and {{location.latitude}} too — and are encoded as in any link.\nExample: https://api.open-meteo.com/v1/forecast?latitude={{location.latitude}}&longitude={{location.longitude}}&current=temperature_2m")
             Picker("Keep responses for", selection: $source.cacheSeconds) {
                 ForEach(Self.cacheChoices, id: \.0) { Text($0.1).tag($0.0) }
             }
@@ -324,11 +324,15 @@ private struct SourceDetail: View {
     private var sampleSection: some View {
         Section {
             ForEach(source.urlNames.sorted(), id: \.self) { name in
+                // {{location.latitude}}: fetched here as for a key, unless given.
+                let fetched = ModuleRegistry.shared.module(fetching: name) != nil
                 TextField(name, text: Binding(
                     get: { source.sampleValues[name] ?? "" },
                     set: { source.sampleValues[name] = $0.isEmpty ? nil : $0 }
-                ))
-                .help("Used for {{\(name)}} when fetching a sample or testing here. When a key is pressed, the value comes from the tree.")
+                ), prompt: fetched ? Text(ModuleRegistry.shared.standIn(forValue: name)) : nil)
+                .help(fetched
+                      ? "Left empty, {{\(name)}} is fetched when you fetch a sample or test, as it is for a key. Fill it in to try another value."
+                      : "Used for {{\(name)}} when fetching a sample or testing here. When a key is pressed, the value comes from the tree.")
             }
         } header: {
             Text("Sample values")

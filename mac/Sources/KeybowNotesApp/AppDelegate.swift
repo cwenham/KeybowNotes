@@ -276,7 +276,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Values modules fetch — {{api.weather}} — and what they need first.
         let registry = ModuleRegistry.shared
         let used = ActionPlanner.placeholders(for: selection, context: context)
-        let fetchedNames = registry.fetchedNames(in: used)
+        // A value the tree gives itself — `location: Office` — isn't fetched.
+        let given = ActionPlanner.values(for: selection, context: context)
+        let fetchedNames = registry.fetchedNames(in: used).filter { given[$0] == nil }
         let needed = used.union(registry.valuesNeeded(toFetch: fetchedNames))
         let waits = !blockTexts.isEmpty || !fetchedNames.isEmpty
         if waits, pendingWork != nil {
@@ -336,8 +338,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             registry.module(handlingBlock: name)?.manifest.blocks.first { $0.name == name }?.title
         })
         let askTitle = askers.count == 1 ? "Asking \(askers.first!)…" : "Waiting for replies…"
-        let sources = fetchedNames.map { $0.split(separator: ".").dropFirst().first.map(String.init) ?? $0 }
-        let fetchTitle = "Fetching " + Array(Set(sources)).sorted().joined(separator: ", ") + "…"
+        let fetchTitle = "Fetching " + registry.fetchSubject(for: fetchedNames,
+                                                            given: ActionPlanner.values(for: selection, context: context)) + "…"
         overlay.showWorking(summary, path: selection.pathDescription,
                             title: fetchedNames.isEmpty ? askTitle : fetchTitle) { [weak self] in
             self?.cancelReplies()

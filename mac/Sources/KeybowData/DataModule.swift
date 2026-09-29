@@ -74,9 +74,16 @@ public final class DataModule: KeybowModule, @unchecked Sendable {
         return host?.setSecret(key, "key.\(id.uuidString)", for: Self.id)
     }
 
-    /// A fresh response, with the source's sample values in its URL.
+    /// A fresh response, with the source's sample values in its URL — and
+    /// values other modules fetch, `{{location.latitude}}`, where it has none.
     public func sample(_ source: DataSource) async throws -> Fetched {
-        try await fetcher.fetch(source, params: source.sampleValues, key: key(for: source.id), useCache: false)
+        var params = source.sampleValues
+        let registry = ModuleRegistry.shared
+        let fetched = registry.fetchedNames(in: source.urlNames).filter { params[$0] == nil && registry.module(fetching: $0) !== self }
+        if !fetched.isEmpty {
+            params.merge(try await registry.fetch(fetched, params: params, now: Date())) { given, _ in given }
+        }
+        return try await fetcher.fetch(source, params: params, key: key(for: source.id), useCache: false)
     }
 
     /// Claude's rule for what the source wants, checked against a sample.
@@ -173,6 +180,12 @@ public final class DataModule: KeybowModule, @unchecked Sendable {
             if let source = source(named: Self.parse(name).source) { needed.formUnion(source.urlNames) }
         }
         return needed
+    }
+
+    public func fetchSubject(for names: [String]) -> String {
+        var sources: [String] = []
+        for name in names where !sources.contains(Self.parse(name).source) { sources.append(Self.parse(name).source) }
+        return sources.joined(separator: ", ")
     }
 
     public func standIn(forValue name: String) -> String {

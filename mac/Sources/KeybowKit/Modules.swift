@@ -74,11 +74,17 @@ public protocol KeybowModule: AnyObject, Sendable {
     func fetch(_ names: [String], params: [String: String], now: Date) async throws -> [String: String]
 
     /// Other values those names need to be fetched — a URL's `{{city}}` or
-    /// `{{selection}}` — so the host gets them ready first.
+    /// `{{selection}}` — so the host gets them ready first. They may be
+    /// another module's fetched values, `{{location.latitude}}`, which are
+    /// fetched before these.
     func valuesNeeded(toFetch names: [String]) -> Set<String>
 
     /// What a fetched value shows in previews: "‹weather›".
     func standIn(forValue name: String) -> String
+
+    /// What's being fetched, for the overlay's "Fetching …": "weather",
+    /// "your location".
+    func fetchSubject(for names: [String]) -> String
 }
 
 /// A module's reason, fit to show on the overlay.
@@ -110,6 +116,7 @@ extension KeybowModule {
     }
     public func valuesNeeded(toFetch names: [String]) -> Set<String> { [] }
     public func standIn(forValue name: String) -> String { "‹\(name)›" }
+    public func fetchSubject(for names: [String]) -> String { manifest.name }
 }
 
 /// A command a module offers in the menu bar's menu — or a submenu of them,
@@ -448,24 +455,83 @@ public final class ModuleRegistry: @unchecked Sendable {
         names.filter { module(fetching: $0) != nil }.sorted()
     }
 
-    /// What those names need first, from the modules that fetch them.
+    /// What those names need first, from the modules that fetch them — and
+    /// what those need in turn, when they're fetched too.
     public func valuesNeeded(toFetch names: [String]) -> Set<String> {
         var needed = Set<String>()
-        for (module, group) in grouped(names) { needed.formUnion(module.valuesNeeded(toFetch: group)) }
+        var seen = Set(names)
+        var frontier = names
+        while !frontier.isEmpty {
+            var next: [String] = []
+            for (module, group) in grouped(frontier) {
+                for name in module.valuesNeeded(toFetch: group) where needed.insert(name).inserted {
+                    if self.module(fetching: name) != nil, seen.insert(name).inserted { next.append(name) }
+                }
+            }
+            frontier = next
+        }
         return needed
     }
 
-    /// Fetches them — each module's at once, the modules side by side.
-    public func fetch(_ names: [String], params: [String: String], now: Date) async throws -> [String: String] {
-        let groups = grouped(names)
-        return try await withThrowingTaskGroup(of: [String: String].self) { group in
-            for (module, names) in groups {
-                group.addTask { try await module.fetch(names, params: params, now: now) }
+    /// Everything fetching these involves, in the order it's fetched: each
+    /// round needs only what came before. A name already in `params` isn't
+    /// fetched — the tree's own values win — so a node can set
+    /// `location.latitude` for a place of its own.
+    public func fetchRounds(_ names: [String], given params: [String: String] = [:]) throws -> [[String]] {
+        var remaining = Set(names).union(valuesNeeded(toFetch: names).filter { module(fetching: $0) != nil })
+        remaining = remaining.filter { params[$0] == nil && module(fetching: $0) != nil }
+        var rounds: [[String]] = []
+        while !remaining.isEmpty {
+            let ready = remaining.filter { name in
+                module(fetching: name).map { $0.valuesNeeded(toFetch: [name]).isDisjoint(with: remaining) } ?? false
             }
-            var values: [String: String] = [:]
-            for try await fetched in group { values.merge(fetched) { first, _ in first } }
-            return values
+            guard !ready.isEmpty else {
+                throw ModuleError("These values each need another to be fetched first",
+                                  remaining.sorted().map { "{{\($0)}}" }.joined(separator: ", "))
+            }
+            rounds.append(ready.sorted())
+            remaining.subtract(ready)
         }
+        return rounds
+    }
+
+    /// "your location and weather", for the overlay's "Fetching …".
+    public func fetchSubject(for names: [String], given params: [String: String] = [:]) -> String {
+        let ordered = ((try? fetchRounds(names, given: params)) ?? [names]).flatMap { $0 }
+        var subjects: [String] = []
+        for (module, group) in grouped(ordered) {
+            let subject = module.fetchSubject(for: group)
+            if !subjects.contains(subject) { subjects.append(subject) }
+        }
+        switch subjects.count {
+        case 0: return "values"
+        case 1: return subjects[0]
+        default: return subjects.dropLast().joined(separator: ", ") + " and " + subjects.last!
+        }
+    }
+
+    /// Fetches them, and whatever they need that's fetched too — a round at a
+    /// time, each module's names in a round at once, the modules side by
+    /// side. Each round's values are there for the next: a data source's URL
+    /// gets `{{location.latitude}}`. Returns every value fetched.
+    public func fetch(_ names: [String], params: [String: String], now: Date) async throws -> [String: String] {
+        var params = params
+        var values: [String: String] = [:]
+        for round in try fetchRounds(names, given: params) {
+            let groups = grouped(round)
+            let given = params
+            let fetched = try await withThrowingTaskGroup(of: [String: String].self) { group in
+                for (module, names) in groups {
+                    group.addTask { try await module.fetch(names, params: given, now: now) }
+                }
+                var fetched: [String: String] = [:]
+                for try await result in group { fetched.merge(result) { first, _ in first } }
+                return fetched
+            }
+            values.merge(fetched) { first, _ in first }
+            params.merge(fetched) { _, new in new }
+        }
+        return values
     }
 
     public func standIn(forValue name: String) -> String {

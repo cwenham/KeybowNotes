@@ -753,6 +753,7 @@ Any text in an action, and every template, can use placeholders:
 | `{{date:yyyy-MM-dd}}` | a date built-in with a format |
 | `{{selection}}` | the text selected in the app in front when the key was pressed |
 | `{{api.weather}}` | a value fetched from an API, found by a rule Claude wrote once (below) |
+| `{{location.latitude}}` | where this Mac is (below) |
 
 A fallback in quotes is taken without them: `{{selection|"5 minute timer"}}`
 gives *5 minute timer*.
@@ -835,7 +836,11 @@ Data Sources…* in the menu bar's menu:
 - **A URL**, over https. It can hold placeholders, filled from the key being
   pressed and encoded as in any link (§6, *Inside links*):
   `https://api.example.com/v1/current?city={{city}}`. Give them sample values in
-  the window, for fetching a sample there.
+  the window, for fetching a sample there. `{{location.latitude}}` and
+  `{{location.longitude}}` make a source follow the Mac about:
+  `https://api.open-meteo.com/v1/forecast?latitude={{location.latitude}}&longitude={{location.longitude}}&current=temperature_2m`.
+  They need no sample values — the window finds the Mac, as a key would —
+  though you can give some to try another place.
 - **An API key**, if it needs one — sent as a Bearer token, in a header of its
   own (`X-API-Key` unless you name another) or as a query parameter (`key`
   unless you name another). It's kept in the Keychain, sent only to that
@@ -883,6 +888,42 @@ tries the current one.
   about it, with a hint; the log gets only the status.
 - **Previews** show a stand-in, `‹weather›`, and fetch nothing.
 
+### Where you are: `{{location}}`
+
+| Name | Example | |
+|---|---|---|
+| `location` | 51.50722,-0.1275 | latitude and longitude, for a map link or an API |
+| `location.latitude` | 51.50722 | degrees north; south is negative |
+| `location.longitude` | -0.1275 | degrees east; west is negative |
+| `location.altitude` | | metres above sea level — usually empty (below) |
+| `location.accuracy` | 35 | how far off the place may be, in metres |
+
+```
+Here [Copy, text: "I'm at https://maps.apple.com/?ll={{location}}"]
+Journal [append, entry: "**{{datetime}}** at {{location}} — {{selection}}"]
+```
+
+- **Found when a key uses it,** through Location Services, and kept for five
+  minutes, so keys pressed together don't each wait. The overlay shows
+  *Fetching your location…* with a timer and Cancel; a Mac on Wi-Fi usually
+  answers within a few seconds, and gives up after twenty.
+- **Macs find their place from nearby Wi-Fi networks,** not GPS: expect tens of
+  metres, and no altitude — `{{location.altitude}}` is empty unless the Mac
+  knows it, so write `{{location.altitude|unknown}}` to say so.
+- **Precision,** in Settings → Location, rounds the place: as exactly as the Mac
+  knows (5 decimal places), about 100 m, about 1 km, or about 10 km. Rounding is
+  kinder to your privacy when the place goes to someone else's API; a weather
+  forecast needs no more than about 1 km. `{{location.accuracy}}` grows to match.
+- **The tree's own values win.** A node with `location.latitude: 40.7128` and
+  `location.longitude: -74.006` — or `location: "40.7128,-74.006"`, quoted for
+  its comma — uses that place for every `{{location…}}` value beneath it, and
+  the Mac isn't asked: handy for keys that are always about the office.
+- **The first time,** macOS asks whether KeybowNotes may use your location. The
+  prompt can open behind other windows. Refused, a key that needs the place
+  stops and says where to allow it: System Settings → Privacy & Security →
+  Location Services.
+- The place is never written to the log. **Previews** show `‹your latitude›`.
+
 ### Where values come from
 
 Highest priority first:
@@ -915,8 +956,10 @@ Highest priority first:
    sent ⌘C instead, and the clipboard is put back straight after; that can be
    turned off in Settings. Neither the selection nor the clipboard is written to
    the system log.
-5. **Data sources:** `{{api.weather}}` and `{{api.weather.raw}}` (above),
-   fetched only when the action uses them.
+5. **Fetched:** `{{api.weather}}` and `{{api.weather.raw}}` from data sources, and
+   `{{location}}` and its parts from Location Services (above) — only when the
+   action uses them. A value one of them needs is fetched first: a source's URL
+   gets the Mac's place.
 6. **Built-ins:**
 
    | Name | Default format | Example |
@@ -1020,7 +1063,7 @@ and from modules, `stopwatch`.
 
 **Computed values:** `leaf`, `parent`, `level1`–`level4`, `path`, `folderPath`,
 `parentPath`, `tree`, `contact.*`, `project.*`, `selection`, `clipboard`, `frontApp`,
-`stopwatch`, `stopwatch.*`, `api.*`, `date`,
+`stopwatch`, `stopwatch.*`, `api.*`, `location`, `location.*`, `date`,
 `time`, `datetime`, `weekday`, `isoWeek`, and `when` by convention.
 
 **Tree names:** `main`, `row2`, `row3`, `bottom`.

@@ -394,8 +394,9 @@ Placeholders are `{{…}}`:
    `{{folderPath}}` ("Work/Notes/Standup"), `{{parentPath}}`, `{{tree}}`.
 4. **Built-ins** — `{{date}}`, `{{time}}`, `{{datetime}}`, `{{weekday}}`,
    `{{isoWeek}}`, `{{clipboard}}`, `{{frontApp}}`.
-5. **Data sources** — `{{api.weather}}`, fetched from an API when an action
-   uses it (see below).
+5. **Fetched** — `{{api.weather}}` from an API, and `{{location.latitude}}`
+   from Location Services, when an action uses them (see below). A data
+   source's URL may use the Mac's place; it's found first.
 
 `{{selection}}` is the text selected in the frontmost app. It is read only when
 the action uses it, through the accessibility API; apps that don't answer
@@ -464,6 +465,7 @@ should explain a refusal rather than failing silently.
 | Reminders | `reminders.create` |
 | Contacts | The tree editor's *Look Up in Contacts*; asked for when first used |
 | Network (Anthropic API) | `{{#ai}}` blocks: prompts go to `api.anthropic.com` with an API key from the Keychain. No permission prompt; the key is the gate |
+| Location Services | `{{location}}` and its parts, including in a data source's URL. Asked for when first needed. The app isn't under the hardened runtime; if it were, it would also need the `com.apple.security.personal-information.location` entitlement |
 | Accessibility | `text.insert`: pressing ⌘V in the app in front. `text.insertDirect`: setting the selected text, or typing. `{{selection}}`: reading the selected text, and sending ⌘C to apps that won't share it. Asked for when first needed, or from Settings → Selected Text |
 
 `url.open`, `clipboard.copy` and `maps.search` need nothing. `clock.timer` needs

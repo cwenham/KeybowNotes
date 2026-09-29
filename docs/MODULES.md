@@ -24,7 +24,7 @@ bar or the outline directly.
 | Keep **state** between runs of the app | `ModuleHost.load` / `save` |
 | Put text on the **clipboard** | `ModuleHost.copy` |
 | Reply to **template blocks** — `{{#ai}}…{{/ai}}` | `manifest.blocks`, `reply(to:)`, `standIn(for:)` |
-| **Fetch values** when an action needs them — `{{api.weather}}` | `manifest.fetches`, `fetch(_:params:now:)`, `valuesNeeded(toFetch:)`, `standIn(forValue:)` |
+| **Fetch values** when an action needs them — `{{api.weather}}` | `manifest.fetches`, `fetch(_:params:now:)`, `valuesNeeded(toFetch:)`, `standIn(forValue:)`, `fetchSubject(for:)` |
 | Add **settings** to the Settings window, secrets kept in the Keychain | `manifest.settings`, `ModuleHost.setting` / `secret` |
 | Keep secrets of its own making in the Keychain | `ModuleHost.setSecret` |
 | Say its status changed on its own | `ModuleHost.statusChanged()` |
@@ -38,6 +38,7 @@ KeybowKit            the module interface, the registry, and the core
 KeybowStopwatch      a module: depends on KeybowKit only
 KeybowAI             a module: {{#ai}} blocks, and Claude for other modules
 KeybowData           a module: data sources, using KeybowAI to write rules
+KeybowLocation       a module: where the Mac is, from Location Services
 KeybowModules        the list of built-in modules
 KeybowNotesApp       registers them at launch; shows their status
 keybow               registers them too, so their keywords compile
@@ -95,8 +96,14 @@ a module is a new target, a line there, and a dependency in `Package.swift`.
   and may take time: the host fetches before any blocks, since a block may read
   a fetched value, under the same timer and Cancel. `valuesNeeded(toFetch:)`
   names the values a fetch needs first — a URL's `{{city}}` — so the host reads
-  `{{selection}}` for it if need be. Fetched values aren't blocks: they may go
-  in fields that steer an action. Previews use `standIn(forValue:)`.
+  `{{selection}}` for it if need be. A needed value may be another module's
+  fetched value — a data source's URL using `{{location.latitude}}` — so the
+  registry fetches in rounds (`fetchRounds`), each needing only what came
+  before, and hands each round's values to the next; values that need each
+  other are refused. A name the tree gives a value itself isn't fetched.
+  `fetchSubject(for:)` names what's fetched for the overlay: *Fetching your
+  location and sunset…*. Fetched values aren't blocks: they may go in fields
+  that steer an action. Previews use `standIn(forValue:)`.
 - **Settings.** A module describes its settings — text, a secret, a choice, a
   flag — and the host draws them in its own section of the Settings window. The
   module reads them with `setting(_:for:)`, and secrets with `secret(_:for:)`,
@@ -188,6 +195,26 @@ dependency at all: another module's values are in every action's placeholders.
   Test Now, and a rule of your own.
 - Sources are kept with `ModuleHost.save`; responses only in memory, for as
   long as each source says.
+
+## Location
+
+`mac/Sources/KeybowLocation/`, module id `location`.
+
+- Fetches `{{location}}` (latitude,longitude), `{{location.latitude}}`,
+  `{{location.longitude}}`, `{{location.altitude}}` (empty when unknown, as it
+  usually is on a Mac) and `{{location.accuracy}}` (metres).
+- A setting, *Precision*, rounds the place to 5, 3, 2 or 1 decimal places of a
+  degree; the accuracy widens to cover the rounding.
+- `CoreLocationProvider` asks Location Services for one place at a time
+  (`requestLocation`, to about 100 m) — it never tracks the Mac — and uses one
+  up to five minutes old if the system has it. It asks for permission on first
+  use, bringing the app forward so the prompt is seen, and waits up to two
+  minutes for an answer and twenty seconds for a place. Callers waiting at the
+  same time share one request; cancelling the task stops the wait.
+- The provider is a protocol, so tests use a fixed place. The app needs
+  `NSLocationUsageDescription` in its Info.plist; it isn't signed with the
+  hardened runtime, which would also need the
+  `com.apple.security.personal-information.location` entitlement.
 
 ## Not yet
 

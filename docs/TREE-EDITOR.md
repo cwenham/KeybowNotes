@@ -187,6 +187,14 @@ For the selected node:
 - **Module types** — a module's action types are in the Type menu with the
   built-in ones, and its fields show like theirs; a field with a few set
   values, like the stopwatch's *Do*, is a menu.
+- **When OK is chosen / When Cancel is chosen** — for *Display* and *Ask*, what
+  each button runs: a Type menu of its own (*Nothing: just close*, or any action
+  type) and that type's fields, indented under it. Choosing a type writes
+  `ok: Copy` — its keyword where it has one — and each field `ok.text: …`. A
+  display's sections appear once its Buttons include that button; an Ask always
+  has both. A note under each says what `{{displayed}}` or `{{answer}}` holds,
+  and, for Copy and Insert, that it's what they use with no text. Fields the
+  chosen type doesn't use are listed under *Not used here*.
 - **Clock timer setup** — for *Clock timer*, if the helper shortcut doesn't
   exist yet, the steps to make it, with **Open Shortcuts**.
 - **Template** — when the action uses one, the file itself, editable in place

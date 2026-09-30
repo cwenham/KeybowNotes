@@ -111,7 +111,7 @@ has that does nothing is flagged, with a button to remove it.
 
 ![The tree editor with a calendar event selected: its title, start, duration and alert, each showing where it comes from](docs/images/tree-editor-event.png)
 
-**Modules** — the stopwatch, the Claude blocks, data sources, location, quotes and displays are modules: separate code that
+**Modules** — the stopwatch, the Claude blocks, data sources, location, quotes, displays and Ask are modules: separate code that
 plugs in through one interface, adding actions, template blocks, values, settings
 and menu commands. See [docs/MODULES.md](docs/MODULES.md).
 

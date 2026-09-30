@@ -497,7 +497,8 @@ private struct NodeInspector: View {
                 ForEach(fields.filter { if case .action = $0.kind { return false }; return true }, id: \.key) { sub in
                     outcomeFieldRow(sub, in: spec.key, type: chosen)
                 }
-                Text("{{displayed}} is the text shown\(["clipboard.copy", "text.insert", "text.insertDirect"].contains(chosen) ? ", and what's used with no text" : "").")
+                let given = action?.type == "ask" ? "{{answer}} is what was typed" : "{{displayed}} is the text shown"
+                Text(given + (["clipboard.copy", "text.insert", "text.insertDirect"].contains(chosen) ? ", and what's used with no text." : "."))
                     .font(.caption2).foregroundStyle(.secondary)
             }
         }

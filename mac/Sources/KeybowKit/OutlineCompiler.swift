@@ -119,6 +119,11 @@ public enum OutlineCompiler {
     public static func knownType(_ word: String) -> String? {
         let text = word.trimmingCharacters(in: .whitespaces)
         if let type = actionType(forKeyword: text) { return type }
+        switch text.lowercased() {
+        case "append": return "notes.append"
+        case "new", "create": return "notes.create"
+        default: break
+        }
         if builtInTypes.contains(text) || ModuleRegistry.shared.actionType(text) != nil { return text }
         return nil
     }

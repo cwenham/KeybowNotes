@@ -14,6 +14,9 @@ public struct ActionOutcome: Equatable, Sendable {
     /// its placeholders can use: `{{displayed}}`.
     public var followUp: String?
     public var values: [String: String] = [:]
+    /// The text a follow-up that takes text, and is given none, uses:
+    /// `{{displayed}}`, `{{answer}}`.
+    public var followUpText: String?
 
     public static func success(_ message: String, _ detail: String? = nil) -> ActionOutcome {
         ActionOutcome(succeeded: true, message: message, detail: detail)
@@ -28,9 +31,11 @@ public struct ActionOutcome: Equatable, Sendable {
         ActionOutcome(succeeded: true, message: "", detail: nil, isQuiet: true)
     }
 
-    /// Done; now run the node's `action` — `ok` — with these values.
-    public static func then(_ action: String, values: [String: String] = [:]) -> ActionOutcome {
-        ActionOutcome(succeeded: true, message: "", detail: nil, isQuiet: true, followUp: action, values: values)
+    /// Done; now run the node's `action` — `ok` — with these values, and
+    /// `text` for one that takes text and has none.
+    public static func then(_ action: String, values: [String: String] = [:], text: String? = nil) -> ActionOutcome {
+        ActionOutcome(succeeded: true, message: "", detail: nil, isQuiet: true, followUp: action, values: values,
+                      followUpText: text)
     }
 }
 

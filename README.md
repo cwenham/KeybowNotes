@@ -50,6 +50,8 @@ change your mind — press any key — before the action runs.
   page — in a panel sized to fit, Markdown or HTML. It fades by itself, or waits
   for OK or Cancel, and each can run an action of its own: copy what was shown,
   file it as a note.
+- **Ask**: a question with a field to type in, whose answer goes to an action of
+  your choosing — a search, a note, text typed where you were.
 
 **Values** — anything an action writes can include `{{placeholders}}`: the labels
 along the path, a contact's number, the date in any format, **where your Mac is**,

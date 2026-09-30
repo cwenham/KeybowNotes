@@ -152,8 +152,8 @@ public final class DisplayModule: KeybowModule, @unchecked Sendable {
 
         let values = ["displayed": Self.plainText(text)]
         switch result {
-        case .ok where buttons.contains(.ok): return .then("ok", values: values)
-        case .cancel where buttons.contains(.cancel): return .then("cancel", values: values)
+        case .ok where buttons.contains(.ok): return .then("ok", values: values, text: "{{displayed}}")
+        case .cancel where buttons.contains(.cancel): return .then("cancel", values: values, text: "{{displayed}}")
         default: return .quiet
         }
     }

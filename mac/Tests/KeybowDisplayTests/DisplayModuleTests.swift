@@ -40,7 +40,8 @@ final class DisplayModuleTests: XCTestCase {
     func testOKAndCancelRunTheirActions() async {
         let (display, _) = module(answer: .ok)
         let ok = await display.run(request(["text": "Keep it?", "button": "okCancel"]), now: Date())
-        XCTAssertEqual(ok, .then("ok", values: ["displayed": "Keep it?"]))
+        XCTAssertEqual(ok, .then("ok", values: ["displayed": "Keep it?"], text: "{{displayed}}"),
+                       "{{displayed}}, and what Copy or Insert use with no text of their own")
 
         let (cancelling, _) = module(answer: .cancel)
         let cancel = await cancelling.run(request(["text": "Keep it?", "button": "okCancel"]), now: Date())

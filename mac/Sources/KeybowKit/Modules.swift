@@ -356,9 +356,27 @@ public struct ModuleDisplay: Equatable, Sendable {
         case ok, cancel
     }
 
+    /// A text field under the text, for an answer — an Ask.
+    public struct Field: Equatable, Sendable {
+        /// What's in it to begin with, selected so typing replaces it.
+        public let initial: String
+        /// Grey words in it while it's empty.
+        public let hint: String
+        /// Several lines; ⌘Return is OK.
+        public let multiline: Bool
+
+        public init(initial: String = "", hint: String = "", multiline: Bool = false) {
+            self.initial = initial
+            self.hint = hint
+            self.multiline = multiline
+        }
+    }
+
     /// How it went away.
     public enum Result: Equatable, Sendable {
         case ok
+        /// OK, with what was typed in its field.
+        case entered(String)
         /// The Cancel button, or Esc when there is one.
         case cancel
         /// Faded, closed, Esc without a Cancel button, or replaced by another.
@@ -370,11 +388,15 @@ public struct ModuleDisplay: Equatable, Sendable {
     public let buttons: [Button]
     /// Seconds before it fades, when it has no buttons.
     public let fadeAfter: TimeInterval
+    /// With a field, it takes the keyboard — without taking the app in use
+    /// from the front — and OK waits for something to be typed.
+    public let field: Field?
 
-    public init(content: Content, buttons: [Button] = [], fadeAfter: TimeInterval = 10) {
+    public init(content: Content, buttons: [Button] = [], fadeAfter: TimeInterval = 10, field: Field? = nil) {
         self.content = content
         self.buttons = buttons
         self.fadeAfter = fadeAfter
+        self.field = field
     }
 }
 

@@ -440,7 +440,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // The system log is kept on disk and readable by any admin, so the
         // selected text, the clipboard and anything copied stay out of it.
         var isPrivate = !ActionPlanner.placeholders(for: selection, context: context)
-            .isDisjoint(with: ["selection", "clipboard", "displayed"])
+            .isDisjoint(with: ["selection", "clipboard", "displayed", "answer"])
 
         let planned: PlannedAction
         do {
@@ -493,7 +493,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             outcome.succeeded ? Log.info(line) : Log.error(line)
             for warning in planned.warnings where !isPrivate { Log.info("  warning: \(warning)") }
             if let next = outcome.followUp {
-                self.follow(next, of: selection, values: outcome.values)
+                self.follow(next, of: selection, values: outcome.values, text: outcome.followUpText)
             } else if !outcome.isQuiet {
                 overlay.showFinished(outcome, summary: summary, warnings: planned.warnings)
             }
@@ -502,12 +502,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Runs the node's own `ok` or `cancel` action, as though its key had just
     /// been pressed — or nothing, when it has none.
-    private func follow(_ key: String, of selection: ResolvedSelection, values: [String: String]) {
+    private func follow(_ key: String, of selection: ResolvedSelection, values: [String: String], text: String?) {
         guard let next = selection.action?.nestedAction(key) else { return }
         Log.info("  then \(key): \(next.type)")
         var fields = next.fields
-        // Copy, Insert and the like, given no text: what was shown.
-        if fields["text"] == nil, fields["template"] == nil { fields["text"] = .string("{{displayed}}") }
+        // Copy, Insert and the like, given no text: what was shown, or typed.
+        if fields["text"] == nil, fields["template"] == nil, let text { fields["text"] = .string(text) }
         fire(selection.with(action: ActionSpec(type: next.type, fields: fields)), values: values)
     }
 

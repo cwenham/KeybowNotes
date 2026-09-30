@@ -27,7 +27,7 @@ bar or the outline directly.
 | **Fetch values** when an action needs them — `{{api.weather}}`, `{{quote file="q.md"}}` | `manifest.fetches`, `fetch(_:params:now:)`, `valuesNeeded(toFetch:)`, `standIn(forValue:)`, `fetchSubject(for:)` |
 | Read files the tree names, beside its templates | `ModuleHost.templatesFolder` |
 | Add **settings** to the Settings window, secrets kept in the Keychain | `manifest.settings`, `ModuleHost.setting` / `secret` |
-| **Show something on screen** until it's dismissed, with OK and Cancel | `ModuleHost.display(_:)` |
+| **Show something on screen** until it's dismissed, with OK and Cancel — and a field to type in | `ModuleHost.display(_:)`, `ModuleDisplay.Field` |
 | Take a **template or text** whole, like Copy | `ModuleActionType.takesText` |
 | Have the host **run a follow-up action** of the node's own — a display's OK | a field of kind `.action`; `ActionOutcome.then(_:values:)` |
 | Keep secrets of its own making in the Keychain | `ModuleHost.setSecret` |
@@ -44,7 +44,7 @@ KeybowAI             a module: {{#ai}} blocks, and Claude for other modules
 KeybowData           a module: data sources, using KeybowAI to write rules
 KeybowLocation       a module: where the Mac is, from Location Services
 KeybowQuotes         a module: {{quote}}, portions of a file
-KeybowDisplay        a module: the display action
+KeybowDisplay        modules: the display and ask actions
 KeybowModules        the list of built-in modules
 KeybowNotesApp       registers them at launch; shows their status
 keybow               registers them too, so their keywords compile
@@ -263,6 +263,21 @@ keywords `Display` and `Show`.
   hot key while it's up (`EscapeKey`), which needs no permission — watching
   keys typed into other apps would need Accessibility or Input Monitoring. A development build can answer OK or Cancel by itself
   with `KEYBOW_DEBUG_DISPLAY_ANSWER`.
+
+## Ask
+
+`mac/Sources/KeybowDisplay/AskModule.swift`, action type `ask`, keywords
+`Ask` and `Prompt`.
+
+- A display with a `ModuleDisplay.Field` — its starting text, a hint, one line
+  or several — and OK and Cancel. The host's panel takes the keyboard: it's a
+  non-activating panel, so it can without the app in use leaving the front, and
+  that app has the keyboard back once it goes. OK waits for text, and answers
+  `.entered(text)`.
+- It returns `.then("ok", values: ["answer": text], text: "{{answer}}")`: the
+  follow-up gets `{{answer}}`, and `{{answer}}` as its text if it has none.
+  Cancel is `.then("cancel")`; anything else `.quiet`.
+- `ok: append` and `ok: new` name note actions, as the words do in brackets.
 
 ## Quotes
 

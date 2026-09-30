@@ -69,6 +69,24 @@ final class FollowUpActionTests: XCTestCase {
         XCTAssertEqual(plan, .copyToClipboard("Kept: Carpe diem (Idea)"))
     }
 
+    func testANoteWordNamesAnActionToo() throws {
+        let (config, compiled) = try compile("1. Jot [Shower, ok: append, ok.find.byName: Inbox, ok.entry: \"{{answer}}\", cancel: new]")
+        XCTAssertTrue(compiled.diagnostics.isEmpty, "\(compiled.diagnostics.map(\.message))")
+        let action = try XCTUnwrap(config.resolve(path: [0])?.action)
+        XCTAssertEqual(action.nestedAction("ok")?.type, "notes.append")
+        XCTAssertEqual(action.nestedAction("cancel")?.type, "notes.create")
+    }
+
+    func testAnAnswerFillsTheFollowUp() throws {
+        let (config, _) = try compile(#"1. Rename [Shower, ok: Insert, ok.text: "{{answer}} ({{leaf}})"]"#)
+        let selection = try XCTUnwrap(config.resolve(path: [0]))
+        var context = ActionContext(templatesDirectory: nil)
+        context.environment["answer"] = "Grace Hopper"
+        let next = try XCTUnwrap(selection.action?.nestedAction("ok"))
+        XCTAssertEqual(try ActionPlanner.plan(selection.with(action: next), config: config, context: context).plan,
+                       .insertText("Grace Hopper (Rename)"))
+    }
+
     func testAnActionThatNothingRunsIsNoted() throws {
         let (_, compiled) = try compile("1. Idea [Shower, ok: Teleport]")
         let messages = compiled.diagnostics.map(\.message)

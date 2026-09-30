@@ -9,7 +9,7 @@ import WebKit
 /// from any app — taken as a hot key while it's up, which needs no
 /// permission — and a click lets it take keys itself.
 @MainActor
-final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate {
+final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate, NSTextFieldDelegate, NSTextViewDelegate {
     /// The widest a display gets: text wider than this wraps.
     static let widest: CGFloat = 620
     static let narrowest: CGFloat = 260
@@ -17,6 +17,10 @@ final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate {
     static let buttonBarHeight: CGFloat = 48
     /// Room on the right for the close button, when there are no others.
     static let closeRoom: CGFloat = 16
+    /// An Ask is at least this wide, for room to type.
+    static let askWidth: CGFloat = 440
+    static let fieldHeight: CGFloat = 28
+    static let tallFieldHeight: CGFloat = 96
 
     /// Where it goes: the overlay's screen.
     var screen: () -> NSScreen = { NSScreen.main ?? NSScreen.screens[0] }
@@ -31,6 +35,11 @@ final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate {
     private var monitors: [Any] = []
     private var escapeKey: EscapeKey?
     private var loaded = false
+    /// An Ask's answer: one line, or several.
+    private var answerField: NSTextField?
+    private var answerView: NSTextView?
+    private var answerBox: NSView?
+    private var okButton: NSButton?
 
     /// Shows it, replacing any other, and waits for it to go away.
     func show(_ display: ModuleDisplay) async -> ModuleDisplay.Result {
@@ -50,6 +59,10 @@ final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate {
         let textWidth = width - Self.padding * 2 - (display.buttons.isEmpty ? Self.closeRoom : 0)
 
         let panel = DisplayPanel(contentRect: NSRect(x: 0, y: 0, width: width, height: 120))
+        // Its controls in the HUD's dark, whatever the Mac's appearance.
+        panel.appearance = NSAppearance(named: .darkAqua)
+        // An Ask takes the keyboard as it opens; a display only when clicked.
+        panel.becomesKeyOnlyIfNeeded = display.field == nil
         let background = NSVisualEffectView()
         background.material = .hudWindow
         background.blendingMode = .behindWindow
@@ -87,12 +100,18 @@ final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate {
                                        action: button == .ok ? #selector(okChosen) : #selector(cancelChosen))
                 control.bezelStyle = .rounded
                 control.controlSize = .large
-                if button == .ok { control.keyEquivalent = "\r" }
+                if button == .ok {
+                    control.keyEquivalent = "\r"
+                    // Return starts a new line in a tall field: ⌘Return is OK.
+                    if display.field?.multiline == true { control.keyEquivalentModifierMask = .command }
+                    okButton = control
+                }
                 if button == .cancel { control.keyEquivalent = "\u{1b}" }
                 control.identifier = NSUserInterfaceItemIdentifier(button.rawValue)
                 background.addSubview(control)
             }
         }
+        if let field = display.field { addAnswer(field, to: background) }
 
         web.loadHTMLString(Self.page(for: display.content, width: textWidth), baseURL: nil)
         // A page that's slow to finish — a picture from far away — shows anyway.
@@ -102,6 +121,55 @@ final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate {
             self.sizeAndShow(contentSize: NSSize(width: textWidth, height: 200))
         }
     }
+
+    /// The field an Ask's answer is typed in, holding its starting text.
+    private func addAnswer(_ field: ModuleDisplay.Field, to background: NSView) {
+        if field.multiline {
+            // In a rounded box of its own, like the one-line field's.
+            let box = AnswerBox()
+            let scroll = NSTextView.scrollableTextView()
+            scroll.borderType = .noBorder
+            scroll.drawsBackground = false
+            scroll.autoresizingMask = [.width, .height]
+            if let text = scroll.documentView as? NSTextView {
+                text.font = .systemFont(ofSize: 15)
+                text.textContainerInset = NSSize(width: 4, height: 6)
+                text.drawsBackground = false
+                text.isRichText = false
+                text.allowsUndo = true
+                text.string = field.initial
+                text.delegate = self
+                answerView = text
+            }
+            box.addSubview(scroll)
+            answerBox = box
+            background.addSubview(box)
+        } else {
+            let text = NSTextField(string: field.initial)
+            text.placeholderString = field.hint.isEmpty ? nil : field.hint
+            text.font = .systemFont(ofSize: 15)
+            text.bezelStyle = .roundedBezel
+            text.lineBreakMode = .byTruncatingTail
+            text.cell?.isScrollable = true
+            text.delegate = self
+            answerField = text
+            answerBox = text
+            background.addSubview(text)
+        }
+        answerChanged()
+    }
+
+    private var answer: String {
+        (answerField?.stringValue ?? answerView?.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// OK waits for something to be typed.
+    private func answerChanged() {
+        okButton?.isEnabled = !answer.isEmpty
+    }
+
+    func controlTextDidChange(_ notification: Notification) { answerChanged() }
+    func textDidChange(_ notification: Notification) { answerChanged() }
 
     /// The page: Markdown in the HUD's style; an HTML document as it is, over
     /// a dark page, in a width that fits.
@@ -160,25 +228,29 @@ final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate {
         let area = screen().visibleFrame
         let buttons = display.buttons.isEmpty ? 0 : Self.buttonBarHeight
         let closeRoom = display.buttons.isEmpty ? Self.closeRoom : 0
+        let fieldHeight = display.field.map { $0.multiline ? Self.tallFieldHeight : Self.fieldHeight } ?? 0
+        // The field sits over the buttons, with a gap above it for the question.
+        let answerRoom = fieldHeight > 0 ? fieldHeight + 14 : 0
         let isDocument: Bool
         if case .html = display.content { isDocument = true } else { isDocument = false }
         let textWidth = isDocument ? min(Self.widest, area.width * 0.5) - Self.padding * 2 - closeRoom : contentSize.width
-        let tallest = area.height * 0.7 - buttons
+        let tallest = area.height * 0.7 - buttons - answerRoom
         let scrolls = contentSize.height > tallest
         // Taller than there's room for: it scrolls, and the scroll bar may take width.
         let scroller = scrolls && NSScroller.preferredScrollerStyle == .legacy
             ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy) : 0
         let pageWidth = textWidth + 1 + scroller
-        let width = max(Self.narrowest, pageWidth + Self.padding * 2 + closeRoom)
+        let width = max(display.field == nil ? Self.narrowest : Self.askWidth, pageWidth + Self.padding * 2 + closeRoom)
         let pageHeight = min(contentSize.height + 1, tallest)
-        let height = pageHeight + Self.padding * 2 + buttons
+        let height = pageHeight + Self.padding * 2 + buttons + answerRoom
         if scrolls { webView.evaluateJavaScript("document.documentElement.style.overflow = 'auto'") }
 
         // Centred, a little above the middle: clear of the overlay below.
         let origin = NSPoint(x: (area.midX - width / 2).rounded(), y: (area.minY + area.height * 0.55 - height / 2).rounded())
         panel.setFrame(NSRect(origin: origin, size: NSSize(width: width, height: height)), display: true)
-        webView.frame = NSRect(x: Self.padding, y: Self.padding + buttons, width: width - Self.padding * 2 - closeRoom,
-                               height: pageHeight)
+        webView.frame = NSRect(x: Self.padding, y: Self.padding + buttons + answerRoom,
+                               width: width - Self.padding * 2 - closeRoom, height: pageHeight)
+        answerBox?.frame = NSRect(x: Self.padding, y: buttons + 6, width: width - Self.padding * 2, height: fieldHeight)
 
         var right = width - 16
         for case let button as NSButton in background.subviews.reversed() {
@@ -203,6 +275,14 @@ final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate {
         onShow?()
         watchKeys()
         if display.buttons.isEmpty { fade(after: display.fadeAfter) }
+        // An Ask takes the keyboard — the panel doesn't activate the app, so
+        // the app in use stays in front, and gets it back once it's answered.
+        if let answerBox {
+            panel.makeKey()
+            panel.makeFirstResponder(answerView ?? answerBox)
+            answerView?.selectAll(nil)
+            Log.info("display: asking; \(panel.isKeyWindow ? "has the keyboard" : "hasn't the keyboard")")
+        }
         // Development builds only: choose OK or Cancel by itself, for testing
         // what follows without a click.
         if Bundle.main.bundleIdentifier == nil, !display.buttons.isEmpty,
@@ -210,7 +290,12 @@ final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate {
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(1.5))
                 guard let self, self.display == display else { return }
-                self.finish(answer == "cancel" ? .cancel : .ok, quickly: true)
+                // "type:Grace Hopper" types an answer first.
+                if answer.hasPrefix("type:") {
+                    self.answerField?.stringValue = String(answer.dropFirst(5))
+                    self.answerView?.string = String(answer.dropFirst(5))
+                }
+                if answer == "cancel" { self.finish(.cancel, quickly: true) } else { self.okChosen() }
             }
         }
     }
@@ -226,7 +311,14 @@ final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate {
         }
     }
 
-    @objc private func okChosen() { finish(.ok, quickly: true) }
+    @objc private func okChosen() {
+        if display?.field != nil {
+            guard !answer.isEmpty else { return }
+            finish(.entered(answer), quickly: true)
+        } else {
+            finish(.ok, quickly: true)
+        }
+    }
     @objc private func cancelChosen() { finish(.cancel, quickly: true) }
     @objc private func closeChosen() { finish(.dismissed, quickly: true) }
 
@@ -260,6 +352,10 @@ final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate {
         panel = nil
         webView = nil
         display = nil
+        answerField = nil
+        answerView = nil
+        answerBox = nil
+        okButton = nil
         continuation?.resume(returning: result)
         continuation = nil
     }
@@ -314,6 +410,32 @@ final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate {
             NSWorkspace.shared.open(url)
         }
         return nil
+    }
+}
+
+/// A rounded, outlined box for a tall answer field, drawn as the one-line
+/// field is: a dark well with a light edge, blue while it has the keyboard.
+final class AnswerBox: NSView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = 6
+        layer?.borderWidth = 1
+        layer?.masksToBounds = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.25).cgColor
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.25).cgColor
+    }
+
+    override func layout() {
+        super.layout()
+        for view in subviews { view.frame = bounds.insetBy(dx: 1, dy: 1) }
     }
 }
 

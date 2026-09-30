@@ -145,6 +145,7 @@ An annotation is either a **word** or a **pair**.
 | `Music` | play a playlist or album in Music | `"type": "music.play"` |
 | `Stopwatch` | KeybowNotes' own stopwatch (a module) | `"type": "stopwatch"` |
 | `Display`, `Show` | show text on screen (a module) | `"type": "display"` |
+| `Ask`, `Prompt` | ask for something to be typed, and hand it on (a module) | `"type": "ask"` |
 | `append` | add to a running note rather than make a new one | `"type": "notes.append"` |
 | `new`, `create` | make a new note | `"type": "notes.create"` |
 | `something.md` | a template (§8) | `"template": "something.md"` |
@@ -803,6 +804,36 @@ other way — ✕, Esc without a Cancel button, fading, being replaced — runs
 nothing. In the tree editor, *When OK is chosen* and *When Cancel is chosen*
 appear once the buttons are set, each with its own Type menu and fields.
 
+### `ask` — ask for something, and hand it on
+
+A module, built on `display`. Shows a question with a field to type in, and on
+OK runs an action of the node's own with what was typed, as `{{answer}}`.
+
+| Field | |
+|---|---|
+| `template`, `text` | The question, as a display's: Markdown or an HTML document. With neither, the leaf's label. |
+| `initial` | What's in the field to begin with, selected so typing replaces it: `{{selection|}}`. |
+| `hint` | Grey words in the empty field. |
+| `multiline` | `true` for a taller field that takes new lines. |
+| `ok` | The action given the answer. |
+| `cancel` | An action for Cancel or Esc; usually none. |
+
+```
+1. Search [Ask, text: "Search Wikipedia for", ok: Display, ok.text: "{{api.wikipedia term={{answer}}}}"]
+2. Jot [Ask, text: "A note for the inbox", multiline: true, ok: append, ok.find.byName: Inbox, ok.entry: "{{answer}}"]
+3. Rename [Ask, text: "New name", initial: "{{selection}}", ok: Insert]
+```
+
+- **It takes the keyboard** as it opens, without taking the app you're in from
+  the front — so an Insert on OK types into that app, and once it's answered,
+  your typing goes back there.
+- **Return is OK** — ⌘Return with `multiline`, where Return starts a new line —
+  and Esc is Cancel. OK waits for something to be typed; the answer is trimmed.
+- **`{{answer}}`** is what was typed, for any field of the OK action, and what
+  Copy, Insert and Direct Insert use when they're given no text. It's kept out
+  of the log, like the selection.
+- `ok` and `cancel` are written, and chosen in the editor, as a display's are.
+
 ---
 
 ## 6. Values: `{{placeholders}}`
@@ -1192,7 +1223,7 @@ the app; edit it only while KeybowNotes isn't running.
 **Outline words:** `Notes`, `Calendar`, `Reminders`, `Messages`, `Mail`, `Call`,
 `FaceTime`, `Link`, `Browser`, `Copy`, `Clipboard`, `Insert`, `Paste`, `Direct Insert`, `Type`,
 `Timer`, `Maps`, `Music`,
-`Stopwatch`, `Display`, `Show` (and any other module's keywords),
+`Stopwatch`, `Display`, `Show`, `Ask`, `Prompt` (and any other module's keywords),
 `append`, `new`, `create`, `… alert`, `….md`, `@…`, and the app names the
 compiler knows.
 
@@ -1205,11 +1236,11 @@ action fields listed in §2.
 **Action types:** `notes.create`, `notes.append`, `calendar.createEvent`,
 `reminders.create`, `messages.compose`, `mail.compose`, `phone.call`, `app.open`,
 `url.open`, `clipboard.copy`, `text.insert`, `text.insertDirect`, `clock.timer`, `maps.search`, `music.play`, `shortcut`,
-and from modules, `stopwatch` and `display`.
+and from modules, `stopwatch`, `display` and `ask`.
 
 **Computed values:** `leaf`, `parent`, `level1`–`level4`, `path`, `folderPath`,
 `parentPath`, `tree`, `contact.*`, `project.*`, `selection`, `clipboard`, `frontApp`,
-`stopwatch`, `stopwatch.*`, `api.*`, `location`, `location.*`, `quote`, `displayed`, `date`,
+`stopwatch`, `stopwatch.*`, `api.*`, `location`, `location.*`, `quote`, `displayed`, `answer`, `date`,
 `time`, `datetime`, `weekday`, `isoWeek`, and `when` by convention.
 
 **Tree names:** `main`, `row2`, `row3`, `bottom`.
@@ -1218,8 +1249,8 @@ and from modules, `stopwatch` and `display`.
 
 ## 11. Not yet in the language
 
-- **Asking for a value** before acting — a text field in the overlay. Reserved
-  syntax: `{{?Label}}`.
+- **Asking for a value inline**, in any action's text, rather than with an
+  `ask` action before it. Reserved syntax: `{{?Label}}`.
 - **More than one action** per leaf — a note *and* a reminder pointing to it.
 - **Channel URLs** for apps like Discord and Meshtastic, which the compiler can
   only list as needing one.

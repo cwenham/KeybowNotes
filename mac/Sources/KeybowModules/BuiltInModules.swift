@@ -17,5 +17,6 @@ public enum BuiltInModules {
         ModuleRegistry.shared.register(LocationModule(), host: host)
         ModuleRegistry.shared.register(QuoteModule(), host: host)
         ModuleRegistry.shared.register(DisplayModule(), host: host)
+        ModuleRegistry.shared.register(AskModule(), host: host)
     }
 }

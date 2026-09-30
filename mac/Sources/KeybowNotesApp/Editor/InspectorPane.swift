@@ -90,9 +90,11 @@ private let fieldsByType: [String: [FieldSpec]] = [
                                 hint: "Inherit: accessibility where the app takes it, else typing")],
 ]
 
-/// The built-in types, then any a module adds.
+/// Inherit, then every type — built in or from a module — by name.
 private var typeNames: [(String?, String)] {
-    builtInTypeNames + ModuleRegistry.shared.actionTypes.map { ($0.type, $0.title) }
+    let types = builtInTypeNames.filter { $0.0 != nil } + ModuleRegistry.shared.actionTypes.map { ($0.type, $0.title) }
+    return builtInTypeNames.filter { $0.0 == nil }
+        + types.sorted { $0.1.localizedStandardCompare($1.1) == .orderedAscending }
 }
 
 private func fields(for type: String) -> [FieldSpec]? {

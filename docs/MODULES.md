@@ -255,7 +255,10 @@ keywords `Display` and `Show`.
   "text": …}`; the module never sees it. The host finds it with
   `ActionSpec.nestedAction("ok")` and fires it for the same selection
   (`ResolvedSelection.with(action:)`), adding the outcome's values — `{{displayed}}`,
-  and `text: {{displayed}}` when it has no text or template. The editor draws a
+  and `text: {{displayed}}` when it has no text or template. Until then its
+  fields aren't the node's: `ActionPlanner.ownFields` leaves them out, so their
+  blocks aren't asked and their values not fetched when the key is pressed,
+  only when the follow-up runs. The editor draws a
   Type menu and fields for each, shown once the buttons include it.
 - In the app, `DisplayController` draws it: a non-activating HUD panel with a
   WebKit view, scripts off, links out to the browser, sized by measuring the

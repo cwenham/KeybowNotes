@@ -177,7 +177,7 @@ public enum ActionPlanner {
     public static func blockTexts(for selection: ResolvedSelection, context: ActionContext) throws -> [String] {
         guard let action = selection.action else { return [] }
         var texts: [String] = []
-        for (key, text) in stringFields(action.fields) where text.contains("{{#") {
+        for (key, text) in stringFields(ownFields(action)) where text.contains("{{#") {
             let names = TemplateBlocks.names(in: text)
             guard let first = names.first else { continue }
             if blockFreeFields.contains(key) { throw ActionPlanError.blockNotAllowed(field: key, block: first) }
@@ -193,6 +193,13 @@ public enum ActionPlanner {
             texts.append(text)
         }
         return texts
+    }
+
+    /// An action's fields, less those holding an action of their own — a
+    /// display's `ok` — which are its follow-up's, worked out when it runs:
+    /// its `{{#ai}}` asked, and its values fetched, once there's an `{{answer}}`.
+    static func ownFields(_ action: ActionSpec) -> [String: JSONValue] {
+        action.fields.filter { !OutlineCompiler.holdsAction($0.key) }
     }
 
     /// Text fields by key, nested ones dotted: `find.byName`.
@@ -226,7 +233,7 @@ public enum ActionPlanner {
             default: break
             }
         }
-        action.fields.values.forEach(collect)
+        ownFields(action).values.forEach(collect)
         if let name = action.string("template"), !name.isEmpty,
            let url = Planner.templateURL(name, in: context.templatesDirectory),
            let text = try? String(contentsOf: url, encoding: .utf8) {

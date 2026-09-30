@@ -69,6 +69,29 @@ final class FollowUpActionTests: XCTestCase {
         XCTAssertEqual(plan, .copyToClipboard("Kept: Carpe diem (Idea)"))
     }
 
+    func testAFollowUpsBlocksAndValuesWaitForIt() throws {
+        // Worked out when OK is chosen, with {{answer}} — not when the key that
+        // asks is pressed, before there's any answer to give Claude.
+        let (config, _) = try compile("""
+            1. Ask Claude [Shower, text: "What would you ask?", ok: Shower, ok.text: "{{#ai}}{{answer}}{{/ai}}"]
+            2. Look up [Shower, text: "{{leaf}}?", ok: Shower, ok.text: "{{api.wikipedia term={{answer}}}}"]
+            """)
+        let context = ActionContext(templatesDirectory: nil)
+        let asking = try XCTUnwrap(config.resolve(path: [0]))
+        XCTAssertEqual(try ActionPlanner.blockTexts(for: asking, context: context), [])
+        XCTAssertFalse(ActionPlanner.placeholders(for: asking, context: context).contains("answer"))
+        let lookingUp = try XCTUnwrap(config.resolve(path: [1]))
+        XCTAssertEqual(ActionPlanner.placeholders(for: lookingUp, context: context), ["leaf"])
+
+        // Once it's the action running, they're its own.
+        let next = try XCTUnwrap(asking.action?.nestedAction("ok"))
+        XCTAssertEqual(try ActionPlanner.blockTexts(for: asking.with(action: next), context: context),
+                       ["{{#ai}}{{answer}}{{/ai}}"])
+        let lookup = try XCTUnwrap(lookingUp.action?.nestedAction("ok"))
+        XCTAssertTrue(ActionPlanner.placeholders(for: lookingUp.with(action: lookup), context: context)
+            .contains("api.wikipedia term={{answer}}"))
+    }
+
     func testANoteWordNamesAnActionToo() throws {
         let (config, compiled) = try compile("1. Jot [Shower, ok: append, ok.find.byName: Inbox, ok.entry: \"{{answer}}\", cancel: new]")
         XCTAssertTrue(compiled.diagnostics.isEmpty, "\(compiled.diagnostics.map(\.message))")

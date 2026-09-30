@@ -833,6 +833,11 @@ OK runs an action of the node's own with what was typed, as `{{answer}}`.
   Copy, Insert and Direct Insert use when they're given no text. It's kept out
   of the log, like the selection.
 - `ok` and `cancel` are written, and chosen in the editor, as a display's are.
+- **The OK action is worked out when it runs,** after OK: its `{{#ai}}` blocks
+  are asked, and its data sources fetched, with the answer in hand. So
+  `ok.text: "{{#ai}}{{answer}}{{/ai}}"` asks Claude what you typed, and
+  `{{api.wikipedia term={{answer}}}}` looks it up — nothing is asked or fetched
+  for it when the key is pressed.
 
 ---
 

@@ -117,6 +117,7 @@ Two details that are easy to get wrong, both learned the hard way:
 ```bash
 swift build
 ./.build/debug/keybow ports     # list the device's serial ports
+./.build/debug/keybow keypads   # list the keypads found: model, unique ID, ports
 ./.build/debug/keybow ping      # connect, ping, print replies
 ./.build/debug/keybow watch     # print key events until Ctrl-C
 ./.build/debug/keybow demo      # light each key in turn
@@ -124,13 +125,20 @@ swift build
 ```
 
 `leds` takes 1-16 `rrggbb` values; the last one fills the remaining keys.
+Device commands talk to the first keypad found. With more than one connected,
+`KEYBOW_DEVICE` picks another, by model or by the unique ID `keypads` lists —
+and with the app quit, since it holds every keypad's port:
+
+```bash
+KEYBOW_DEVICE=rgbkeypad ./.build/debug/keybow ping
+```
 
 Config commands:
 
 ```bash
 ./.build/debug/keybow convert tree.md                  # print the JSON it compiles to
 ./.build/debug/keybow tree tree.md                     # print the trees and each leaf's action
-./.build/debug/keybow run tree.md                      # drive the Keybow; prints, runs nothing
+./.build/debug/keybow run tree.md                      # drive the keypad with its trees; prints, runs nothing
 ```
 
 The config language — the outline syntax and its keywords, the JSON form, how a

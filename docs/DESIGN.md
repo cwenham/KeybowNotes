@@ -4,8 +4,9 @@
 [../spikes/FINDINGS.md](../spikes/FINDINGS.md), which settled the Notes, Calendar
 and Messages questions.
 
-A Pimoroni Keybow 2040 (4×4 illuminated mechanical keypad, RP2040) drives a Mac
-menu-bar app. Four key presses walk a four-level category tree; a HUD overlay
+A Pimoroni Keybow 2040 (4×4 illuminated mechanical keypad, RP2040) — or
+Pimoroni's RGB Keypad Base on a Raspberry Pi Pico, or several of either — drives
+a Mac menu-bar app. Four key presses walk a four-level category tree; a HUD overlay
 shows the path so far and the options for the next row; the fourth press runs an
 action — usually creating a note, but also reminders, events, messages and more.
 
@@ -28,7 +29,7 @@ editable config file, rather than something reflashed onto the device.
 
 | Part | Technology |
 |---|---|
-| Firmware | CircuitPython on Keybow 2040 (Pimoroni's `pmk` library) |
+| Firmware | CircuitPython on Keybow 2040 or RGB Keypad Base (Pimoroni's `pmk` library), one `code.py` for both |
 | Transport | USB CDC serial, on the **data** port, with the console left free for debugging |
 | Mac app | Swift / SwiftUI, universal binary, minimum macOS 15 (Sequoia), menu-bar agent (`LSUIElement`) |
 | Config | JSON on disk, reloaded when it changes |
@@ -47,7 +48,7 @@ sees the device; the firmware translates to the hardware's column-major order.
 
 | Direction | Message | Meaning |
 |---|---|---|
-| → Mac | `HELLO keybow <protocol-version>` | Sent on boot and on reconnect |
+| → Mac | `HELLO keybow <protocol-version> <model> <id>` | Sent on boot and on reconnect; version 1 sent no model or ID |
 | → Mac | `DOWN <n>` / `UP <n>` | Key pressed / released (both, so long-press works) |
 | Mac → | `LEDS <rrggbb>×16` | Set all 16 key colours in one message |
 | Mac → | `PING` / → Mac `PONG` | Heartbeat |
@@ -56,10 +57,20 @@ sees the device; the firmware translates to the hardware's column-major order.
 shows a distinct "no host" pattern (a dim breathing red, say), so a dead app is
 obvious rather than silently ignoring presses.
 
-**Connection handling.** The app finds the device by USB vendor/product ID
-(`0x16d0` / `0x08c6`), not by a fixed `/dev/cu.*` path, and must survive
-unplugging, replugging and sleep/wake. Of the two serial ports CircuitPython
-exposes, the console is ignored and the data port used.
+**Connection handling.** The app finds keypads by USB vendor/product ID —
+`0x16d0` / `0x08c6` for the Keybow 2040, `0x239a` / `0x80f4` for a Pico — not by
+a fixed `/dev/cu.*` path, and must survive unplugging, replugging and
+sleep/wake. Of the two serial ports CircuitPython exposes, the console is
+ignored and the data port used; a board showing only one hasn't run `boot.py`,
+and is left alone.
+
+**Several keypads.** Each is told apart by its USB serial number — the board's
+unique ID — and gets a driver of its own: its own walk through its trees, its
+own lights, its own reconnection. Every two seconds the app looks for keypads
+that have appeared. Which trees a keypad uses is the outline's to say, by model
+or by ID ([CONFIG-LANGUAGE.md](CONFIG-LANGUAGE.md#keypads)); without a
+`# keypad` section, all share one set. The overlay follows the keypad last
+pressed: another going idle doesn't clear it.
 
 **The port stays open.** The firmware writes only while the host asserts DTR, so
 the app opens the data port once and holds it for as long as the device is

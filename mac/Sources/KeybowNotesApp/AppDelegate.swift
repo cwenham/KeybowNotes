@@ -8,7 +8,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let options: Options
     private let settings = AppSettings()
     private var store: ConfigStore
-    private var driver: SelectionDriver?
+    /// One per keypad found, by its unique ID: its driver, and how it's doing.
+    private var keypads: [String: KeypadLink] = [:]
+    private var keypadOrder: [String] = []
+    /// The keypad whose choosing the overlay shows: the last one pressed.
+    private var activeKeypad: String?
+    private var discovery: Timer?
+
+    private struct KeypadLink {
+        /// Nil for the stand-in that --simulate presses, with no keypad.
+        let device: KeypadDevice?
+        let driver: SelectionDriver
+        var status = "looking"
+        var name: String { device?.model.title ?? "Keypad" }
+    }
+
+    /// The config a keypad runs: its own trees, everything else shared.
+    private func config(for link: KeypadLink) -> KeybowConfig {
+        link.device.map(config.forDevice) ?? config
+    }
     private var overlay: OverlayController?
     private let displays = DisplayController()
     private var statusItem: NSStatusItem?
@@ -49,31 +67,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         installMainMenu()
         let overlay = OverlayController(config: config, placement: options.placement ?? settings.placement)
         overlay.debugDirectory = options.debugDirectory
-        let driver = SelectionDriver(config: config, connection: KeybowConnection())
-        driver.setBrightness(settings.brightness)
         self.overlay = overlay
-        self.driver = driver
         setUpMenu()
         updateConfigStatus()
         refreshOpenAtLogin()
 
-        Task { @MainActor in
-            for await snapshot in driver.snapshots { overlay.handle(snapshot) }
+        // Every keypad, as it's plugged in: found by its unique ID, each with
+        // a driver — its own trees, lights and choosing — of its own.
+        discoverKeypads()
+        discovery = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.discoverKeypads() }
         }
-        Task { @MainActor in
-            for await event in driver.events {
-                overlay.handle(event)
-                self.log(event)
-                if case .fire(let selection, let chosenAt) = event { self.fire(selection, chosenAt: chosenAt) }
-            }
-        }
-        Task { @MainActor [weak self] in
-            for await event in driver.connectionEvents {
-                overlay.handle(event)
-                self?.updateConnection(event)
-            }
-        }
-        driver.start()
+        updateKeypadStatus()
 
         watch(store)
         settings.onChange = { [weak self] change in self?.settingsChanged(change) }
@@ -102,7 +107,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        driver?.stop()
+        discovery?.invalidate()
+        for link in keypads.values { link.driver.stop() }
         // Give the lights-off command a moment to reach the device.
         Thread.sleep(forTimeInterval: 0.2)
     }
@@ -116,7 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .timing:
             applyConfig()
         case .brightness:
-            driver?.setBrightness(settings.brightness)
+            for link in keypads.values { link.driver.setBrightness(settings.brightness) }
         case .dryRun:
             dryRunItem.state = dryRun ? .on : .off
             Log.info(dryRun ? "dry run: on" : "dry run: off — actions will run")
@@ -193,7 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func applyConfig() {
-        driver?.replaceConfig(config)
+        for link in keypads.values { link.driver.replaceConfig(config(for: link)) }
         overlay?.config = config
         refreshModules()
     }
@@ -210,7 +216,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let busyTypes = Set(statuses.filter(\.lightsKeys)
             .compactMap { registry.module(id: $0.moduleID) }
             .flatMap { $0.manifest.actionTypes.map(\.type) })
-        driver?.setPulsingKeys(busyTypes.isEmpty ? [] : config.entryKeys(toActionTypes: busyTypes))
+        for link in keypads.values {
+            link.driver.setPulsingKeys(busyTypes.isEmpty ? [] : config(for: link).entryKeys(toActionTypes: busyTypes))
+        }
         updateMenuBarClock(statuses.first)
     }
 
@@ -540,9 +548,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func simulate(_ keys: [Int], pace: TimeInterval) {
-        guard let driver else { return }
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(1))
+            // The first keypad found — or, with none, a stand-in that never connects.
+            let driver = keypadOrder.first.flatMap { keypads[$0]?.driver } ?? addKeypad(nil, serial: "simulated").driver
             for key in keys {
                 Log.info("simulated press: key \(key)")
                 driver.inject(.down(key: key))
@@ -806,32 +815,98 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Logging
 
-    private func updateConnection(_ event: KeybowEvent) {
-        switch event {
-        case .connected(let path):
-            connectionItem.title = "Keybow: port open, waiting for a reply (\((path as NSString).lastPathComponent))"
-            settings.keybowStatus = "Port open, waiting for a reply"
-        case .disconnected(let reason):
-            connectionItem.title = "Keybow: not connected"
-            settings.keybowStatus = "Not connected"
-            Log.info("disconnected: \(reason)")
-        case .message(.hello(let version)):
-            connectionItem.title = "Keybow: connected (protocol \(version))"
-            settings.keybowStatus = "Connected"
-            Log.info("device: HELLO, protocol \(version)")
-        case .message(.pong):
-            if !connectionItem.title.hasPrefix("Keybow: connected") {
-                connectionItem.title = "Keybow: connected"
-                settings.keybowStatus = "Connected"
+    // MARK: - Keypads
+
+    /// Starts a driver for each keypad not yet known. One that goes away keeps
+    /// its driver, which reconnects when it's back.
+    private func discoverKeypads() {
+        for device in USBSerialPorts.keypads() where keypads[device.serial] == nil {
+            Log.info("keypad found: \(device.model.title) \(device.serial)")
+            addKeypad(device, serial: device.serial)
+        }
+    }
+
+    @discardableResult
+    private func addKeypad(_ device: KeypadDevice?, serial: String) -> KeypadLink {
+        let driver = SelectionDriver(config: device.map(config.forDevice) ?? config,
+                                     connection: KeybowConnection(serial: serial))
+        driver.setBrightness(settings.brightness)
+        let link = KeypadLink(device: device, driver: driver)
+        keypads[serial] = link
+        keypadOrder.append(serial)
+
+        Task { @MainActor [weak self] in
+            for await snapshot in driver.snapshots { self?.show(snapshot, from: serial) }
+        }
+        Task { @MainActor [weak self] in
+            for await event in driver.events {
+                guard let self, let overlay = self.overlay else { continue }
+                overlay.handle(event)
+                self.log(event)
+                if case .fire(let selection, let chosenAt) = event { self.fire(selection, chosenAt: chosenAt) }
             }
+        }
+        Task { @MainActor [weak self] in
+            for await event in driver.connectionEvents {
+                self?.overlay?.handle(event)
+                self?.updateConnection(event, of: serial)
+            }
+        }
+        driver.start()
+        refreshModules()
+        updateKeypadStatus()
+        return link
+    }
+
+    /// The overlay follows the keypad being used: another's going idle
+    /// doesn't clear it.
+    private func show(_ snapshot: SelectionSnapshot, from serial: String) {
+        if !snapshot.isIdle {
+            activeKeypad = serial
+        } else if let active = activeKeypad, active != serial {
+            return
+        }
+        overlay?.handle(snapshot)
+    }
+
+    private func updateConnection(_ event: KeybowEvent, of serial: String) {
+        guard var link = keypads[serial] else { return }
+        let name = link.name
+        switch event {
+        case .connected:
+            link.status = "port open, waiting for a reply"
+        case .disconnected(let reason):
+            link.status = "not connected"
+            Log.info("\(name) disconnected: \(reason)")
+        case .message(.hello(let version)):
+            link.status = "connected"
+            Log.info("\(name): HELLO, protocol \(version)")
+        case .message(.pong):
+            link.status = "connected"
         case .message(.deviceError(let text)):
             // Usually something else writing to the port.
-            Log.error("device: ERR \(text)")
+            Log.error("\(name): ERR \(text)")
         case .message(.unrecognised(let text)):
-            Log.error("device said something unexpected: \(text)")
+            Log.error("\(name) said something unexpected: \(text)")
         case .message:
             break
         }
+        let changed = keypads[serial]?.status != link.status
+        keypads[serial] = link
+        if changed { updateKeypadStatus() }
+    }
+
+    /// "Keybow 2040: connected" — or, with two, a line for both.
+    private func updateKeypadStatus() {
+        let real = keypadOrder.compactMap { keypads[$0] }.filter { $0.device != nil }
+        let summary: String
+        switch real.count {
+        case 0: summary = "no keypad found"
+        case 1: summary = real[0].status
+        default: summary = real.map { "\($0.name) \($0.status)" }.joined(separator: " · ")
+        }
+        connectionItem.title = real.count == 1 ? "\(real[0].name): \(summary)" : "Keypads: \(summary)"
+        settings.keybowStatus = summary.prefix(1).uppercased() + summary.dropFirst()
     }
 
     private func log(_ event: NavigatorEvent) {

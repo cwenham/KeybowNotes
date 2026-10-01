@@ -246,10 +246,44 @@ public struct OutlineEntry: Equatable, Identifiable, Sendable {
     }
 }
 
+/// A keypad with trees of its own: `# keypad RGB Keypad [RGB Keypad]`.
+public struct OutlineKeypad: Equatable, Sendable {
+    public var name: String
+    /// The model it's for — `RGB Keypad`, `Keybow 2040` — and `id: …` for one
+    /// board of a model there are two of.
+    public var annotations: [Annotation]
+    public var trees: [TreeKind: [OutlineNode?]] = [:]
+
+    public init(name: String, annotations: [Annotation] = [], trees: [TreeKind: [OutlineNode?]] = [:]) {
+        self.name = name
+        self.annotations = annotations
+        self.trees = trees
+    }
+
+    /// The heading's text after `# keypad `.
+    public var text: String {
+        let name = OutlineNode.escape(name)
+        return annotations.isEmpty ? name : name + " [" + annotations.map(\.text).joined(separator: ", ") + "]"
+    }
+
+    public var model: KeypadDevice.Model? {
+        for case .word(let word) in annotations { if let model = KeypadDevice.Model(words: word) { return model } }
+        return nil
+    }
+
+    public var id: String? {
+        for case .pair("id", let value) in annotations where !value.isEmpty { return value }
+        return nil
+    }
+}
+
 public struct OutlineDocument: Equatable, Sendable {
     /// Lines before anything else — a title, notes — kept as written.
     public var preamble: [String] = []
+    /// The first keypad's trees: those before any `# keypad` heading.
     public var trees: [TreeKind: [OutlineNode?]] = [:]
+    /// Keypads with trees of their own, after the first.
+    public var keypads: [OutlineKeypad] = []
     public var lists: [OutlineList] = []
     public var contacts: [OutlineEntry] = []
     public var projects: [OutlineEntry] = []
@@ -261,9 +295,23 @@ public struct OutlineDocument: Equatable, Sendable {
 
     public init() {}
 
-    public func roots(_ tree: TreeKind) -> [OutlineNode?] {
-        trees[tree] ?? OutlineNode.emptyRow
+    /// A keypad's tree: 0 is the first keypad's, 1… those of `keypads`.
+    public func roots(_ tree: TreeKind, keypad: Int = 0) -> [OutlineNode?] {
+        if keypad == 0 { return trees[tree] ?? OutlineNode.emptyRow }
+        guard keypad <= keypads.count else { return OutlineNode.emptyRow }
+        return keypads[keypad - 1].trees[tree] ?? OutlineNode.emptyRow
     }
+
+    public mutating func setRoots(_ roots: [OutlineNode?], _ tree: TreeKind, keypad: Int = 0) {
+        if keypad == 0 {
+            trees[tree] = roots
+        } else if keypad <= keypads.count {
+            keypads[keypad - 1].trees[tree] = roots
+        }
+    }
+
+    /// How many keypads: the first, and one per section.
+    public var keypadCount: Int { keypads.count + 1 }
 }
 
 public struct OutlineDiagnostic: Equatable, Sendable {
@@ -286,7 +334,7 @@ public struct OutlineDiagnostic: Equatable, Sendable {
 
 public enum OutlineParser {
     private enum Section {
-        case tree(TreeKind)
+        case tree(TreeKind, keypad: Int)
         case list(Int)
         case contacts, projects, defaults
     }
@@ -296,6 +344,8 @@ public enum OutlineParser {
         var diagnostics: [OutlineDiagnostic] = []
         var section: Section?
         var started = false
+        /// The keypad tree headings belong to: 0 until a `# keypad` heading.
+        var keypad = 0
         // Open items, innermost last: their indent, and the slot path to them
         // within the section — or nil for an item being skipped with its subtree.
         var stack: [(indent: Int, path: [Int]?)] = []
@@ -307,7 +357,17 @@ public enum OutlineParser {
 
             if trimmed.hasPrefix("#") {
                 let title = trimmed.drop { $0 == "#" }.trimmingCharacters(in: .whitespaces)
-                if let next = sectionNamed(title, in: &document) {
+                // `# keypad RGB Keypad [RGB Keypad]`: its own trees follow.
+                if title.lowercased().hasPrefix("keypad ") {
+                    let (name, annotations) = OutlineNode.split(String(title.dropFirst(7)).trimmingCharacters(in: .whitespaces))
+                    document.keypads.append(OutlineKeypad(name: name, annotations: annotations))
+                    keypad = document.keypads.count
+                    section = .tree(.main, keypad: keypad)
+                    stack = []
+                    started = true
+                    continue
+                }
+                if let next = sectionNamed(title, keypad: keypad, in: &document) {
                     section = next
                     stack = []
                     started = true
@@ -352,7 +412,7 @@ public enum OutlineParser {
                 continue
             }
             started = true
-            if section == nil { section = .tree(.main) }
+            if section == nil { section = .tree(.main, keypad: 0) }
             guard case let container? = section, isNodeSection(container) else {
                 diagnostics.append(.init(.warning, line: lineNumber, "Numbered items belong in a tree or a list; ignored."))
                 continue
@@ -388,7 +448,7 @@ public enum OutlineParser {
             let slot = number - 1
             let path = parentPath + [slot]
 
-            if case .tree(let kind) = container, path.count > kind.levels {
+            if case .tree(let kind, _) = container, path.count > kind.levels {
                 diagnostics.append(.init(.error, line: lineNumber,
                                          "Too deep: the \(kind.rawValue) tree has \(kind.levels) levels."))
                 skipped()
@@ -412,7 +472,7 @@ public enum OutlineParser {
         return (document, diagnostics)
     }
 
-    private static func sectionNamed(_ title: String, in document: inout OutlineDocument) -> Section? {
+    private static func sectionNamed(_ title: String, keypad: Int, in document: inout OutlineDocument) -> Section? {
         let lower = title.lowercased()
         switch lower {
         case "contacts": return .contacts
@@ -429,7 +489,7 @@ public enum OutlineParser {
         }
         let name = title.replacingOccurrences(of: "tree", with: "", options: .caseInsensitive)
             .trimmingCharacters(in: .whitespaces)
-        return TreeKind(name: name).map(Section.tree)
+        return TreeKind(name: name).map { Section.tree($0, keypad: keypad) }
     }
 
     private static func isNodeSection(_ section: Section) -> Bool {
@@ -442,7 +502,7 @@ public enum OutlineParser {
     private static func node(at path: [Int], in section: Section, of document: OutlineDocument) -> OutlineNode? {
         var level: [OutlineNode?]
         switch section {
-        case .tree(let kind): level = document.roots(kind)
+        case .tree(let kind, let keypad): level = document.roots(kind, keypad: keypad)
         case .list(let index): level = document.lists[index].nodes
         default: return nil
         }
@@ -465,10 +525,10 @@ public enum OutlineParser {
             }
         }
         switch section {
-        case .tree(let kind):
-            var roots = document.roots(kind)
+        case .tree(let kind, let keypad):
+            var roots = document.roots(kind, keypad: keypad)
             insert(node, at: path, into: &roots)
-            document.trees[kind] = roots
+            document.setRoots(roots, kind, keypad: keypad)
         case .list(let index):
             insert(node, at: path, into: &document.lists[index].nodes)
         default:
@@ -487,21 +547,31 @@ public enum OutlineWriter {
         var blocks: [String] = []
         if !document.preamble.isEmpty { blocks.append(document.preamble.joined(separator: "\n")) }
 
-        // The main tree goes first and needs no heading.
-        let main = lines(document.roots(.main))
-        if !main.isEmpty { blocks.append(main.joined(separator: "\n")) }
-
-        for tree in TreeKind.allCases where tree != .main {
-            let body = lines(document.roots(tree))
-            guard !body.isEmpty else { continue }
-            let heading: String
-            switch tree {
-            case .row2: heading = "# row 2"
-            case .row3: heading = "# row 3"
-            case .bottom: heading = "# bottom"
-            case .main: heading = "# main"
+        // The first keypad's trees, its main tree first and needing no heading;
+        // then each keypad of its own, its main tree right under its heading.
+        func trees(_ keypad: Int, under heading: String?) {
+            let main = lines(document.roots(.main, keypad: keypad))
+            if let heading {
+                blocks.append(([heading] + main).joined(separator: "\n"))
+            } else if !main.isEmpty {
+                blocks.append(main.joined(separator: "\n"))
             }
-            blocks.append(([heading] + body).joined(separator: "\n"))
+            for tree in TreeKind.allCases where tree != .main {
+                let body = lines(document.roots(tree, keypad: keypad))
+                guard !body.isEmpty else { continue }
+                let heading: String
+                switch tree {
+                case .row2: heading = "# row 2"
+                case .row3: heading = "# row 3"
+                case .bottom: heading = "# bottom"
+                case .main: heading = "# main"
+                }
+                blocks.append(([heading] + body).joined(separator: "\n"))
+            }
+        }
+        trees(0, under: nil)
+        for (index, keypad) in document.keypads.enumerated() {
+            trees(index + 1, under: "# keypad " + keypad.text)
         }
         for list in document.lists {
             blocks.append((["# list \(list.name)"] + lines(list.nodes)).joined(separator: "\n"))

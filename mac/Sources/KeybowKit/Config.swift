@@ -182,6 +182,27 @@ public struct KeybowConfig: Sendable {
     public let projects: [String: [String: String]]
     /// Everything under "defaults", for actions to consult.
     public let defaults: [String: JSONValue]
+    /// Keypads with trees of their own; `trees` are the first keypad's —
+    /// the ones before any `# keypad` heading — which any keypad without a
+    /// section of its own shares.
+    public let keypads: [Keypad]
+
+    /// A keypad's own trees, and which device they're for.
+    public struct Keypad: Sendable {
+        public let name: String
+        /// The model it's for; nil for any.
+        public let model: KeypadDevice.Model?
+        /// One board's unique ID, for two keypads of the same model.
+        public let id: String?
+        public let trees: [TreeKind: [TreeNode?]]
+
+        public init(name: String, model: KeypadDevice.Model?, id: String?, trees: [TreeKind: [TreeNode?]]) {
+            self.name = name
+            self.model = model
+            self.id = id
+            self.trees = trees
+        }
+    }
 
     public static let emptyRow: [TreeNode?] = [nil, nil, nil, nil]
 
@@ -198,8 +219,39 @@ public struct KeybowConfig: Sendable {
             idleTimeout: idleTimeout ?? self.idleTimeout,
             longPressCancel: longPressCancel ?? self.longPressCancel,
             dateRules: dateRules, trees: trees, defaultAction: defaultAction, typeDefaults: typeDefaults,
-            contacts: contacts, projects: projects, defaults: defaults
+            contacts: contacts, projects: projects, defaults: defaults, keypads: keypads
         )
+    }
+
+    /// The same config, with a keypad's trees: 0 is the first keypad's —
+    /// `trees` — and 1… those of `keypads`, in order.
+    public func forKeypad(_ index: Int) -> KeybowConfig {
+        guard index > 0, index <= keypads.count else { return self }
+        return KeybowConfig(
+            version: version, defaultColour: defaultColour, commitDelay: commitDelay, idleTimeout: idleTimeout,
+            longPressCancel: longPressCancel, dateRules: dateRules, trees: keypads[index - 1].trees,
+            defaultAction: defaultAction, typeDefaults: typeDefaults, contacts: contacts, projects: projects,
+            defaults: defaults, keypads: keypads
+        )
+    }
+
+    /// Which keypad's trees a device uses: the section naming its ID, else
+    /// the first naming its model and no ID — else the first keypad's.
+    public func keypadIndex(for device: KeypadDevice) -> Int {
+        if let index = keypads.firstIndex(where: { $0.id?.caseInsensitiveCompare(device.serial) == .orderedSame }) {
+            return index + 1
+        }
+        if let index = keypads.firstIndex(where: { $0.id == nil && $0.model == device.model }) {
+            return index + 1
+        }
+        // The first keypad's trees, or — when it has none, and every keypad
+        // has a section — the first section's.
+        let firstIsEmpty = trees.values.allSatisfy { $0.allSatisfy { $0 == nil } }
+        return firstIsEmpty && !keypads.isEmpty ? 1 : 0
+    }
+
+    public func forDevice(_ device: KeypadDevice) -> KeybowConfig {
+        forKeypad(keypadIndex(for: device))
     }
 
     public func roots(_ tree: TreeKind) -> [TreeNode?] {
@@ -428,6 +480,14 @@ private struct RawConfig: Decodable {
     /// Version 1 had a single tree.
     var tree: [RawNode]?
     var trees: [String: [RawNode]]?
+    var keypads: [RawKeypad]?
+}
+
+private struct RawKeypad: Decodable {
+    var name: String?
+    var model: String?
+    var id: String?
+    var trees: [String: [RawNode]]?
 }
 
 private enum RawChildren: Decodable {
@@ -606,7 +666,21 @@ extension KeybowConfig {
             typeDefaults: typeDefaults,
             contacts: stringTable(raw.contacts),
             projects: stringTable(raw.projects),
-            defaults: defaults
+            defaults: defaults,
+            keypads: try (raw.keypads ?? []).enumerated().map { index, keypad in
+                var keypadTrees: [TreeKind: [TreeNode?]] = [:]
+                for (name, nodes) in keypad.trees ?? [:] {
+                    guard let kind = TreeKind(name: name) else {
+                        guard let skipped else { throw ConfigError.unknownTree(name) }
+                        skipped(ConfigError.unknownTree(name).description)
+                        continue
+                    }
+                    keypadTrees[kind] = try builder.slots(from: nodes, at: "keypads[\(index)].\(kind.rawValue)", tree: kind,
+                                                          depth: 1, inheritedColour: nil)
+                }
+                return Keypad(name: keypad.name ?? "Keypad \(index + 2)", model: keypad.model.flatMap(KeypadDevice.Model.init(words:)),
+                              id: keypad.id, trees: keypadTrees)
+            }
         )
     }
 

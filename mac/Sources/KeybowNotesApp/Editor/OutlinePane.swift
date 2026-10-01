@@ -105,6 +105,7 @@ struct OutlinePane: NSViewRepresentable {
         // Reading these registers interest, so SwiftUI calls back on change.
         _ = model.revision
         _ = model.tab
+        _ = model.keypad
         _ = model.selection
         coordinator.sync()
     }
@@ -121,7 +122,7 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     private weak var outline: KeyOutlineView?
     private var rows: [OutlineRow.Kind: OutlineRow] = [:]
     private var lastRevision = -1
-    private var lastTab: TreeKind?
+    private var lastContainer: OutlineContainer?
     private var collapsed = Set<UUID>()
     private var afterEdit: AfterEdit?
     private var editingRow: OutlineRow?
@@ -151,7 +152,7 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     // MARK: - Keeping up with the model
 
     func sync() {
-        if model.revision != lastRevision || model.tab != lastTab || pendingPlaceholder != shownPending {
+        if model.revision != lastRevision || model.container != lastContainer || pendingPlaceholder != shownPending {
             reload()
         }
         selectRowForModel()
@@ -171,8 +172,8 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     func reload() {
         guard let outline else { return }
         lastRevision = model.revision
-        if lastTab != model.tab { collapsed = [] }
-        lastTab = model.tab
+        if lastContainer != model.container { collapsed = [] }
+        lastContainer = model.container
         shownPending = pendingPlaceholder
         rows = rows.filter { key, _ in
             if case .node(let id) = key { return model.document.location(of: id) != nil }

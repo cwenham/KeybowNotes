@@ -26,6 +26,8 @@ public enum AnnotationRole: Equatable, Sendable {
 public struct OutlineNodeInfo: Sendable {
     /// Which tree it's in, or nil when it's in a list.
     public let tree: TreeKind?
+    /// Which keypad's tree: 0 for the first keypad's.
+    public var keypad: Int = 0
     public let listName: String?
     /// Slot indices from the top of its tree or list.
     public let path: [Int]
@@ -235,16 +237,31 @@ private struct Compiler {
     }
 
     mutating func run() -> String {
-        var trees: [(String, OrderedJSON)] = []
-        for kind in TreeKind.allCases {
-            let roots = document.roots(kind)
-            guard roots.contains(where: { $0 != nil }) else { continue }
-            let nodes = roots.enumerated().compactMap { slot, node -> OrderedJSON? in
-                guard let node else { return nil }
-                return compile(node, slot: slot, path: [slot], tree: kind, list: nil,
-                               context: Context(), colour: OutlineCompiler.palette[slot % OutlineCompiler.palette.count])
+        func compileTrees(keypad: Int) -> [(String, OrderedJSON)] {
+            var trees: [(String, OrderedJSON)] = []
+            for kind in TreeKind.allCases {
+                let roots = document.roots(kind, keypad: keypad)
+                guard roots.contains(where: { $0 != nil }) else { continue }
+                let nodes = roots.enumerated().compactMap { slot, node -> OrderedJSON? in
+                    guard let node else { return nil }
+                    return compile(node, slot: slot, path: [slot], tree: kind, keypad: keypad, list: nil,
+                                   context: Context(), colour: OutlineCompiler.palette[slot % OutlineCompiler.palette.count])
+                }
+                trees.append((kind.rawValue, .array(nodes)))
             }
-            trees.append((kind.rawValue, .array(nodes)))
+            return trees
+        }
+        let trees = compileTrees(keypad: 0)
+        var keypads: [OrderedJSON] = []
+        for (index, keypad) in document.keypads.enumerated() {
+            var fields: [(String, OrderedJSON)] = [("name", .string(keypad.name))]
+            if let model = keypad.model { fields.append(("model", .string(model.rawValue))) }
+            if let id = keypad.id { fields.append(("id", .string(id))) }
+            for case .word(let word) in keypad.annotations where KeypadDevice.Model(words: word) == nil {
+                warnings.append("Keypad “\(keypad.name)”: “\(word)” isn't a model — Keybow 2040 or RGB Keypad.")
+            }
+            fields.append(("trees", .object(compileTrees(keypad: index + 1))))
+            keypads.append(.object(fields))
         }
 
         var lists: [(String, OrderedJSON)] = []
@@ -264,13 +281,14 @@ private struct Compiler {
         if !projects.isEmpty { output.append(("projects", .object(projects))) }
         if !lists.isEmpty { output.append(("lists", .object(lists))) }
         output.append(("trees", .object(trees)))
+        if !keypads.isEmpty { output.append(("keypads", .array(keypads))) }
         return OrderedJSON.object(output).render() + "\n"
     }
 
     // MARK: Nodes
 
-    private mutating func compile(_ node: OutlineNode, slot: Int, path: [Int], tree: TreeKind?, list: String?,
-                                  context inherited: Context, colour paletteColour: String?) -> OrderedJSON? {
+    private mutating func compile(_ node: OutlineNode, slot: Int, path: [Int], tree: TreeKind?, keypad: Int = 0,
+                                  list: String?, context inherited: Context, colour paletteColour: String?) -> OrderedJSON? {
         var context = inherited
         var action: [(String, OrderedJSON)] = []
         var nested: [(String, [(String, OrderedJSON)])] = []
@@ -428,14 +446,14 @@ private struct Compiler {
         } else if node.hasChildren {
             let children = node.children.enumerated().compactMap { childSlot, child -> OrderedJSON? in
                 guard let child else { return nil }
-                return compile(child, slot: childSlot, path: path + [childSlot], tree: tree, list: list,
+                return compile(child, slot: childSlot, path: path + [childSlot], tree: tree, keypad: keypad, list: list,
                                context: context, colour: nil)
             }
             fields.append(("children", .array(children)))
             if children.isEmpty { emptied = true }
         }
 
-        infos[node.id] = OutlineNodeInfo(tree: tree, listName: list, path: path, roles: roles,
+        infos[node.id] = OutlineNodeInfo(tree: tree, keypad: keypad, listName: list, path: path, roles: roles,
                                          diagnostics: diagnostics, actionType: context.type)
         return emptied ? nil : .object(fields)
     }

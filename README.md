@@ -4,7 +4,8 @@ A 16-key macro pad and a Mac menu-bar app that turn two or three key presses int
 a note, a calendar event, a message, a snippet of text typed where you are — or a
 question to Claude.
 
-The keypad is a [Pimoroni Keybow 2040](https://shop.pimoroni.com/products/keybow-2040):
+The keypad is a [Pimoroni Keybow 2040](https://shop.pimoroni.com/products/keybow-2040)
+or a Raspberry Pi Pico on Pimoroni's [RGB Keypad Base](https://shop.pimoroni.com/products/pico-rgb-keypad-base):
 a 4 × 4 grid of lit keys. You arrange what you want to do as a tree, four keys to
 a row. Pressing a key picks a branch; its choices light up on the next row, and a
 heads-up display on the Mac shows where you are. Choosing a leaf runs its action.
@@ -105,6 +106,11 @@ description. API keys stay in the Keychain and go only to their own API.
 all four rows, rows 2 and 3 are shorter trees of their own, and row 4 runs upwards.
 Four menus on one keypad, with the top row always a way back to the main one.
 
+**Several keypads** — plug in more than one, and each can have trees of its own:
+a `# keypad Desk [RGB Keypad]` section of the outline, chosen by model or by the
+board's unique ID, and a tab of its own in the tree editor. Without one, every
+keypad shares the same trees.
+
 **The tree editor** — the tree is a plain outline file, `tree.md`, and the editor
 is an outliner for it: Return, Tab and Shift-Tab to add and arrange nodes, a
 settings pane with a tooltip on every field, and the keypad drawn as it will light
@@ -119,9 +125,9 @@ and menu commands. See [docs/MODULES.md](docs/MODULES.md).
 
 ## How it fits together
 
-- **[firmware/](firmware/)** — CircuitPython for the Keybow 2040. The keypad only
-  reports key presses and shows the colours it's told to, over a USB serial port
-  of its own.
+- **[firmware/](firmware/)** — CircuitPython for the Keybow 2040 and the RGB
+  Keypad. The keypad only reports key presses and shows the colours it's told
+  to, over a USB serial port of its own.
 - **[mac/](mac/)** — a Swift package: the menu-bar app, the tree editor, the core
   library, a `keybow` command-line tool, and the modules. Everything that decides
   what a key means lives here, on the Mac.
@@ -130,7 +136,8 @@ and menu commands. See [docs/MODULES.md](docs/MODULES.md).
 
 ## Requirements
 
-- A **Pimoroni Keybow 2040**, running CircuitPython 10 with Pimoroni's `pmk`
+- A **Pimoroni Keybow 2040**, or a **Raspberry Pi Pico** on Pimoroni's **RGB
+  Keypad Base** — or several — running CircuitPython with Pimoroni's `pmk`
   library.
 - A Mac with **macOS 15 Sequoia** or later — Apple silicon or Intel.
 - **Xcode 16** or later to build it (Swift 6).

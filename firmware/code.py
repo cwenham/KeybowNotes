@@ -5,7 +5,10 @@
 #
 # Protocol (UTF-8 text, one message per line, on the USB CDC *data* port):
 #
-#   -> HELLO keybow 1              sent on boot and whenever the host reappears
+#   -> HELLO keybow 2 <model> <uid>   sent on boot and whenever the host reappears:
+#                                  the model (keybow2040, rgbkeypad) and the
+#                                  board's unique ID, so the host can tell
+#                                  keypads apart
 #   -> DOWN <n> / UP <n>           key 0-15, numbered as you see them
 #   <- LEDS <96 hex chars>         16 colours, rrggbb each, logical order
 #   <- PING            -> PONG     heartbeat
@@ -22,15 +25,27 @@
 
 import time
 
+import board
+import microcontroller
 import supervisor
 
 import usb_cdc
 from pmk import PMK
-from pmk.platform.keybow2040 import Keybow2040 as Hardware
+
+# One firmware for both keypads: the Keybow 2040, and Pimoroni's RGB Keypad
+# Base on a Raspberry Pi Pico. pmk numbers both the same way.
+if getattr(board, "board_id", "") == "pimoroni_keybow2040":
+    from pmk.platform.keybow2040 import Keybow2040 as Hardware
+    MODEL = "keybow2040"
+else:
+    from pmk.platform.rgbkeypadbase import RGBKeypadBase as Hardware
+    MODEL = "rgbkeypad"
 
 from keymap import LOGICAL_TO_PHYSICAL, PHYSICAL_TO_LOGICAL
 
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
+UID = "".join("%02X" % byte for byte in microcontroller.cpu.uid)
+HELLO = "HELLO keybow %d %s %s" % (PROTOCOL_VERSION, MODEL, UID)
 
 # How long without a line from the host before we assume it has gone.
 HOST_TIMEOUT_S = 5.0
@@ -101,7 +116,7 @@ def handle(line):
     _host_last_seen = time.monotonic()
     if not _host_present:
         _host_present = True
-        send("HELLO keybow %d" % PROTOCOL_VERSION)
+        send(HELLO)
 
     if line == "PING":
         send("PONG")
@@ -158,7 +173,7 @@ def breathe(now):
 if serial is None:
     # boot.py did not run, or the data port is disabled. Say so on the console
     # and light everything blue, since the protocol cannot work at all.
-    print("usb_cdc.data is not available — check boot.py and hard-reset the Keybow")
+    print("usb_cdc.data is not available — check boot.py and hard-reset the keypad")
     set_all((0, 0, 60))
     while True:
         keybow.update()
@@ -179,7 +194,7 @@ def run():
             breathe(now)
 
 
-send("HELLO keybow %d" % PROTOCOL_VERSION)
+send(HELLO)
 set_all((0, 0, 0))
 
 while True:

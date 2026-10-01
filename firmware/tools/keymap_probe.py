@@ -4,13 +4,19 @@
 # logical number the protocol would give it. Work along the top row first: you
 # should see 0, 1, 2, 3 left to right, then 4-7 on the next row, and so on.
 #
-# If the numbers come out transposed or reversed, change ROTATION in keymap.py
-# to match where the USB socket actually is, and run this again.
+# If the numbers come out transposed or reversed, change this board's entry in
+# ROTATIONS in keymap.py to match where the USB socket actually is, and run
+# this again.
 
 import time
 
+import board
 from pmk import PMK
-from pmk.platform.keybow2040 import Keybow2040 as Hardware
+
+if getattr(board, "board_id", "") == "pimoroni_keybow2040":
+    from pmk.platform.keybow2040 import Keybow2040 as Hardware
+else:
+    from pmk.platform.rgbkeypadbase import RGBKeypadBase as Hardware
 
 from keymap import PHYSICAL_TO_LOGICAL, LOGICAL_TO_PHYSICAL, ROTATION
 

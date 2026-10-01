@@ -6,14 +6,15 @@ import Foundation
 
 /// A tree, or a named list.
 public enum OutlineContainer: Hashable, Sendable {
-    case tree(TreeKind)
+    /// A keypad's tree: 0 is the first keypad's, 1… a `# keypad` section's.
+    case tree(TreeKind, keypad: Int = 0)
     case list(String)
 
     /// How deep nodes may go. A list's depth depends on where it's used, so
     /// it's held to three levels, leaving room for at least one above it.
     public var levels: Int {
         switch self {
-        case .tree(let kind): return kind.levels
+        case .tree(let kind, _): return kind.levels
         case .list: return 3
         }
     }
@@ -73,8 +74,10 @@ extension OutlineDocument {
             }
             return nil
         }
-        for kind in TreeKind.allCases {
-            if let path = search(roots(kind), []) { return OutlineLocation(.tree(kind), path) }
+        for keypad in 0..<keypadCount {
+            for kind in TreeKind.allCases {
+                if let path = search(roots(kind, keypad: keypad), []) { return OutlineLocation(.tree(kind, keypad: keypad), path) }
+            }
         }
         for list in lists {
             if let path = search(list.nodes, []) { return OutlineLocation(.list(list.name), path) }
@@ -101,7 +104,7 @@ extension OutlineDocument {
     public func level(_ container: OutlineContainer, parent: [Int]) -> [OutlineNode?] {
         var level: [OutlineNode?]
         switch container {
-        case .tree(let kind): level = roots(kind)
+        case .tree(let kind, let keypad): level = roots(kind, keypad: keypad)
         case .list(let name): level = lists.first { $0.name == name }?.nodes ?? OutlineNode.emptyRow
         }
         for slot in parent {
@@ -122,10 +125,10 @@ extension OutlineDocument {
             level[first] = node
         }
         switch container {
-        case .tree(let kind):
-            var roots = self.roots(kind)
+        case .tree(let kind, let keypad):
+            var roots = self.roots(kind, keypad: keypad)
             replace(in: &roots, at: parent)
-            trees[kind] = roots
+            setRoots(roots, kind, keypad: keypad)
         case .list(let name):
             if let index = lists.firstIndex(where: { $0.name == name }) {
                 replace(in: &lists[index].nodes, at: parent)
@@ -334,5 +337,48 @@ extension OutlineDocument {
             entries[index].fields.append(.pair(key: key, value: value))
         }
         if kind == .contacts { contacts = entries } else { projects = entries }
+    }
+}
+
+// MARK: - Keypads
+
+extension OutlineNode {
+    /// The same node and everything under it, with fresh IDs: a copy that can
+    /// sit beside the original.
+    public func copyWithNewIDs() -> OutlineNode {
+        var copy = self
+        copy.id = UUID()
+        copy.line = 0
+        copy.children = children.map { $0?.copyWithNewIDs() }
+        return copy
+    }
+}
+
+extension OutlineDocument {
+    /// Adds a keypad of its own, and says its number.
+    @discardableResult
+    public mutating func addKeypad(_ keypad: OutlineKeypad) -> Int {
+        keypads.append(keypad)
+        return keypads.count
+    }
+
+    /// Removes a keypad's section, and its trees with it. The first keypad's
+    /// trees, 0, can't be.
+    public mutating func removeKeypad(_ index: Int) {
+        guard index > 0, index <= keypads.count else { return }
+        keypads.remove(at: index - 1)
+    }
+
+    /// Fills a keypad's trees with copies of another's.
+    public mutating func copyTrees(from source: Int, to target: Int) {
+        guard source != target else { return }
+        for kind in TreeKind.allCases {
+            setRoots(roots(kind, keypad: source).map { $0?.copyWithNewIDs() }, kind, keypad: target)
+        }
+    }
+
+    /// True when a keypad has no nodes in any tree.
+    public func keypadIsEmpty(_ index: Int) -> Bool {
+        TreeKind.allCases.allSatisfy { roots($0, keypad: index).allSatisfy { $0 == nil } }
     }
 }

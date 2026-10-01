@@ -149,7 +149,7 @@ private struct NodeInspector: View {
     let location: OutlineLocation
 
     private var tree: TreeKind? {
-        if case .tree(let kind) = location.container { return kind }
+        if case .tree(let kind, _) = location.container { return kind }
         return nil
     }
 
@@ -160,7 +160,7 @@ private struct NodeInspector: View {
         }
     }
 
-    private var config: KeybowConfig? { model.compilation.config }
+    private var config: KeybowConfig? { model.keypadConfig }
 
     /// Everything down to and including this node — for a branch, what its
     /// leaves inherit.
@@ -924,11 +924,14 @@ struct InspectorRow<Content: View>: View {
     let title: String
     /// Shown when the pointer rests on the label or the control.
     let help: String?
+    var labelWidth = InspectorLayout.labelWidth
     @ViewBuilder let content: Content
 
-    init(_ title: String, help: String? = nil, @ViewBuilder content: () -> Content) {
+    init(_ title: String, help: String? = nil, labelWidth: CGFloat = InspectorLayout.labelWidth,
+         @ViewBuilder content: () -> Content) {
         self.title = title
         self.help = help
+        self.labelWidth = labelWidth
         self.content = content()
     }
 
@@ -937,7 +940,7 @@ struct InspectorRow<Content: View>: View {
             Text(title)
                 .multilineTextAlignment(.trailing)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(width: InspectorLayout.labelWidth, alignment: .trailing)
+                .frame(width: labelWidth, alignment: .trailing)
             content
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -969,6 +972,7 @@ struct DraftField: View {
     /// Grows to several lines; ⌥Return starts a new line.
     var multiline = false
     var help: String?
+    var labelWidth = InspectorLayout.labelWidth
     let commit: (String) -> Void
 
     @State private var draft = ""
@@ -980,7 +984,7 @@ struct DraftField: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        InspectorRow(title, help: help) {
+        InspectorRow(title, help: help, labelWidth: labelWidth) {
             VStack(alignment: .trailing, spacing: 2) {
                 TextField(placeholder.isEmpty ? hint : placeholder, text: $draft, axis: multiline ? .vertical : .horizontal)
                     .lineLimit(multiline ? 1...6 : 1...1)

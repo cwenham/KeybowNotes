@@ -34,7 +34,7 @@ final class AppSettings {
 
     // MARK: Live status, shown in the window but not saved
 
-    var keybowStatus = "Looking for the Keybow…"
+    var keybowStatus = "Looking for keypads…"
     var openAtLogin = false
     var accessibilityAllowed = false
     /// Why Open at Login isn't simply on or off, when it isn't.

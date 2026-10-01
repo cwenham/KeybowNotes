@@ -21,6 +21,7 @@ it. Nothing the editor knows is kept anywhere but the outline.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
+│  Default   Desk   +     Name [Desk     ]  RGB Keypad ⌄  Any one ⌄  Remove… │
 │  Main ↓   Row 2 ↓   Row 3 ↓   Bottom ↑                   ● Edited   Save │
 ├──────────────────────────────────────┬───────────────────────────────────┤
 │ 1 ▾ Work                             │ Work › General Tasks › Meeting    │
@@ -43,13 +44,38 @@ it. Nothing the editor knows is kept anywhere but the outline.
 └──────────────────────────────────────┴───────────────────────────────────┘
 ```
 
-- **Tabs** switch between the four trees, or ⌘1 to ⌘4. Each has a diagram of the
+- **Keypad tabs**, on the top row, switch between keypads' trees: **Default**
+  — the trees before any `# keypad` section, for every keypad without trees of
+  its own — then one tab per section. Resting on a tab says which keypads use
+  it, of those connected. See [Keypads](#keypads).
+- **Tree tabs** switch between the four trees, or ⌘1 to ⌘4. Each has a diagram of the
   keypad in the tree's colour — Main blue, Row 2 teal, Row 3 orange, Bottom
   pink — with its starting row at full strength and the rows it goes on to
   fading in order, so it shows which way the tree runs. The overlay's tree badge
   uses the same diagram and colour. A dot marks a tree with problems.
 - **Outline** on the left; **inspector** at top right; **keypad** at bottom right.
 - The window opens from the menu bar: **Edit Tree…** (⌘E).
+
+### Keypads
+
+With more than one keypad, each can have trees of its own: a `# keypad`
+section of the outline ([CONFIG-LANGUAGE.md](CONFIG-LANGUAGE.md#keypads)).
+
+- **+** adds one. It's named and set for the first connected keypad still using
+  the Default trees, if there is one; else it's "Keypad 2" for no model yet.
+- Choosing a keypad's tab shows its settings beside the tabs:
+  - **Name** — what it's called, in the tab and the section's heading.
+  - **Model** — Keybow 2040, RGB Keypad, or any model: its trees are for every
+    keypad of that model.
+  - **ID** — *Any one*, or one connected board's unique ID: for two keypads of
+    the same model, each with trees of its own.
+  - **Copy Default's Trees** — while it has no trees, starts it from a copy of
+    the Default ones.
+  - **Remove…** — takes the section away, asking first when it has trees; its
+    keypads go back to the Default trees. Undo brings it back.
+- Everything else — the outline, the inspector, the keypad drawing, the four
+  tree tabs — works on the chosen keypad's trees. Lists, contacts, projects and
+  defaults are shared, so they're the same on every tab.
 
 ---
 

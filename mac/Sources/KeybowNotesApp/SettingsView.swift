@@ -30,7 +30,7 @@ struct SettingsView: View {
 
     private var general: some View {
         Section("General") {
-            LabeledContent("Keybow", value: settings.keybowStatus)
+            LabeledContent("Keypads", value: settings.keybowStatus)
             Toggle("Open at login", isOn: Binding(get: { settings.openAtLogin }, set: actions.setOpenAtLogin))
             if let note = settings.openAtLoginNote {
                 Text(note).font(.caption).foregroundStyle(.secondary)

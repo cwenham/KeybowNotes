@@ -6,8 +6,9 @@ public enum KeybowEvent: Equatable, Sendable {
     case message(DeviceMessage)
 }
 
-/// Keeps a connection to the Keybow alive: finds the device, holds the data port
-/// open, sends heartbeats, and reconnects after unplugging or sleep.
+/// Keeps a connection to a keypad alive: finds the device, holds the data port
+/// open, sends heartbeats, and reconnects after unplugging or sleep. Given a
+/// serial number, only that keypad; else the first found.
 ///
 /// Events arrive on `events`; commands go out through `send(_:)`. Everything is
 /// serialised on a private queue, so it is safe to call from anywhere.
@@ -29,6 +30,9 @@ public final class KeybowConnection: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "KeybowConnection")
     private let timings: Timings
+    /// The keypad's unique ID, or nil for whichever is found first.
+    public let serial: String?
+    private var found: KeypadDevice?
 
     private var port: SerialPort?
     private var readSource: DispatchSourceRead?
@@ -40,7 +44,8 @@ public final class KeybowConnection: @unchecked Sendable {
 
     public let events: AsyncStream<KeybowEvent>
 
-    public init(timings: Timings = Timings()) {
+    public init(serial: String? = nil, timings: Timings = Timings()) {
+        self.serial = serial
         self.timings = timings
         var capturedContinuation: AsyncStream<KeybowEvent>.Continuation!
         self.events = AsyncStream { capturedContinuation = $0 }
@@ -49,6 +54,15 @@ public final class KeybowConnection: @unchecked Sendable {
 
     public var isConnected: Bool {
         queue.sync { port != nil }
+    }
+
+    /// The keypad last connected to.
+    public var device: KeypadDevice? {
+        queue.sync { found }
+    }
+
+    private func candidate() -> KeypadDevice? {
+        USBSerialPorts.keypads().first { serial == nil || $0.serial == serial }
     }
 
     public func start() {
@@ -92,7 +106,7 @@ public final class KeybowConnection: @unchecked Sendable {
         }
 
         // Has the device gone away from the IO registry?
-        if let path = port?.path, USBSerialPorts.keybowDataPort()?.path != path {
+        if let path = port?.path, USBSerialPorts.keypads().first(where: { $0.serial == found?.serial })?.dataPort != path {
             teardown(reason: "device disappeared")
             return
         }
@@ -115,10 +129,11 @@ public final class KeybowConnection: @unchecked Sendable {
     }
 
     private func attemptConnect() {
-        guard let candidate = USBSerialPorts.keybowDataPort() else { return }
+        guard let candidate = candidate() else { return }
         do {
-            let opened = try SerialPort(path: candidate.path)
+            let opened = try SerialPort(path: candidate.dataPort)
             port = opened
+            found = candidate
             assembler = LineAssembler()
             lastHeard = Date()
             lastPinged = .distantPast

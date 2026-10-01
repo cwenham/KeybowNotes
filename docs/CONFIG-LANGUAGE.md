@@ -107,6 +107,7 @@ A heading starts a section, which lasts until the next one:
 | `# row 2` | the row 2 tree |
 | `# row 3` | the row 3 tree |
 | `# bottom`, `# row 4`, `# bottom up` | the bottom tree |
+| `# keypad <name> [model, id: …]` | another keypad's trees — see [Keypads](#keypads) |
 | `# list <name>` | nodes reused with `[@name]` |
 | `# contacts` | people: `- Name [field: value, …]` |
 | `# projects` | projects: `- Name [path: …, …]` |
@@ -116,6 +117,51 @@ The word "tree", case, spaces and hyphens don't matter in tree headings. A
 heading before the first item that names no section is part of the preamble —
 a title. Other lines between items are ignored, and aren't kept when the
 outline is written back out.
+
+### Keypads
+
+With more than one keypad, each can have trees of its own. A `# keypad`
+heading starts a keypad's section: the items right under it are its main tree,
+and the tree headings after it — `# row 2`, `# row 3`, `# bottom` — are its
+side trees, until the next `# keypad` heading. Trees before any `# keypad`
+heading are the **Default** trees.
+
+```
+1. Work [colour: 0060ff]                    ← the Default trees
+   1. Standup
+
+# row 2
+1. Capture [Copy]
+
+# keypad Desk [RGB Keypad]                  ← trees for any RGB Keypad
+1. Music [colour: ff8c00]
+   1. Play
+# row 3
+1. Timers [Stopwatch]
+
+# keypad Spare [Keybow 2040, id: E66000000000AAAA]   ← for one board only
+
+# contacts                                  ← shared by every keypad
+- Alex Example [phone: +15550100]
+```
+
+The brackets say which keypads a section is for:
+
+- **A model** — `Keybow 2040` or `RGB Keypad` (also `keybow`, `rgb`,
+  `Pico`) — for every keypad of that model.
+- **`id: …`** — for one board, by the unique ID it reports. It's for having two
+  of one model: the section naming a board's ID wins over one naming only its
+  model. `keybow keypads` lists the IDs of those connected, and the tree
+  editor's ID menu offers them.
+
+A keypad uses the first section with its ID, else the first with its model and
+no ID, else the Default trees — or, when the Default trees are empty, the first
+section's. A word that isn't a model is reported, and the section matches
+by ID alone.
+
+Lists, contacts, projects and defaults are shared, wherever their headings
+fall. A file without `# keypad` headings reads as before: every keypad shares
+its trees.
 
 ### Brackets
 
@@ -257,8 +303,9 @@ app would load it.
 
 The tree editor, and `keybow upgrade-outline`, write the outline in one
 consistent form: three spaces per level, numbers as key positions, empty keys
-omitted, and sections in the order main tree, side trees, lists, contacts,
-projects, defaults. The preamble is kept as written.
+omitted, and sections in the order main tree, side trees, each keypad's section
+— its heading, its main tree, its side trees — then lists, contacts, projects,
+defaults. The preamble is kept as written.
 
 ### Upgrading an older outline
 
@@ -283,7 +330,11 @@ refers to, and keeps the original as `tree.md.bak`.
     "row2":   [ … ],
     "row3":   [ … ],
     "bottom": [ … ]
-  }
+  },
+  "keypads": [                              // §2, Keypads
+    { "name": "Desk", "model": "rgbkeypad", "trees": { "main": [ … ] } },
+    { "name": "Spare", "model": "keybow2040", "id": "E66000000000AAAA", "trees": { … } }
+  ]
 }
 ```
 
@@ -1276,7 +1327,9 @@ compiler knows.
 action fields listed in §2.
 
 **Section headings:** `main`, `row 2`, `row 3`, `bottom` (and their variants),
-`list …`, `contacts`, `projects`, `defaults`.
+`keypad …`, `list …`, `contacts`, `projects`, `defaults`.
+
+**Keypad models:** `Keybow 2040`, `RGB Keypad` (and their variants), with `id`.
 
 **Action types:** `notes.create`, `notes.append`, `calendar.createEvent`,
 `reminders.create`, `messages.compose`, `mail.compose`, `phone.call`, `app.open`,

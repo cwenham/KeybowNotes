@@ -17,6 +17,8 @@ let usage = """
 usage: keybow <command>
 
   ports              list the Keybow's serial ports
+  keypads            list the keypads connected — Keybow 2040s and RGB Keypads
+                     with the firmware's data port — by model and unique ID
   watch              connect and print everything the device says (Ctrl-C to stop)
   ping               connect, ping once, print the reply
   leds <spec>        set the keys, then hold the connection for a moment
@@ -33,6 +35,9 @@ usage: keybow <command>
                      rewrite an older outline in the current syntax: [brackets]
                      instead of (parentheses), plus # contacts and # projects
                      sections to fill in. Keeps a .bak copy.
+
+Device commands talk to the first keypad found; KEYBOW_DEVICE=rgbkeypad (or a
+model, or a unique ID from `keybow keypads`) picks another.
 
 The tree defaults to ~/Library/Application Support/KeybowNotes/tree.md,
 falling back to ./tree.demo.md. A compiled .json file works too.
@@ -63,8 +68,17 @@ func parseColours(_ arguments: [String]) -> [KeyColour] {
 }
 
 /// Runs `body` while the connection is up, then exits.
+/// The keypad KEYBOW_DEVICE names — a model, "rgbkeypad", or a unique ID —
+/// else the first found.
+func chosenKeypad() -> String? {
+    guard let wanted = ProcessInfo.processInfo.environment["KEYBOW_DEVICE"], !wanted.isEmpty else { return nil }
+    let keypads = USBSerialPorts.keypads()
+    if let model = KeypadDevice.Model(words: wanted) { return keypads.first { $0.model == model }?.serial ?? wanted }
+    return wanted
+}
+
 func withConnection(seconds: TimeInterval, _ body: @escaping (KeybowConnection) -> Void) -> Never {
-    let connection = KeybowConnection()
+    let connection = KeybowConnection(serial: chosenKeypad())
 
     Task {
         for await event in connection.events {
@@ -212,6 +226,13 @@ case "ports":
         print("\(port.path)  interface \(interface)  \(role)")
     }
 
+case "keypads":
+    let keypads = USBSerialPorts.keypads()
+    if keypads.isEmpty { print("no keypads found: a Keybow 2040 or an RGB Keypad with the firmware's boot.py run") }
+    for keypad in keypads {
+        print("\(keypad.model.title)  \(keypad.serial)  data \(keypad.dataPort)  console \(keypad.consolePort ?? "-")")
+    }
+
 case "watch":
     withConnection(seconds: 0) { _ in }
 
@@ -327,12 +348,20 @@ case "upgrade-outline":
     exit(0)
 
 case "run":
-    let (config, url) = loadConfig(Array(arguments.dropFirst()))
+    let (whole, url) = loadConfig(Array(arguments.dropFirst()))
+    // The keypad's own trees, when the outline gives it some.
+    let serial = chosenKeypad()
+    let device = USBSerialPorts.keypads().first { serial == nil || $0.serial == serial }
+    let config = device.map(whole.forDevice) ?? whole
     currentRules = config.dateRules
     print("config: \(url.path)")
+    if let device, !whole.keypads.isEmpty {
+        let index = whole.keypadIndex(for: device)
+        print("keypad: \(device.model.title) \(device.serial), using " + (index == 0 ? "the Default trees" : "“\(whole.keypads[index - 1].name)”"))
+    }
     printTrees(config)
     print("---")
-    let connection = KeybowConnection()
+    let connection = KeybowConnection(serial: device?.serial ?? serial)
     let driver = SelectionDriver(config: config, connection: connection)
     Task {
         for await event in driver.connectionEvents {

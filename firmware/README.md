@@ -1,35 +1,52 @@
 # KeybowNotes firmware
 
-CircuitPython for the Pimoroni Keybow 2040. It reports key presses and obeys LED
-commands; the Mac app holds the category tree and all the logic.
+CircuitPython for Pimoroni's 4×4 keypads: the **Keybow 2040**, and the **RGB
+Keypad Base** on a Raspberry Pi Pico. It reports key presses and obeys LED
+commands; the Mac app holds the category tree and all the logic. One firmware
+runs on both — it tells which board it's on from CircuitPython's `board_id` —
+and the app drives any number of them at once.
 
 **Verified on hardware** (2026-09-23): CircuitPython 10.3.1 on a Keybow 2040,
 with `pmk` unchanged. `HELLO`, `PING`/`PONG`, `LEDS`, the error replies and
 `DOWN`/`UP` for all keys all behave as specified, and `ROTATION = "top"` gives
 the numbering the protocol expects (top row 0-3, left column 0, 4, 8, 12).
+Also run on CircuitPython 8.2.10 on a Pico with the RGB Keypad Base
+(2026-10-01).
 
 ## Install
 
-1. **CircuitPython.** Hold BOOTSEL while plugging the Keybow in, and drop the
-   Keybow 2040 `.uf2` from [circuitpython.org](https://circuitpython.org/board/pimoroni_keybow2040/)
-   onto the RPI-RP2 drive. It reboots as `CIRCUITPY`.
-2. **The PMK library.** Copy the `pmk` folder from Pimoroni's
+1. **CircuitPython.** Hold BOOTSEL while plugging the board in, and drop its
+   `.uf2` from circuitpython.org onto the RPI-RP2 drive — the
+   [Keybow 2040's](https://circuitpython.org/board/pimoroni_keybow2040/), or for
+   the RGB Keypad the [Pico's](https://circuitpython.org/board/raspberry_pi_pico/).
+   It reboots as `CIRCUITPY`.
+2. **Libraries.** Copy the `pmk` folder from Pimoroni's
    [pmk-circuitpython](https://github.com/pimoroni/pmk-circuitpython) repo into
-   `CIRCUITPY/lib/`.
+   `CIRCUITPY/lib/`, and its LED driver from the
+   [Adafruit CircuitPython bundle](https://circuitpython.org/libraries):
+   `adafruit_is31fl3731` for the Keybow 2040, `adafruit_dotstar` for the RGB
+   Keypad.
 3. **This firmware.** Copy `boot.py`, `code.py` and `keymap.py` to the root of
-   `CIRCUITPY`.
+   `CIRCUITPY`. A board that has run something else may hold a `code.txt`,
+   `main.py` or `main.txt`; CircuitPython runs the first of `code.txt`,
+   `code.py`, `main.txt`, `main.py`, so set the others aside.
 4. **Hard reset** — press the reset button or unplug and replug. `boot.py` only
-   runs at power-on, and until it does there is no data port.
+   runs at power-on, and until it does there is no data port. From the console,
+   `import microcontroller; microcontroller.reset()` does the same.
 
 ## Ports
 
-After the reset the Keybow presents two serial ports:
+After the reset the keypad presents two serial ports:
 
 - the **console** (the REPL), for `print()` output and debugging
 - the **data** port, which carries the protocol
 
 The Mac app finds them by USB vendor and product ID, not by device path, and
-talks on the data port. To watch the console yourself:
+talks on the data port. It tells keypads apart by their USB serial number,
+which CircuitPython sets to the board's unique ID; a board with only one port —
+`boot.py` not yet run — isn't taken for a keypad. `keybow keypads` lists those
+it finds. The RGB Keypad is known by the Pico's IDs, so any Pico running
+CircuitPython with a data port counts as one. To watch the console yourself:
 
 ```bash
 ls /dev/cu.usbmodem*
@@ -42,13 +59,15 @@ screen /dev/cu.usbmodemXXXX 115200
 
 The protocol numbers keys as you see them — 0-3 along the top row, 12-15 along
 the bottom. The hardware counts up the columns from the bottom-left, and which
-corner is "top-left" depends on where the USB socket is.
+corner is "top-left" depends on where the USB socket is. `keymap.py` keeps a
+rotation per board, in `ROTATIONS`; pmk numbers the RGB Keypad as it does the
+Keybow, so both start at `top`.
 
 Copy `tools/keymap_probe.py` over `code.py`, open the console, and press keys.
 Each prints the logical number it would report. If the top row does not give
-0, 1, 2, 3 left to right, set `ROTATION` in `keymap.py` to where the socket
-actually sits (`top`, `bottom`, `left` or `right`) and try again. Then put the
-real `code.py` back.
+0, 1, 2, 3 left to right, set the board's entry in `ROTATIONS` in `keymap.py`
+to where the socket actually sits (`top`, `bottom`, `left` or `right`) and try
+again. Then put the real `code.py` back.
 
 ## Protocol
 
@@ -56,7 +75,7 @@ UTF-8 text, one message per line, on the data port.
 
 | Direction | Message | Meaning |
 |---|---|---|
-| Keybow → Mac | `HELLO keybow 1` | On boot, and whenever the host reappears |
+| Keybow → Mac | `HELLO keybow 2 <model> <id>` | On boot, and whenever the host reappears: the model — `keybow2040` or `rgbkeypad` — and the board's unique ID |
 | Keybow → Mac | `DOWN <n>` / `UP <n>` | Key 0-15 pressed / released |
 | Mac → Keybow | `LEDS <96 hex chars>` | 16 `rrggbb` colours, in logical key order |
 | Mac → Keybow | `PING` → `PONG` | Heartbeat |
@@ -89,3 +108,6 @@ LEDS ff0000 00ff00 0000ff 000000 000000 000000 000000 000000 000000 000000 00000
 
 Spaces in the `LEDS` payload are ignored, so it can be written either way. That
 should answer `PONG` and light the first three keys red, green and blue.
+
+Version 1 sent only `HELLO keybow 1`. The app still takes it — it knows the
+model and ID from USB — so a keypad on older firmware keeps working.

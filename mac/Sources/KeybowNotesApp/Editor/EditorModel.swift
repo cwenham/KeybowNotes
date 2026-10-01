@@ -26,6 +26,9 @@ final class EditorModel {
     private(set) var isDirty = false
 
     var tab: TreeKind = .main
+    /// The keypad whose trees are shown: 0 for the first keypad's, 1… a
+    /// `# keypad` section's.
+    var keypad = 0
     var selection: EditorSelection?
     /// A refusal or notice, shown briefly.
     private(set) var message: String?
@@ -55,7 +58,10 @@ final class EditorModel {
         self.compilation = OutlineCompiler.compile(document, locateApp: locateApp)
     }
 
-    var container: OutlineContainer { .tree(tab) }
+    var container: OutlineContainer { .tree(tab, keypad: min(keypad, document.keypads.count)) }
+
+    /// The compiled config, with the shown keypad's trees.
+    var keypadConfig: KeybowConfig? { compilation.config?.forKeypad(min(keypad, document.keypads.count)) }
 
     // MARK: - Reading
 

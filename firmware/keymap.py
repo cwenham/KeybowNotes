@@ -8,7 +8,8 @@
 #     8  9 10 11      <- row 3
 #    12 13 14 15      <- row 4, fires the action
 #
-# The Keybow's own numbering runs up the columns, starting bottom-left:
+# The hardware's own numbering — the Keybow's, and pmk's for the RGB Keypad
+# Base — runs up the columns, starting bottom-left:
 #
 #     3  7 11 15
 #     2  6 10 14
@@ -22,9 +23,16 @@
 # VERIFY THIS ON THE REAL DEVICE before trusting it: run tools/keymap_probe.py,
 # which lights each key you press and prints the logical number it was given.
 
-# Where the USB socket sits when the keypad faces you: "top", "left", "bottom"
-# or "right".
-ROTATION = "top"
+import board
+
+# Where the USB socket sits when the keypad faces you — "top", "left",
+# "bottom" or "right" — for each board. pmk numbers the RGB Keypad Base's keys
+# as the Keybow's, so only this can differ.
+ROTATIONS = {
+    "pimoroni_keybow2040": "top",
+    "raspberry_pi_pico": "top",
+}
+ROTATION = ROTATIONS.get(getattr(board, "board_id", ""), "top")
 
 ROWS = 4
 COLS = 4

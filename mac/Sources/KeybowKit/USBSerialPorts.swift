@@ -11,6 +11,56 @@ public struct USBSerialPort: Equatable, Sendable {
     public let interfaceNumber: Int?
     public let vendorID: Int
     public let productID: Int
+    /// The USB device's serial number: for CircuitPython, the board's unique ID.
+    public var serial: String?
+}
+
+/// A keypad KeybowNotes can talk to: a Keybow 2040, or Pimoroni's RGB
+/// Keypad Base on a Raspberry Pi Pico, running the KeybowNotes firmware.
+public struct KeypadDevice: Hashable, Sendable {
+    public enum Model: String, CaseIterable, Sendable {
+        case keybow2040
+        case rgbKeypad = "rgbkeypad"
+
+        public var title: String {
+            switch self {
+            case .keybow2040: return "Keybow 2040"
+            case .rgbKeypad: return "RGB Keypad"
+            }
+        }
+
+        /// The USB identity CircuitPython gives each board.
+        var usb: (vendor: Int, product: Int) {
+            switch self {
+            case .keybow2040: return (0x16D0, 0x08C6)
+            case .rgbKeypad: return (0x239A, 0x80F4)       // any Pico running CircuitPython
+            }
+        }
+
+        /// From an outline or the firmware, any case and spacing: "Keybow
+        /// 2040", "keybow", "RGB Keypad", "rgbkeypad", "Pico".
+        public init?(words: String) {
+            switch words.lowercased().filter({ $0.isLetter || $0.isNumber }) {
+            case "keybow2040", "keybow": self = .keybow2040
+            case "rgbkeypad", "rgbkeypadbase", "picorgbkeypad", "pico", "rgb": self = .rgbKeypad
+            default: return nil
+            }
+        }
+    }
+
+    /// The board's unique ID, which is also its USB serial number.
+    public let serial: String
+    public let model: Model
+    /// The port the protocol runs on; the console is the other.
+    public let dataPort: String
+    public let consolePort: String?
+
+    public init(serial: String, model: Model, dataPort: String, consolePort: String? = nil) {
+        self.serial = serial
+        self.model = model
+        self.dataPort = dataPort
+        self.consolePort = consolePort
+    }
 }
 
 public enum USBSerialPorts {
@@ -38,11 +88,30 @@ public enum USBSerialPorts {
                     path: path,
                     interfaceNumber: usb.interfaceNumber,
                     vendorID: usb.vendorID,
-                    productID: usb.productID
+                    productID: usb.productID,
+                    serial: usb.serial
                 )
             )
         }
         return found.sorted { ($0.interfaceNumber ?? .max, $0.path) < ($1.interfaceNumber ?? .max, $1.path) }
+    }
+
+    /// Every keypad connected, in a steady order. A board shows two ports
+    /// once its boot.py has run — the console, and the data port the protocol
+    /// uses — and one with only the console is left alone: talking to it
+    /// would be typing into its REPL.
+    public static func keypads() -> [KeypadDevice] {
+        var devices: [KeypadDevice] = []
+        for model in KeypadDevice.Model.allCases {
+            let ports = ports(vendorID: model.usb.vendor, productID: model.usb.product)
+            let bySerial = Dictionary(grouping: ports) { $0.serial ?? "" }
+            for (serial, own) in bySerial.sorted(by: { $0.key < $1.key }) where own.count >= 2 {
+                let sorted = own.sorted { ($0.interfaceNumber ?? .max, $0.path) < ($1.interfaceNumber ?? .max, $1.path) }
+                devices.append(KeypadDevice(serial: serial, model: model, dataPort: sorted.last!.path,
+                                            consolePort: sorted.first?.path))
+            }
+        }
+        return devices
     }
 
     /// The port carrying the KeybowNotes protocol.
@@ -51,6 +120,11 @@ public enum USBSerialPorts {
     /// boot.py. The data port is the one on the higher USB interface number.
     public static func keybowDataPort() -> USBSerialPort? {
         ports(vendorID: KeybowProtocol.vendorID, productID: KeybowProtocol.productID).last
+    }
+
+    /// The data port of the first keypad connected, of any model.
+    public static func firstKeypad() -> KeypadDevice? {
+        keypads().first
     }
 
     /// The REPL console, useful for diagnostics.
@@ -62,7 +136,7 @@ public enum USBSerialPorts {
 
     private static func usbAncestry(
         of service: io_registry_entry_t
-    ) -> (vendorID: Int, productID: Int, interfaceNumber: Int?)? {
+    ) -> (vendorID: Int, productID: Int, interfaceNumber: Int?, serial: String?)? {
         var current = service
         IOObjectRetain(current)
         defer { IOObjectRelease(current) }
@@ -70,6 +144,7 @@ public enum USBSerialPorts {
         var interfaceNumber: Int?
         var vendorID: Int?
         var productID: Int?
+        var serial: String?
 
         // Walk towards the root collecting what we find. The whole chain is
         // visited rather than stopping at the first idVendor, because the ACM
@@ -81,7 +156,8 @@ public enum USBSerialPorts {
             }
             if vendorID == nil { vendorID = intProperty(current, "idVendor") }
             if productID == nil { productID = intProperty(current, "idProduct") }
-            if interfaceNumber != nil, vendorID != nil, productID != nil { break }
+            if serial == nil { serial = stringProperty(current, "USB Serial Number") ?? stringProperty(current, "kUSBSerialNumberString") }
+            if interfaceNumber != nil, vendorID != nil, productID != nil, serial != nil { break }
 
             var parent: io_registry_entry_t = 0
             guard IORegistryEntryGetParentEntry(current, kIOServicePlane, &parent) == KERN_SUCCESS else {
@@ -92,7 +168,7 @@ public enum USBSerialPorts {
         }
 
         guard let vendor = vendorID, let product = productID else { return nil }
-        return (vendor, product, interfaceNumber)
+        return (vendor, product, interfaceNumber, serial)
     }
 
     private static func stringProperty(_ entry: io_registry_entry_t, _ key: String) -> String? {

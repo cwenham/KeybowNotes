@@ -74,8 +74,8 @@ struct KeypadPane: View {
     private func layout() -> [Key] {
         var keys = [Key](repeating: Key(), count: KeybowProtocol.keyCount)
         let tree = model.tab
-        let container = OutlineContainer.tree(tree)
-        let config = model.compilation.config
+        let container = model.container
+        let config = model.keypadConfig
 
         func colour(_ path: [Int]) -> KeyColour {
             config?.node(in: tree, at: path)?.colour ?? config?.defaultColour ?? KeyColour(red: 90, green: 90, blue: 90)

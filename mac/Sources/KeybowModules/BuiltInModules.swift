@@ -5,6 +5,7 @@ import KeybowKit
 import KeybowLocation
 import KeybowQuotes
 import KeybowStopwatch
+import KeybowWindows
 
 /// Every module built in, for each host — the app, the command line — to
 /// register before it reads an outline. Adding a module is a line here and a
@@ -18,5 +19,6 @@ public enum BuiltInModules {
         ModuleRegistry.shared.register(QuoteModule(), host: host)
         ModuleRegistry.shared.register(DisplayModule(), host: host)
         ModuleRegistry.shared.register(AskModule(), host: host)
+        ModuleRegistry.shared.register(WindowModule(), host: host)
     }
 }

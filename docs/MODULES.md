@@ -45,6 +45,7 @@ KeybowData           a module: data sources, using KeybowAI to write rules
 KeybowLocation       a module: where the Mac is, from Location Services
 KeybowQuotes         a module: {{quote}}, portions of a file
 KeybowDisplay        modules: the display and ask actions
+KeybowWindows        a module: the window action
 KeybowModules        the list of built-in modules
 KeybowNotesApp       registers them at launch; shows their status
 keybow               registers them too, so their keywords compile
@@ -266,6 +267,26 @@ keywords `Display` and `Show`.
   hot key while it's up (`EscapeKey`), which needs no permission — watching
   keys typed into other apps would need Accessibility or Input Monitoring. A development build can answer OK or Cancel by itself
   with `KEYBOW_DEBUG_DISPLAY_ANSWER`.
+
+## Windows
+
+`mac/Sources/KeybowWindows/`, action type `window`, keywords `Window` and
+`Arrange`.
+
+- `WindowGeometry` does the arithmetic, from screens' frames and visible frames
+  alone, so it's tested without windows: the rectangle for each place, the
+  screens in order from the left, the one a window is on, the one a `screen:`
+  names, a window's share carried from one screen to another, and the flip
+  between AppKit's rectangles (from the bottom-left of the main screen) and
+  Accessibility's (from its top-left).
+- `WindowMover` uses Accessibility on the app in front: its focused window, else
+  its main, else its first. It turns off `AXEnhancedUserInterface` while it
+  works — apps animate and fight a resize with it on — then sizes, moves and
+  sizes again, and reads the frame back, putting it right if a window moved to
+  another screen was held to the old one's size.
+- `KEYBOW_DEBUG_WINDOW_PID` limits it to one process's window, whatever's in
+  front, for testing without moving anyone's work. It only narrows what's moved,
+  so the app honours it too.
 
 ## Ask
 

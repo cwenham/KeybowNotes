@@ -146,6 +146,7 @@ An annotation is either a **word** or a **pair**.
 | `Stopwatch` | KeybowNotes' own stopwatch (a module) | `"type": "stopwatch"` |
 | `Display`, `Show` | show text on screen (a module) | `"type": "display"` |
 | `Ask`, `Prompt` | ask for something to be typed, and hand it on (a module) | `"type": "ask"` |
+| `Window`, `Arrange` | move and size the window you're working in (a module) | `"type": "window"` |
 | `append` | add to a running note rather than make a new one | `"type": "notes.append"` |
 | `new`, `create` | make a new note | `"type": "notes.create"` |
 | `something.md` | a template (§8) | `"template": "something.md"` |
@@ -804,6 +805,45 @@ other way — ✕, Esc without a Cancel button, fading, being replaced — runs
 nothing. In the tree editor, *When OK is chosen* and *When Cancel is chosen*
 appear once the buttons are set, each with its own Type menu and fields.
 
+### `window` — move and size the window you're working in
+
+A module. Moves the focused window of the app in front — KeybowNotes never
+takes the front, so it's the window you were working in — to part of its
+screen, or to another screen.
+
+| Field | |
+|---|---|
+| `place` | `full`, a half — `left`, `right` (the full height), `top`, `bottom` (the full width) — or a quarter: `topLeft`, `topRight`, `bottomLeft`, `bottomRight`. Without it, the leaf's label, when it names one. |
+| `screen` | `next` or `previous` (round the ends), `main` (the one with the menu bar), a number counting from the left, or part of a display's name. Without it, the window's own screen. |
+
+```
+1. Windows [Window]
+   1. Left
+   2. Right
+   3. Top left
+   4. Full
+2. Elsewhere [Window, screen: next]
+   1. Left
+   2. Full
+   3. Next screen
+```
+
+- **The screen's area** is all of it less the menu bar, and less the Dock when
+  it's always shown. Halves meet exactly; an odd point goes to the right or
+  upper one. Quarters are half of each.
+- **`full` fills that area.** It isn't macOS's full-screen mode, and a window in
+  that mode is left alone, with a note to leave it first.
+- **Labels name places** as you'd say them: *Top left*, *Upper right*, *Left
+  half*, *Bottom right corner*, *Full screen*, *Maximise*. A label like *Next
+  screen* or *Previous display*, with no place, names the screen.
+- **To another screen without a place,** the window keeps its share of the
+  screen: half the width, a quarter of the way in, stays so.
+- A window that's one size only is moved, not resized, and the overlay says so.
+  Some apps round a size — a terminal to whole lines — so they may fall a few
+  points short.
+- On a screen with a menu bar of its own, macOS keeps windows below it.
+- It needs **Accessibility** access, like Insert and `{{selection}}`.
+
 ### `ask` — ask for something, and hand it on
 
 A module, built on `display`. Shows a question with a field to type in, and on
@@ -1228,7 +1268,7 @@ the app; edit it only while KeybowNotes isn't running.
 **Outline words:** `Notes`, `Calendar`, `Reminders`, `Messages`, `Mail`, `Call`,
 `FaceTime`, `Link`, `Browser`, `Copy`, `Clipboard`, `Insert`, `Paste`, `Direct Insert`, `Type`,
 `Timer`, `Maps`, `Music`,
-`Stopwatch`, `Display`, `Show`, `Ask`, `Prompt` (and any other module's keywords),
+`Stopwatch`, `Display`, `Show`, `Ask`, `Prompt`, `Window`, `Arrange` (and any other module's keywords),
 `append`, `new`, `create`, `… alert`, `….md`, `@…`, and the app names the
 compiler knows.
 
@@ -1241,7 +1281,7 @@ action fields listed in §2.
 **Action types:** `notes.create`, `notes.append`, `calendar.createEvent`,
 `reminders.create`, `messages.compose`, `mail.compose`, `phone.call`, `app.open`,
 `url.open`, `clipboard.copy`, `text.insert`, `text.insertDirect`, `clock.timer`, `maps.search`, `music.play`, `shortcut`,
-and from modules, `stopwatch`, `display` and `ask`.
+and from modules, `stopwatch`, `display`, `ask` and `window`.
 
 **Computed values:** `leaf`, `parent`, `level1`–`level4`, `path`, `folderPath`,
 `parentPath`, `tree`, `contact.*`, `project.*`, `selection`, `clipboard`, `frontApp`,

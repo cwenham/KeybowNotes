@@ -52,6 +52,8 @@ change your mind — press any key — before the action runs.
   file it as a note.
 - **Ask**: a question with a field to type in, whose answer goes to an action of
   your choosing — a search, a note, text typed where you were.
+- **Windows**: put the window you're working in on a half or a quarter of the
+  screen, fill it, or send it to another screen.
 
 **Values** — anything an action writes can include `{{placeholders}}`: the labels
 along the path, a contact's number, the date in any format, **where your Mac is**,
@@ -111,7 +113,7 @@ has that does nothing is flagged, with a button to remove it.
 
 ![The tree editor with a calendar event selected: its title, start, duration and alert, each showing where it comes from](docs/images/tree-editor-event.png)
 
-**Modules** — the stopwatch, the Claude blocks, data sources, location, quotes, displays and Ask are modules: separate code that
+**Modules** — the stopwatch, the Claude blocks, data sources, location, quotes, displays, Ask and window moving are modules: separate code that
 plugs in through one interface, adding actions, template blocks, values, settings
 and menu commands. See [docs/MODULES.md](docs/MODULES.md).
 
@@ -165,7 +167,7 @@ macOS asks the first time each is needed:
 |---|---|
 | Notes, Mail, Music | Automation — control of that app |
 | Calendar events and reminders | Calendars, Reminders |
-| `{{selection}}`, and typing text into other apps | Accessibility |
+| `{{selection}}`, typing text into other apps, and moving windows | Accessibility |
 | Looking people up in the editor | Contacts |
 | `{{location}}`, where your Mac is | Location Services |
 

@@ -155,6 +155,26 @@ final class ExposeModuleTests: XCTestCase {
         XCTAssertNil(ExposeModule.Show.all.argument)
     }
 
+    /// An event's `show` is yes or no; Exposé's is what to show — whichever
+    /// the key inherits, and wherever the type is written in its brackets.
+    func testShowIsWhatToShowNotAFlag() throws {
+        ModuleRegistry.shared.register(ExposeModule(), host: MemoryModuleHost())
+        ModuleRegistry.shared.register(WindowModule(), host: MemoryModuleHost())
+        let (document, _) = OutlineParser.parse("""
+            # row 2 [pages]
+            1. Screens [Window, screen: main, instant: true]
+               4. Expose [Exposé, show: all]
+               8. App [show: app, Expose]
+            # row 3
+            1. Meeting [Calendar, show: no]
+            """)
+        let compiled = OutlineCompiler.compile(document, locateApp: { _ in nil })
+        XCTAssertTrue(compiled.json.contains(#""action": { "type": "expose", "show": "all" }"#), compiled.json)
+        XCTAssertTrue(compiled.json.contains(#""show": "app""#), "the type after the field")
+        XCTAssertTrue(compiled.json.contains(#""show": false"#), "an event's is still a flag")
+        XCTAssertTrue(compiled.json.contains(#""instant": true"#), "every action's flag")
+    }
+
     func testMistakesAndThePreview() {
         let module = ExposeModule()
         XCTAssertEqual(module.problem(with: request(["show": "everything twice"], leaf: "x")),

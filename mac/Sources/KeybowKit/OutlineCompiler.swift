@@ -136,16 +136,36 @@ public enum OutlineCompiler {
         return actionTypeWords[lower] ?? ModuleRegistry.shared.keywords[lower]
     }
 
-    static func isNumericField(_ key: String) -> Bool {
-        numericFields.contains(key) || ModuleRegistry.shared.fields.contains { $0.key == key && $0.kind == .number }
+    /// Whether a field takes a number, for an action of `type` — or, with no
+    /// type known, for any action. A name means different things to different
+    /// actions: an event's `show` is yes or no, Exposé's is what to show.
+    static func isNumericField(_ key: String, type: String?) -> Bool {
+        isField(key, type: type, builtIn: numericFields, kind: .number)
     }
 
-    static func isBooleanField(_ key: String) -> Bool {
-        booleanFields.contains(key) || ModuleRegistry.shared.fields.contains { $0.key == key && $0.kind == .flag }
+    static func isBooleanField(_ key: String, type: String?) -> Bool {
+        key == "instant" || isField(key, type: type, builtIn: booleanFields, kind: .flag)
     }
 
-    static let numericFields: Set<String> = ["alertMinutes", "guards.maxBodyBytes"]
-    static let booleanFields: Set<String> = ["createIfMissing", "show", "guards.refuseInlineImages", "shuffle", "instant"]
+    private static func isField(_ key: String, type: String?, builtIn: [String: Set<String>], kind: ModuleField.Kind) -> Bool {
+        guard let type else {
+            return builtIn.values.contains { $0.contains(key) }
+                || ModuleRegistry.shared.fields.contains { $0.key == key && $0.kind == kind }
+        }
+        return builtIn[type]?.contains(key) == true
+            || ModuleRegistry.shared.actionType(type)?.fields.contains { $0.key == key && $0.kind == kind } == true
+    }
+
+    /// The built-in actions' numbers and flags, by type. `instant` is every action's.
+    static let numericFields: [String: Set<String>] = [
+        "calendar.createEvent": ["alertMinutes"],
+        "notes.append": ["guards.maxBodyBytes"],
+    ]
+    static let booleanFields: [String: Set<String>] = [
+        "calendar.createEvent": ["show"],
+        "notes.append": ["createIfMissing", "guards.refuseInlineImages"],
+        "music.play": ["shuffle"],
+    ]
     static let numericDefaults: Set<String> = [
         "commitDelayMs", "idleTimeoutMs", "longPressCancelMs", "dates.todayOffsetMinutes", "dates.roundToMinutes",
     ]
@@ -328,6 +348,26 @@ private struct Compiler {
             if type != "app.open" { context.app = nil }
         }
 
+        // The type this node's fields are for: its own, wherever it's written
+        // in the brackets, else the one it inherits. A held action's fields —
+        // `ok.text` — are its own type's, when the node says which.
+        let ownType = node.annotations.lazy.compactMap { annotation -> String? in
+            switch annotation {
+            case .pair("type", let value): return OutlineCompiler.knownType(value) ?? value
+            case .word(let word): return OutlineCompiler.knownType(word)
+            default: return nil
+            }
+        }.first
+        func fieldsType(held holder: String?) -> String? {
+            guard let holder else { return ownType ?? context.type }
+            return node.annotations.lazy.compactMap { annotation -> String? in
+                if case .pair(let key, let value) = annotation, key == holder || key == holder + ".type" {
+                    return OutlineCompiler.knownType(value)
+                }
+                return nil
+            }.first
+        }
+
         for annotation in node.annotations {
             let role = OutlineCompiler.role(of: annotation, inheritedType: context.type, inheritedApp: context.app,
                                             listNames: listNames, locateApp: locateApp)
@@ -401,9 +441,10 @@ private struct Compiler {
                     } else {
                         note(.warning, "Nothing here runs “\(value)” actions; \(holder) does nothing.")
                     }
-                } else if OutlineCompiler.isNumericField(fieldKey), let number = Double(value) {
+                } else if OutlineCompiler.isNumericField(fieldKey, type: fieldsType(held: held?.holder)),
+                          let number = Double(value) {
                     set(key, .number(number))
-                } else if OutlineCompiler.isBooleanField(fieldKey) {
+                } else if OutlineCompiler.isBooleanField(fieldKey, type: fieldsType(held: held?.holder)) {
                     set(key, .bool(["true", "yes", "on", "1"].contains(value.lowercased())))
                 } else {
                     set(key, .string(value))

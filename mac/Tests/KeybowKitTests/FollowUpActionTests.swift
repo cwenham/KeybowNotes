@@ -45,16 +45,16 @@ final class FollowUpActionTests: XCTestCase {
 
     func testOKAndCancelHoldActionsOfTheirOwn() throws {
         let (config, compiled) = try compile("""
-            1. Idea [Shower, text: "Hi", ok: Copy, ok.text: "{{displayed}}!", ok.createIfMissing: yes, cancel.type: notes.append, cancel.find.byName: Inbox]
+            1. Idea [Shower, text: "Hi", ok: Copy, ok.text: "{{displayed}}!", cancel.type: notes.append, cancel.find.byName: Inbox, cancel.createIfMissing: yes]
             """)
         XCTAssertTrue(compiled.warnings.isEmpty, "\(compiled.warnings)")
         let action = try XCTUnwrap(config.resolve(path: [0])?.action)
         let ok = try XCTUnwrap(action.nestedAction("ok"))
         XCTAssertEqual(ok.type, "clipboard.copy", "from its keyword")
         XCTAssertEqual(ok.fields["text"], .string("{{displayed}}!"))
-        XCTAssertEqual(ok.fields["createIfMissing"], .bool(true), "typed as the field it is")
         let cancel = try XCTUnwrap(action.nestedAction("cancel"))
         XCTAssertEqual(cancel.type, "notes.append")
+        XCTAssertEqual(cancel.fields["createIfMissing"], .bool(true), "typed as its own action's field")
         XCTAssertEqual(cancel.fields["find"], .object(["byName": .string("Inbox")]), "nested as in an action of its own")
         XCTAssertNil(action.nestedAction("text"))
     }

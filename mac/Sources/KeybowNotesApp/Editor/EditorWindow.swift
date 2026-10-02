@@ -88,10 +88,26 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
                 case "save":
                     // As the Save button does; a menu shortcut needs the app in front.
                     saveTree()
+                case "menu":
+                    // The right-click menu for a row, as "row:file".
+                    let bits = argument.split(separator: ":", maxSplits: 1).map(String.init)
+                    let items = coordinator.menuItems(clickedRow: Int(bits[0]) ?? -1)
+                    let text = items.map { $0.isSeparatorItem ? "—" : $0.title + ($0.isEnabled ? "" : " (off)") }
+                    try? text.joined(separator: "\n").write(toFile: bits.count > 1 ? bits[1] : "/dev/null",
+                                                             atomically: true, encoding: .utf8)
+                case "send":
+                    // An Edit menu command — copy, cut, paste — the way the
+                    // menu sends it: along the responder chain.
+                    if window.firstResponder?.tryToPerform(Selector(argument + ":"), with: nil) != true {
+                        model.flash("Nothing took \(argument).")
+                    }
                 case "dump":
                     var text = OutlineWriter.text(model.document)
                     if case .node(let id)? = model.selection, let node = model.node(id) {
                         text += "\nSELECTED: \(node.label)"
+                    }
+                    if model.selectedIDs.count > 1 {
+                        text += "\nALL SELECTED: " + model.selectedIDs.compactMap { model.node($0)?.label }.joined(separator: ", ")
                     }
                     if let message = model.message { text += "\nMESSAGE: \(message)" }
                     try? text.write(toFile: argument, atomically: true, encoding: .utf8)
@@ -236,8 +252,8 @@ struct EditorRootView: View {
                     .padding(.vertical, 6)
             }
         }
-        .onChange(of: model.tab) { _, _ in model.selection = nil }
-        .onChange(of: model.keypad) { _, _ in model.selection = nil }
+        .onChange(of: model.tab) { _, _ in model.selection = nil; model.selectedIDs = [] }
+        .onChange(of: model.keypad) { _, _ in model.selection = nil; model.selectedIDs = [] }
     }
 
     private var toolbar: some View {

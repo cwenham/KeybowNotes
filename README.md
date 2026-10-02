@@ -126,12 +126,13 @@ from Terminal.
 **The tree editor** — the tree is a plain outline file, `tree.md`, and the editor
 is an outliner for it: Return, Tab and Shift-Tab to add and arrange nodes, a
 settings pane with a tooltip on every field, and the keypad drawn as it will light
-up. Colours, templates, contacts and values are all set there, and anything a node
+up. Nodes cut, copy and paste — several at once, between trees and keypads —
+as outline text. Colours, templates, contacts and values are all set there, and anything a node
 has that does nothing is flagged, with a button to remove it.
 
 ![The tree editor with a calendar event selected: its title, start, duration and alert, each showing where it comes from](docs/images/tree-editor-event.png)
 
-**Modules** — the stopwatch, the Claude blocks, data sources, location, quotes, displays, Ask and window moving are modules: separate code that
+**Modules** — the stopwatch, the Claude blocks, data sources, location, quotes, displays, Ask, window moving and Exposé are modules: separate code that
 plugs in through one interface, adding actions, template blocks, values, settings
 and menu commands. See [docs/MODULES.md](docs/MODULES.md).
 

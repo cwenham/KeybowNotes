@@ -30,6 +30,9 @@ final class EditorModel {
     /// `# keypad` section's.
     var keypad = 0
     var selection: EditorSelection?
+    /// Every node selected in the outline, in its order, when several are:
+    /// what Cut, Copy and Delete act on. `selection` is the one shown.
+    var selectedIDs: [UUID] = []
     /// A refusal or notice, shown briefly.
     private(set) var message: String?
     private(set) var saveStatus: String?
@@ -135,6 +138,7 @@ final class EditorModel {
         compilation = OutlineCompiler.compile(document, locateApp: locateApp)
         // A selection that no longer exists (undone away) is dropped.
         if case .node(let id)? = selection, document.location(of: id) == nil { selection = nil }
+        selectedIDs = selectedIDs.filter { document.location(of: $0) != nil }
         isDirty = OutlineWriter.text(document) != savedText
         revision += 1
         saveStatus = nil

@@ -7,7 +7,9 @@ struct InspectorPane: View {
     var body: some View {
         ScrollView {
             Group {
-                if let id = model.selectedNodeID, let node = model.node(id),
+                if model.selectedIDs.count > 1 {
+                    SeveralSelected(model: model)
+                } else if let id = model.selectedNodeID, let node = model.node(id),
                    let location = model.document.location(of: id) {
                     NodeInspector(model: model, id: id, node: node, location: location)
                         .id(id)          // fresh drafts for each node
@@ -21,6 +23,25 @@ struct InspectorPane: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
+        }
+    }
+}
+
+/// Several nodes selected: what can be done with them together.
+private struct SeveralSelected: View {
+    let model: EditorModel
+
+    var body: some View {
+        let labels = model.selectedIDs.compactMap { model.node($0)?.label }
+        VStack(alignment: .leading, spacing: 8) {
+            Text("\(labels.count) nodes selected").font(.headline)
+            Text(labels.joined(separator: ", ")).foregroundStyle(.secondary).lineLimit(4)
+            Text("⌘X cuts them and ⌘C copies them, each with everything under it, to paste with ⌘V — here, in "
+                 + "another tree, or under another keypad. ⌫ deletes them. Right-click for the same, and click one "
+                 + "to edit it.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

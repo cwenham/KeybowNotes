@@ -51,6 +51,10 @@ public enum OutlineEditError: Error, Equatable, CustomStringConvertible {
     case pageUsesList
     /// Turning pages off with keys past the first row below.
     case pagesTooBig
+    /// Pasting more nodes than there are free keys.
+    case notEnoughRoom(free: Int, needed: Int)
+    /// Pasting a node with keys past the room there is: a page's, off a page.
+    case tooManyKeys(String, keys: Int)
 
     public var description: String {
         switch self {
@@ -68,6 +72,11 @@ public enum OutlineEditError: Error, Equatable, CustomStringConvertible {
         case .pageUsesList: return "Can't be pages yet: a key here takes its keys from a list."
         case .pagesTooBig:
             return "Can't stop being pages yet: some pages have keys past the first row below, where a tree has none."
+        case .notEnoughRoom(let free, let needed):
+            return free == 0 ? "No free key here to paste onto."
+                : "Not enough free keys here: \(needed) to paste, \(free) free."
+        case .tooManyKeys(let label, let keys):
+            return "“\(label)” has keys past \(keys), which only fit on a page."
         }
     }
 }
@@ -448,5 +457,187 @@ extension OutlineDocument {
     /// True when a keypad has no nodes in any tree.
     public func keypadIsEmpty(_ index: Int) -> Bool {
         TreeKind.allCases.allSatisfy { roots($0, keypad: index).allSatisfy { $0 == nil } }
+    }
+}
+
+// MARK: - Copying and pasting
+
+/// Nodes on the clipboard, as outline text: the lines a tree is written in, so
+/// they paste into a text editor — or from one — as well as into a tree.
+public enum OutlineClipboard {
+    /// The nodes, each numbered by its order, with everything under it.
+    public static func text(_ nodes: [OutlineNode]) -> String {
+        var lines: [String] = []
+        for (index, node) in nodes.enumerated() {
+            lines.append("\(index + 1). " + node.text)
+            lines += OutlineWriter.lines(node.children, depth: 1)
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// The most keys anything has: a page on row 1's.
+    static let mostKeys = TreeKind.main.pageKeys
+
+    /// New nodes from outline text: numbered or bulleted items, nested by
+    /// indentation. Anything else — headings, notes, blank lines — is passed
+    /// over. The top items' numbers don't matter, since they go wherever
+    /// they're pasted; under them, a number is a key, and a number used twice
+    /// or left out takes the next free one.
+    public static func nodes(from text: String) -> [OutlineNode] {
+        final class Draft {
+            let node: OutlineNode
+            var children: [(slot: Int?, draft: Draft)] = []
+            init(_ node: OutlineNode) { self.node = node }
+        }
+        var roots: [Draft] = []
+        var open: [(indent: Int, draft: Draft)] = []
+        for raw in text.components(separatedBy: .newlines) {
+            let line = raw.replacingOccurrences(of: "\t", with: "    ")
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let indent = line.prefix { $0 == " " }.count
+            let digits = trimmed.prefix { $0.isNumber }
+            let number: Int?
+            let body: Substring
+            if !digits.isEmpty, trimmed.dropFirst(digits.count).first == "." {
+                number = Int(digits)
+                body = trimmed.dropFirst(digits.count + 1)
+            } else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
+                number = nil
+                body = trimmed.dropFirst(2)
+            } else {
+                continue
+            }
+            let item = body.trimmingCharacters(in: .whitespaces)
+            guard !item.isEmpty else { continue }
+            let (label, annotations) = OutlineNode.split(item)
+            let draft = Draft(OutlineNode(label: label, annotations: annotations))
+            while let last = open.last, last.indent >= indent { open.removeLast() }
+            if let parent = open.last?.draft {
+                parent.children.append((number.map { $0 - 1 }, draft))
+            } else {
+                roots.append(draft)
+            }
+            open.append((indent, draft))
+        }
+
+        func build(_ draft: Draft) -> OutlineNode {
+            var node = draft.node
+            var slots = OutlineNode.emptyRow
+            for (wanted, child) in draft.children {
+                var slot = wanted.flatMap { (0..<mostKeys).contains($0) ? $0 : nil }
+                if let taken = slot, taken < slots.count, slots[taken] != nil { slot = nil }
+                let at = slot ?? slots.firstIndex(where: { $0 == nil }) ?? slots.count
+                guard at < mostKeys else { continue }
+                if at >= slots.count { slots += [OutlineNode?](repeating: nil, count: at + 1 - slots.count) }
+                slots[at] = build(child)
+            }
+            node.children = slots
+            return node
+        }
+        return roots.map(build)
+    }
+}
+
+/// Where pasted nodes go.
+public enum PastePlace: Equatable, Sendable {
+    /// Beside a node: on the free keys after it on its row, then before it.
+    case after(UUID)
+    /// Under a node: on its free keys.
+    case inside(UUID)
+    /// On an empty key, then the free keys after it on its row, then before.
+    case at(OutlineLocation)
+}
+
+extension OutlineDocument {
+    /// Of `ids`, those not under another of them, in the order given: what
+    /// copying, cutting or deleting them all acts on.
+    public func topMost(_ ids: [UUID]) -> [UUID] {
+        let chosen = Set(ids)
+        return ids.filter { id in
+            guard let location = location(of: id) else { return false }
+            return !(1..<max(1, location.path.count)).contains { depth in
+                let above = OutlineLocation(location.container, Array(location.path.prefix(depth)))
+                return node(at: above).map { chosen.contains($0.id) } ?? false
+            }
+        }
+    }
+
+    /// The outline text for copying nodes, each with everything under it.
+    public func clipboardText(_ ids: [UUID]) -> String {
+        OutlineClipboard.text(topMost(ids).compactMap { node($0) })
+    }
+
+    /// Deletes nodes, each with everything under it.
+    public mutating func delete(_ ids: [UUID]) throws {
+        for id in topMost(ids) { try delete(id) }
+    }
+
+    /// Puts copies of `nodes` on free keys at `place`, in order, and says
+    /// which they became. Refused, changing nothing, when they don't fit:
+    /// too few free keys, too deep for the tree, or more keys under one than
+    /// there's room for.
+    @discardableResult
+    public mutating func paste(_ nodes: [OutlineNode], _ place: PastePlace) throws -> [UUID] {
+        let container: OutlineContainer
+        let parent: [Int]
+        let order: [Int]
+        switch place {
+        case .after(let id):
+            let (location, _) = try locate(id)
+            container = location.container
+            parent = location.parentPath
+            let count = slots(container, parent: parent)
+            order = Array((location.slot + 1)..<count) + Array(0..<location.slot)
+        case .inside(let id):
+            let (location, node) = try locate(id)
+            guard node.listReference == nil else { throw OutlineEditError.aboveUsesList }
+            container = location.container
+            parent = location.path
+            order = Array(0..<slots(container, parent: parent))
+        case .at(let location):
+            container = location.container
+            parent = location.parentPath
+            let count = slots(container, parent: parent)
+            order = Array(location.slot..<count) + Array(0..<min(location.slot, count))
+        }
+        guard parent.count < levels(container) else { throw OutlineEditError.tooDeep(levels: levels(container)) }
+        var row = level(container, parent: parent)
+        let free = order.filter { $0 < row.count && row[$0] == nil }
+        guard free.count >= nodes.count else {
+            throw OutlineEditError.notEnoughRoom(free: free.count, needed: nodes.count)
+        }
+        var placed: [UUID] = []
+        for (node, slot) in zip(nodes, free) {
+            let fitted = try fit(node.copyWithNewIDs(), at: parent + [slot], in: container)
+            row[slot] = fitted
+            placed.append(fitted.id)
+        }
+        setLevel(container, parent: parent, to: row)
+        return placed
+    }
+
+    /// A node made to suit where it's going: refused if it's too deep there,
+    /// or has keys past the room there is; else with a slot for every key.
+    private func fit(_ node: OutlineNode, at path: [Int], in container: OutlineContainer) throws -> OutlineNode {
+        guard path.count - 1 + Self.depth(of: node) <= levels(container) else {
+            throw OutlineEditError.tooDeep(levels: levels(container))
+        }
+        guard node.hasChildren else {
+            var leaf = node
+            // A page's room for keys, even with none yet.
+            leaf.children = [OutlineNode?](repeating: nil, count: slots(container, parent: path))
+            return leaf
+        }
+        let count = slots(container, parent: path)
+        guard !node.children.dropFirst(count).contains(where: { $0 != nil }) else {
+            throw OutlineEditError.tooManyKeys(node.label, keys: count)
+        }
+        var fitted = node
+        var children = Array(node.children.prefix(count))
+        children += [OutlineNode?](repeating: nil, count: count - children.count)
+        fitted.children = try children.enumerated().map { slot, child in
+            try child.map { try fit($0, at: path + [slot], in: container) }
+        }
+        return fitted
     }
 }

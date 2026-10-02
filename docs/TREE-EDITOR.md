@@ -118,7 +118,9 @@ long as it's selected, so typing always has somewhere to go.
 | ⌃⌘↑ / ⌃⌘↓, or ⇧⌘↑ / ⇧⌘↓ | **move** the node to the key before / after, swapping with what's there or moving into an empty key | the same, ending the edit |
 | ↑ / ↓ | select the previous / next row | end the edit and select |
 | ← / → | collapse / expand | move the cursor |
-| Delete | delete the node and everything under it | edits |
+| Delete | delete the node and everything under it — or every node selected | edits |
+| ⇧-click, ⌘-click, ⇧↑ / ⇧↓, ⌘A | select several nodes | — |
+| ⌘X / ⌘C / ⌘V | **cut / copy** the selected nodes, each with everything under it; **paste** after the selected node, onto a selected empty key, or onto the tree's top row | the same, for the text |
 | Esc | — | abandon the edit |
 | ⌘Z / ⇧⌘Z | undo / redo | the same, for the text |
 | ⌘S | save | end the edit and save |
@@ -132,6 +134,27 @@ needs a free key beside it first. *Add Child* is in the Edit menu too.
 but it already extends a text selection while editing. ⇧⌘↑/↓ works too: ⌃ and
 ⇧ are easily mistaken for each other, and in a one-line field ⇧⌘↑/↓ only
 duplicates ⇧⌘←/→.
+
+### Cut, copy and paste
+
+Nodes go on the clipboard as **outline text** — the lines of `tree.md`, each
+node with everything under it — so they paste into another tree, a keypad's
+own trees, a list, or a text editor; and outline text copied from a text editor
+pastes in as nodes. Right-click a node for the same, plus:
+
+- **Paste After** — on the free keys after the node on its row, then before it.
+- **Paste Under** — on the node's own free keys.
+- **Paste Here**, on an empty key — that key first, then the next free ones.
+- **Delete**.
+
+Right-clicking a node in the selection acts on all of it; any other node, on
+that node alone. With several selected, the inspector says how many, and
+what's possible.
+
+Pasted nodes are new copies, selected once they're in. A paste that doesn't
+fit is refused whole, with the reason: too few free keys, too deep for the
+tree — a page's keys can't have keys of their own — or a page's keys past the
+fourth going where there's only a row. Undo takes a whole paste or cut back.
 
 ### The rules it keeps
 

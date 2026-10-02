@@ -111,7 +111,8 @@ public struct OutlineNode: Equatable, Identifiable, Sendable {
     public var id = UUID()
     public var label: String
     public var annotations: [Annotation]
-    /// Always four slots; nil where no node occupies that key.
+    /// Four slots — or under a page, one per key below it; nil where no node
+    /// occupies that key.
     public var children: [OutlineNode?]
     /// Where it was read from, for messages; 0 for a node made in the editor.
     public var line: Int
@@ -662,7 +663,7 @@ public enum OutlineWriter {
         return blocks.joined(separator: "\n\n") + "\n"
     }
 
-    private static func lines(_ level: [OutlineNode?], depth: Int = 0) -> [String] {
+    static func lines(_ level: [OutlineNode?], depth: Int = 0) -> [String] {
         var result: [String] = []
         for (slot, node) in level.enumerated() {
             guard let node else { continue }

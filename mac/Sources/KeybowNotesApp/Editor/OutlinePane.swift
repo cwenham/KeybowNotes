@@ -21,14 +21,45 @@ final class OutlineRow: NSObject {
     }
 }
 
-/// An outline view that hands keys to the editor before handling them itself.
-final class KeyOutlineView: NSOutlineView {
+/// An outline view that hands keys to the editor before handling them itself,
+/// and Cut, Copy and Paste from the Edit menu while no row is being edited.
+final class KeyOutlineView: NSOutlineView, NSMenuItemValidation {
     var onKeyDown: ((NSEvent) -> Bool)?
+    var onCommand: ((Selector) -> Void)?
+    var canPerform: ((Selector) -> Bool)?
 
     override func keyDown(with event: NSEvent) {
         if onKeyDown?(event) == true { return }
         super.keyDown(with: event)
     }
+
+    @objc func cut(_ sender: Any?) { onCommand?(#selector(cut(_:))) }
+    @objc func copy(_ sender: Any?) { onCommand?(#selector(copy(_:))) }
+    @objc func paste(_ sender: Any?) { onCommand?(#selector(paste(_:))) }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard let action = menuItem.action else { return false }
+        if [#selector(cut(_:)), #selector(copy(_:)), #selector(paste(_:))].contains(action) {
+            return canPerform?(action) ?? false
+        }
+        return responds(to: action)
+    }
+}
+
+/// A menu item that runs a closure: the outline's right-click menu.
+final class ActionMenuItem: NSMenuItem {
+    private let handler: () -> Void
+
+    init(_ title: String, key: String = "", enabled: Bool = true, handler: @escaping () -> Void) {
+        self.handler = handler
+        super.init(title: title, action: #selector(run), keyEquivalent: key)
+        target = self
+        isEnabled = enabled
+    }
+
+    required init(coder: NSCoder) { fatalError("not used") }
+
+    @objc private func run() { handler() }
 }
 
 /// A row's view: the key number, the text, and a problem marker.
@@ -91,6 +122,8 @@ struct OutlinePane: NSViewRepresentable {
         outline.style = .inset
         outline.usesAutomaticRowHeights = false
         outline.floatsGroupRows = false
+        // ⇧ and ⌘ pick several nodes, to cut, copy or delete together.
+        outline.allowsMultipleSelection = true
         coordinator.attach(outline)
 
         let scroll = NSScrollView()
@@ -113,7 +146,8 @@ struct OutlinePane: NSViewRepresentable {
 
 /// Drives the outline view: its rows, editing, and the keys.
 @MainActor
-final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate, NSTextFieldDelegate {
+final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate, NSTextFieldDelegate,
+                                NSMenuDelegate {
     private enum AfterEdit {
         case newSibling, newChild, indent, outdent, cancel, selectPrevious, selectNext
     }
@@ -146,6 +180,11 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         outline.target = self
         outline.doubleAction = #selector(doubleClicked)
         outline.onKeyDown = { [weak self] event in self?.keyDown(event) ?? false }
+        outline.onCommand = { [weak self] command in self?.run(command) }
+        outline.canPerform = { [weak self] command in self?.canPerform(command) ?? false }
+        let menu = NSMenu()
+        menu.delegate = self
+        outline.menu = menu
         reload()
     }
 
@@ -194,7 +233,9 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         return row
     }
 
-    private func selectRowForModel() {
+    /// Selects the model's row. Left alone when it's one of several selected,
+    /// unless `alone`: the model's selection moved, and the rest go.
+    private func selectRowForModel(alone: Bool = false) {
         guard let outline, let selection = model.selection else { return }
         let kind: OutlineRow.Kind
         switch selection {
@@ -217,11 +258,31 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         }
         guard let target = rows[kind] else { return }
         let index = outline.row(forItem: target)
-        guard index >= 0, outline.selectedRow != index else { return }
+        guard index >= 0 else { return }
+        if alone ? outline.selectedRowIndexes == [index] : outline.selectedRowIndexes.contains(index) { return }
         updatingSelection = true
         outline.selectRowIndexes([index], byExtendingSelection: false)
         outline.scrollRowToVisible(index)
         updatingSelection = false
+        model.selectedIDs = target.nodeID.map { [$0] } ?? []
+    }
+
+    /// Several nodes selected at once — those just pasted.
+    private func selectNodes(_ ids: [UUID]) {
+        guard let outline, let first = ids.first else { return }
+        let indexes = IndexSet(ids.compactMap { id in rows[.node(id)].map { outline.row(forItem: $0) } }.filter { $0 >= 0 })
+        updatingSelection = true
+        outline.selectRowIndexes(indexes, byExtendingSelection: false)
+        if let top = indexes.first { outline.scrollRowToVisible(top) }
+        updatingSelection = false
+        model.selection = .node(first)
+        model.selectedIDs = ids
+    }
+
+    /// The nodes selected, in the outline's order.
+    private var selectedNodeIDs: [UUID] {
+        guard let outline else { return [] }
+        return outline.selectedRowIndexes.compactMap { (outline.item(atRow: $0) as? OutlineRow)?.nodeID }
     }
 
     // MARK: - Rows
@@ -341,6 +402,7 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
 
     func outlineViewSelectionDidChange(_ notification: Notification) {
         guard !updatingSelection, let outline else { return }
+        model.selectedIDs = selectedNodeIDs
         guard let row = outline.item(atRow: outline.selectedRow) as? OutlineRow else { return }
         switch row.kind {
         case .node(let id): model.selection = .node(id)
@@ -366,7 +428,7 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         case .node(let id): model.selection = .node(id)
         case .empty(let location): model.selection = .empty(location)
         }
-        selectRowForModel()
+        selectRowForModel(alone: true)
     }
 
     // MARK: - Keys at rest
@@ -383,7 +445,7 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
             }
             return true
         case 51, 117:                                           // Delete, forward delete
-            if let id = selectedRow?.nodeID { delete(id) }
+            delete(selectedNodeIDs)
             return true
         case 125, 126:                                          // ⌃⌘↓, ⌃⌘↑; plain arrows select
             guard let offset = MoveKeys.offset(for: event) else { return false }
@@ -434,15 +496,142 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         }
     }
 
-    private func delete(_ id: UUID) {
-        guard let outline else { return }
-        let index = outline.selectedRow
-        if model.edit("Delete", { try $0.delete(id) }) {
+    private func delete(_ ids: [UUID], name: String = "Delete") {
+        guard let outline, !ids.isEmpty else { return }
+        let index = outline.selectedRowIndexes.first ?? outline.selectedRow
+        let count = model.document.topMost(ids).count
+        if model.edit(count == 1 ? name : "\(name) \(count) Nodes", { try $0.delete(ids) }) {
             reload()
             // Select what's now in its place, or the row above.
             let next = min(index, outline.numberOfRows - 1)
             if next >= 0, let row = outline.item(atRow: next) as? OutlineRow { select(row.kind) }
         }
+    }
+
+    // MARK: - Cut, copy and paste
+
+    /// Nodes go on the clipboard as outline text, each with everything under
+    /// it, so they paste into another tree, a keypad's own, a list — or a
+    /// text editor.
+    private func copy(_ ids: [UUID]) {
+        guard !ids.isEmpty else { return }
+        pasteboard.clearContents()
+        pasteboard.setString(model.document.clipboardText(ids), forType: .string)
+    }
+
+    private func cut(_ ids: [UUID]) {
+        endEditing()
+        copy(ids)
+        delete(ids, name: "Cut")
+    }
+
+    /// Pastes onto free keys at `place`, selecting what was pasted.
+    private func paste(_ place: PastePlace) {
+        endEditing()
+        guard let text = pasteboard.string(forType: .string) else {
+            model.flash("There's nothing on the clipboard to paste.")
+            return
+        }
+        let nodes = OutlineClipboard.nodes(from: text)
+        guard !nodes.isEmpty else {
+            model.flash("Nothing to paste: the clipboard has no items like “1. Label [annotations]”.")
+            return
+        }
+        if case .inside(let id) = place { collapsed.remove(id) }
+        var placed: [UUID] = []
+        if model.edit(nodes.count == 1 ? "Paste" : "Paste \(nodes.count) Nodes", { placed = try $0.paste(nodes, place) }) {
+            reload()
+            selectNodes(placed)
+        }
+    }
+
+    /// Where ⌘V pastes: after the selected node, on the selected empty key,
+    /// or on the tree's top row.
+    private var pastePlace: PastePlace {
+        switch model.selection {
+        case .node(let id)?: return .after(id)
+        case .empty(let location)?: return .at(location)
+        case nil: return .at(OutlineLocation(model.container, [0]))
+        }
+    }
+
+    private var clipboardHasText: Bool {
+        pasteboard.availableType(from: [.string]) != nil
+    }
+
+    /// The clipboard — or, in a development build trying the editor out with
+    /// KEYBOW_DEBUG_PASTEBOARD, a pasteboard of that name, so the person's
+    /// own clipboard is left alone.
+    private var pasteboard: NSPasteboard {
+        if Bundle.main.bundleIdentifier == nil, let name = ProcessInfo.processInfo.environment["KEYBOW_DEBUG_PASTEBOARD"] {
+            return NSPasteboard(name: NSPasteboard.Name(name))
+        }
+        return .general
+    }
+
+    private func run(_ command: Selector) {
+        switch command {
+        case #selector(KeyOutlineView.cut(_:)): cut(selectedNodeIDs)
+        case #selector(KeyOutlineView.copy(_:)): copy(selectedNodeIDs)
+        case #selector(KeyOutlineView.paste(_:)): paste(pastePlace)
+        default: break
+        }
+    }
+
+    private func canPerform(_ command: Selector) -> Bool {
+        command == #selector(KeyOutlineView.paste(_:)) ? clipboardHasText : !selectedNodeIDs.isEmpty
+    }
+
+    /// The right-click menu: for the selection when the click was on it, else
+    /// for the row clicked.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        menu.autoenablesItems = false
+        guard let outline else { return }
+        for item in menuItems(clickedRow: outline.clickedRow) { menu.addItem(item) }
+    }
+
+    /// The right-click menu's items for a row, or -1 for none.
+    func menuItems(clickedRow clicked: Int) -> [NSMenuItem] {
+        guard let outline else { return [] }
+        let menu = NSMenu()
+        let row = clicked >= 0 ? outline.item(atRow: clicked) as? OutlineRow : nil
+        let targets = clicked >= 0 && outline.selectedRowIndexes.contains(clicked)
+            ? selectedNodeIDs : (row?.nodeID.map { [$0] } ?? [])
+        let count = model.document.topMost(targets).count
+        let many = count > 1 ? " \(count) Nodes" : ""
+        let canPaste = clipboardHasText
+
+        if !targets.isEmpty {
+            menu.addItem(ActionMenuItem("Cut" + many, key: "x") { [weak self] in self?.cut(targets) })
+            menu.addItem(ActionMenuItem("Copy" + many, key: "c") { [weak self] in self?.copy(targets) })
+        }
+        switch row?.kind {
+        case .node(let id)?:
+            menu.addItem(ActionMenuItem("Paste After", key: "v", enabled: canPaste) { [weak self] in self?.paste(.after(id)) })
+            menu.addItem(ActionMenuItem("Paste Under", enabled: canPaste && canHaveChildren(id)) { [weak self] in
+                self?.paste(.inside(id))
+            })
+        case .empty(let location)?:
+            menu.addItem(ActionMenuItem("Paste Here", key: "v", enabled: canPaste) { [weak self] in self?.paste(.at(location)) })
+        case nil:
+            let top = OutlineLocation(model.container, [0])
+            menu.addItem(ActionMenuItem("Paste", key: "v", enabled: canPaste) { [weak self] in self?.paste(.at(top)) })
+        }
+        if !targets.isEmpty {
+            menu.addItem(.separator())
+            menu.addItem(ActionMenuItem("Delete" + many) { [weak self] in self?.delete(targets) })
+        }
+        let items = menu.items
+        menu.removeAllItems()
+        return items
+    }
+
+    /// Whether a node can take children here: not on its tree's last level,
+    /// nor taking them from a list.
+    private func canHaveChildren(_ id: UUID) -> Bool {
+        guard let location = model.document.location(of: id), let node = model.node(id) else { return false }
+        return node.listReference == nil && location.path.count < model.document.levels(location.container)
     }
 
     private func parentID(of id: UUID) -> UUID? {

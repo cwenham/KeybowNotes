@@ -13,6 +13,9 @@ public struct USBSerialPort: Equatable, Sendable {
     public let productID: Int
     /// The USB device's serial number: for CircuitPython, the board's unique ID.
     public var serial: String?
+    /// The IO registry's ID for this port, new each time the board connects:
+    /// a restart shows as a change, however quickly the board comes back.
+    public var registryID: UInt64 = 0
 }
 
 /// A keypad KeybowNotes can talk to: a Keybow 2040, or Pimoroni's RGB
@@ -83,13 +86,16 @@ public enum USBSerialPorts {
             guard let path = stringProperty(service, kIOCalloutDeviceKey) else { continue }
             guard let usb = usbAncestry(of: service) else { continue }
             guard usb.vendorID == vendorID, usb.productID == productID else { continue }
+            var registryID: UInt64 = 0
+            IORegistryEntryGetRegistryEntryID(service, &registryID)
             found.append(
                 USBSerialPort(
                     path: path,
                     interfaceNumber: usb.interfaceNumber,
                     vendorID: usb.vendorID,
                     productID: usb.productID,
-                    serial: usb.serial
+                    serial: usb.serial,
+                    registryID: registryID
                 )
             )
         }
@@ -101,17 +107,38 @@ public enum USBSerialPorts {
     /// uses — and one with only the console is left alone: talking to it
     /// would be typing into its REPL.
     public static func keypads() -> [KeypadDevice] {
-        var devices: [KeypadDevice] = []
+        boards().compactMap { board in
+            guard board.ports.count >= 2 else { return nil }
+            return KeypadDevice(serial: board.serial, model: board.model, dataPort: board.ports.last!,
+                                consolePort: board.ports.first)
+        }
+    }
+
+    /// A keypad's board running CircuitPython, whether or not its boot.py has
+    /// run: its unique ID, and its ports, the console first.
+    public struct Board: Equatable, Sendable {
+        public let serial: String
+        public let model: KeypadDevice.Model
+        public let ports: [String]
+        /// Changes when the board restarts.
+        public let registryIDs: [UInt64]
+
+        public var consolePort: String? { ports.first }
+    }
+
+    /// Every keypad board running CircuitPython, in a steady order.
+    public static func boards() -> [Board] {
+        var boards: [Board] = []
         for model in KeypadDevice.Model.allCases {
             let ports = ports(vendorID: model.usb.vendor, productID: model.usb.product)
             let bySerial = Dictionary(grouping: ports) { $0.serial ?? "" }
-            for (serial, own) in bySerial.sorted(by: { $0.key < $1.key }) where own.count >= 2 {
+            for (serial, own) in bySerial.sorted(by: { $0.key < $1.key }) {
                 let sorted = own.sorted { ($0.interfaceNumber ?? .max, $0.path) < ($1.interfaceNumber ?? .max, $1.path) }
-                devices.append(KeypadDevice(serial: serial, model: model, dataPort: sorted.last!.path,
-                                            consolePort: sorted.first?.path))
+                boards.append(Board(serial: serial, model: model, ports: sorted.map(\.path),
+                                    registryIDs: sorted.map(\.registryID)))
             }
         }
-        return devices
+        return boards
     }
 
     /// The port carrying the KeybowNotes protocol.

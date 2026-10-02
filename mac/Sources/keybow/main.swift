@@ -31,6 +31,11 @@ usage: keybow <command>
   convert <outline> [-o file.json]
                      print the JSON an outline compiles to — what the app runs —
                      listing what it guessed and what still needs filling in
+  setup [keybow2040|rgbkeypad] [--keep-circuitpython]
+                     set a keypad up: the newest CircuitPython the firmware
+                     supports, then the firmware, then a restart. Files it
+                     replaces are backed up first. A board running CircuitPython
+                     is found by itself; KEYBOW_DEVICE=<id> picks one of two
   upgrade-outline <outline>
                      rewrite an older outline in the current syntax: [brackets]
                      instead of (parentheses), plus # contacts and # projects
@@ -193,6 +198,43 @@ func describe(_ event: NavigatorEvent) -> String {
 
 nonisolated(unsafe) var currentRules = DateRules()
 
+/// Whether the keypad says hello on its data port: it does when a host starts
+/// talking to it.
+func heardHello(_ serial: String) async -> Bool {
+    let connection = KeybowConnection(serial: serial)
+    connection.start()
+    defer { connection.stop() }
+    return await withTaskGroup(of: Bool.self) { group in
+        group.addTask {
+            for await event in connection.events {
+                if case .message(.hello) = event { return true }
+            }
+            return false
+        }
+        group.addTask {
+            try? await Task.sleep(for: .seconds(5))
+            return false
+        }
+        let first = await group.next() ?? false
+        group.cancelAll()
+        return first
+    }
+}
+
+/// Whether the app is running: it holds this lock while it is.
+enum SingleInstanceCheck {
+    static var isFree: Bool {
+        let path = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/KeybowNotes/.lock").path
+        let descriptor = open(path, O_RDWR)
+        guard descriptor >= 0 else { return true }
+        defer { close(descriptor) }
+        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else { return false }
+        flock(descriptor, LOCK_UN)
+        return true
+    }
+}
+
 func describe(_ message: DeviceMessage) -> String {
     switch message {
     case .hello(let version):
@@ -204,6 +246,8 @@ func describe(_ message: DeviceMessage) -> String {
         return "UP   \(key)"
     case .pong:
         return "PONG"
+    case .bye:
+        return "BYE"
     case .deviceError(let text):
         return "ERR  \(text)"
     case .unrecognised(let text):
@@ -346,6 +390,85 @@ case "upgrade-outline":
     print("Added \(document.contacts.count - before.0) contacts and \(document.projects.count - before.1) projects to fill in.")
     print("Kept the original as \(backup.lastPathComponent).")
     exit(0)
+
+case "setup":
+    var rest = Array(arguments.dropFirst())
+    let keep = rest.contains("--keep-circuitpython")
+    rest.removeAll { $0 == "--keep-circuitpython" }
+    guard let package = FirmwarePackage.locate() else {
+        fail("The firmware isn't here: set KEYBOW_FIRMWARE to the repository's firmware folder.")
+    }
+    var named: KeypadDevice.Model?
+    if let word = rest.first {
+        guard let model = KeypadDevice.Model(words: word) else { fail("\(word) isn't a model: keybow2040 or rgbkeypad") }
+        named = model
+    }
+    let running = SetupCandidate.all(package: package).filter { !$0.inBootloader && (named == nil || $0.model == named) }
+    var target: SetupCandidate?
+    if let wanted = ProcessInfo.processInfo.environment["KEYBOW_DEVICE"], !wanted.isEmpty {
+        target = running.first { $0.serial?.caseInsensitiveCompare(wanted) == .orderedSame || $0.model == KeypadDevice.Model(words: wanted) }
+        if target == nil { fail("No board running CircuitPython is \(wanted).") }
+    } else if running.count == 1 {
+        target = running[0]
+    } else if running.count > 1 {
+        fail("Which one? KEYBOW_DEVICE=<id> picks:\n" + running.map { "  \($0.model?.title ?? "?")  \($0.serial ?? "")" }.joined(separator: "\n"))
+    }
+    guard let model = target?.model ?? named else {
+        fail("Which model is it? keybow setup keybow2040, or keybow setup rgbkeypad")
+    }
+    let has = target?.bootOut?.version
+    let mustInstall = has.map { !package.majors.contains($0.major) } ?? true
+
+    Task {
+        do {
+            var version: CircuitPythonVersion?
+            let downloads = CircuitPythonDownloads()
+            let board = package.board(for: model)!.circuitPythonBoard
+            if mustInstall || !keep {
+                do {
+                    version = try await downloads.newest(board: board, majors: package.majors)
+                } catch {
+                    guard let cached = downloads.newestCached(board: board, majors: package.majors) else { throw error }
+                    print("couldn't reach the downloads; using \(cached.version), downloaded before")
+                    version = cached.version
+                }
+                if !mustInstall, let has, let newest = version, has >= newest { version = nil }
+            }
+            print("\(model.title)\(target?.serial.map { " \($0)" } ?? ""): "
+                  + (version.map { "CircuitPython \($0)" } ?? "keeping CircuitPython \(has?.description ?? "")")
+                  + ", then the firmware from \(package.root.path)")
+            // With the app running, it has the data port, and hears the hello.
+            let appRunning = !SingleInstanceCheck.isFree
+            let setup = KeypadSetup(package: package, downloads: downloads, stopProgram: { serial in
+                // Written straight to its data port: the app may have it open too.
+                guard let keypad = USBSerialPorts.keypads().first(where: { $0.serial == serial }),
+                      let port = try? SerialPort(path: keypad.dataPort) else { return false }
+                return (try? port.write(line: HostCommand.stop.line)) != nil
+            }) { serial in
+                if appRunning { return USBSerialPorts.keypads().contains { $0.serial == serial } }
+                return await heardHello(serial)
+            }
+            let backups = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Application Support/KeybowNotes/Keypad Backups", isDirectory: true)
+            let outcome = try await setup.run(KeypadSetup.Plan(model: model, serial: target?.serial, circuitPython: version,
+                                                               backups: backups)) { event in
+                switch event {
+                case .started(let step, let text): print("… \(step.title): \(text)")
+                case .waiting(let step, let text): print("‼ \(step.title): \(text)")
+                case .done(let step, let text): print("✓ \(step.title): \(text)")
+                case .skipped(let step, let text): print("– \(step.title): \(text)")
+                }
+            }
+            print("set up: \(model.title) \(outcome.serial)")
+            if let folder = outcome.backupFolder { print("replaced files are in \(folder.path)") }
+            exit(0)
+        } catch let error as ModuleError {
+            fail(error.message + (error.detail.map { "\n" + $0 } ?? ""))
+        } catch {
+            fail("\(error)")
+        }
+    }
+    dispatchMain()
 
 case "run":
     let (whole, url) = loadConfig(Array(arguments.dropFirst()))

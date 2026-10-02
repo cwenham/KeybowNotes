@@ -111,6 +111,12 @@ a `# keypad Desk [RGB Keypad]` section of the outline, chosen by model or by the
 board's unique ID, and a tab of its own in the tree editor. Without one, every
 keypad shares the same trees.
 
+**Setting keypads up** — *Set Up a Keypad…* puts CircuitPython and the firmware on
+a new keypad, or brings one up to date: it fetches the newest CircuitPython the
+firmware supports, restarts the board into its bootloader by itself when it can,
+and copies the firmware that comes with the app. `keybow setup` does the same
+from Terminal.
+
 **The tree editor** — the tree is a plain outline file, `tree.md`, and the editor
 is an outliner for it: Return, Tab and Shift-Tab to add and arrange nodes, a
 settings pane with a tooltip on every field, and the keypad drawn as it will light
@@ -146,9 +152,7 @@ and menu commands. See [docs/MODULES.md](docs/MODULES.md).
 
 ## Getting started
 
-1. **Set up the keypad** — install CircuitPython, the `pmk` library and the three
-   firmware files: [firmware/README.md](firmware/README.md).
-2. **Build and install the app** — from the `mac` folder:
+1. **Build and install the app** — from the `mac` folder:
 
    ```bash
    scripts/build-app.sh --install
@@ -157,9 +161,12 @@ and menu commands. See [docs/MODULES.md](docs/MODULES.md).
    This builds a universal app, signs it with your Apple Development identity if
    you have one (so macOS remembers the permissions you grant), and copies it to
    `/Applications`. More in [mac/README.md](mac/README.md).
-3. **Open KeybowNotes** and plug in the Keybow. A keyboard icon appears in the
-   menu bar, and the first launch installs an example tree in
-   `~/Library/Application Support/KeybowNotes`.
+2. **Open KeybowNotes.** A keyboard icon appears in the menu bar, and the first
+   launch installs an example tree in `~/Library/Application Support/KeybowNotes`.
+3. **Set up the keypad** — plug it in and choose *Set Up a Keypad…* from the menu
+   bar. It installs the newest CircuitPython the firmware supports, then the
+   firmware, and restarts the keypad; any files it replaces are backed up first.
+   To do it by hand instead, see [firmware/README.md](firmware/README.md).
 4. **Make the tree your own** — choose *Edit Tree…* from the menu bar (⌘E). The
    language is described in [docs/CONFIG-LANGUAGE.md](docs/CONFIG-LANGUAGE.md),
    and every field in the editor explains itself.
@@ -177,6 +184,7 @@ macOS asks the first time each is needed:
 | `{{selection}}`, typing text into other apps, and moving windows | Accessibility |
 | Looking people up in the editor | Contacts |
 | `{{location}}`, where your Mac is | Location Services |
+| Setting a keypad up | Files on a removable volume: the keypad's drive |
 
 The app isn't sandboxed and isn't on the App Store: driving Notes, Mail and Music
 through AppleScript rules that out.

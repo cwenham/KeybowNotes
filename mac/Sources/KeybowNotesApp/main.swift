@@ -8,7 +8,8 @@ import KeybowKit
 // terminal, for development:
 //
 //   swift run keybownotes [--config tree.md] [--screen cursor|main] [--dry-run]
-//                         [--show-settings] [--show-data-sources] [--edit-tree] [--simulate "4 8 12"] [--pace 1.2]
+//                         [--show-settings] [--show-data-sources] [--edit-tree] [--set-up-keypad]
+//                         [--simulate "4 8 12"] [--pace 1.2]
 //                         [--debug-snapshots dir]
 //
 // --dry-run shows what each action would do without doing it.
@@ -28,6 +29,7 @@ struct Options {
     var showSettings = false
     var showDataSources = false
     var editTree = false
+    var setUpKeypad = false
 }
 
 func fail(_ message: String) -> Never {
@@ -63,6 +65,8 @@ func parseOptions() -> Options {
             options.showDataSources = true
         case "--edit-tree":
             options.editTree = true
+        case "--set-up-keypad":
+            options.setUpKeypad = true
         case "--debug-snapshots":
             guard let path = arguments.next() else { fail("--debug-snapshots needs a directory") }
             let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)

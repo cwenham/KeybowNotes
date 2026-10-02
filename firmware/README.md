@@ -10,22 +10,44 @@ and the app drives any number of them at once.
 with `pmk` unchanged. `HELLO`, `PING`/`PONG`, `LEDS`, the error replies and
 `DOWN`/`UP` for all keys all behave as specified, and `ROTATION = "top"` gives
 the numbering the protocol expects (top row 0-3, left column 0, 4, 8, 12).
-Also run on CircuitPython 8.2.10 on a Pico with the RGB Keypad Base
-(2026-10-01).
+Also run on a Pico with the RGB Keypad Base: on CircuitPython 8.2.10
+(2026-10-01), and on 10.3.1, which the app's setup installed (2026-10-02).
 
 ## Install
+
+**The easy way:** in the app, choose *Set Up a Keypad…* from the menu bar — or
+run `keybow setup` from the `mac` folder. Either one:
+
+1. finds the newest CircuitPython release the firmware supports — the range is in
+   `manifest.json` — that's built for the board, and downloads it from
+   circuitpython.org into `~/Library/Caches/KeybowNotes/CircuitPython`, checking
+   it's a whole RP2040 UF2 image;
+2. restarts the board in its bootloader: a board running this firmware is sent
+   `STOP` on its data port, and its console then runs the restart; failing that,
+   the "1200-baud touch" on the console; failing that, it asks for the BOOT button;
+3. copies CircuitPython to the RPI-RP2 drive, and waits for CIRCUITPY;
+4. copies the files `manifest.json` names for that board, writing only those that
+   differ, and setting `code.txt` aside, since it would run instead. Whatever it
+   replaces goes first to
+   `~/Library/Application Support/KeybowNotes/Keypad Backups`;
+5. ejects the drive and restarts the board the same way, so `boot.py` runs, and
+   waits for it to say hello.
+
+A board already on a CircuitPython the firmware supports can keep it, and the
+firmware is all that's copied. The app carries this folder in its Resources as
+`Firmware`; a development build uses the repository's.
+
+**By hand:**
 
 1. **CircuitPython.** Hold BOOTSEL while plugging the board in, and drop its
    `.uf2` from circuitpython.org onto the RPI-RP2 drive — the
    [Keybow 2040's](https://circuitpython.org/board/pimoroni_keybow2040/), or for
    the RGB Keypad the [Pico's](https://circuitpython.org/board/raspberry_pi_pico/).
    It reboots as `CIRCUITPY`.
-2. **Libraries.** Copy the `pmk` folder from Pimoroni's
-   [pmk-circuitpython](https://github.com/pimoroni/pmk-circuitpython) repo into
-   `CIRCUITPY/lib/`, and its LED driver from the
-   [Adafruit CircuitPython bundle](https://circuitpython.org/libraries):
-   `adafruit_is31fl3731` for the Keybow 2040, `adafruit_dotstar` for the RGB
-   Keypad.
+2. **Libraries.** Copy `lib/pmk` to `CIRCUITPY/lib/`, with the board's LED
+   driver: `lib/adafruit_is31fl3731` for the Keybow 2040, `lib/adafruit_dotstar.py`
+   for the RGB Keypad. They're here as source, so they run on any version the
+   firmware supports; [lib/README.md](lib/README.md) says where each is from.
 3. **This firmware.** Copy `boot.py`, `code.py` and `keymap.py` to the root of
    `CIRCUITPY`. A board that has run something else may hold a `code.txt`,
    `main.py` or `main.txt`; CircuitPython runs the first of `code.txt`,
@@ -79,6 +101,7 @@ UTF-8 text, one message per line, on the data port.
 | Keybow → Mac | `DOWN <n>` / `UP <n>` | Key 0-15 pressed / released |
 | Mac → Keybow | `LEDS <96 hex chars>` | 16 `rrggbb` colours, in logical key order |
 | Mac → Keybow | `PING` → `PONG` | Heartbeat |
+| Mac → Keybow | `STOP` → `BYE` | End the program, freeing the console's prompt: it ignores Ctrl-C. Setup uses it to restart the board |
 | Keybow → Mac | `ERR <reason>` | A line that could not be acted on |
 
 Any line from the host counts as a heartbeat. After `HOST_TIMEOUT_S` (5s) of

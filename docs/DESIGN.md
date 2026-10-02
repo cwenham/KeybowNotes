@@ -52,6 +52,7 @@ sees the device; the firmware translates to the hardware's column-major order.
 | → Mac | `DOWN <n>` / `UP <n>` | Key pressed / released (both, so long-press works) |
 | Mac → | `LEDS <rrggbb>×16` | Set all 16 key colours in one message |
 | Mac → | `PING` / → Mac `PONG` | Heartbeat |
+| Mac → | `STOP` / → Mac `BYE` | End the program, so the console's prompt is free; setting up uses it |
 
 **Disconnected behaviour.** If pings stop arriving for a few seconds, the firmware
 shows a distinct "no host" pattern (a dim breathing red, say), so a dead app is
@@ -80,6 +81,42 @@ to resend the LED state.
 
 Verified on hardware on 2026-09-23 against CircuitPython 10.3.1; see
 `firmware/README.md`.
+
+**Setting a keypad up.** The firmware travels with the app — `code.py`,
+`boot.py`, `keymap.py` and the libraries each board needs, as source, with a
+`manifest.json` naming which files go to which board and which CircuitPython
+majors they run on — so *Set Up a Keypad…* can make a keypad from a bare board.
+`KeypadSetup`, in KeybowKit, does it in six steps, shared with `keybow setup`:
+
+1. **CircuitPython**: GitHub's list of releases gives the newest in the
+   supported range; Adafruit's downloads say whether it's built for the board
+   (the newest few are tried). The UF2 file is cached, and checked block by
+   block — magic numbers, the RP2040's family ID, a complete sequence — before
+   it can reach a board. Offline, the newest cached copy will do.
+2. **The bootloader**, reached without buttons where possible. The firmware
+   ignores Ctrl-C on its console, so editors that probe boards can't stop it;
+   instead it's sent `STOP` on its data port — by the app, which holds that port
+   — and the console's prompt then runs
+   `microcontroller.on_next_reset(RunMode.BOOTLOADER)`. Failing that, the
+   1200-baud touch: CircuitPython restarts in its bootloader when its console is
+   set to 1200 baud and DTR drops. Failing that, the person is asked to hold
+   BOOT. A board in no state to answer — new, or running something else — is
+   expected to arrive in its bootloader by hand, and the model is the person's
+   to say: the bootloader can't tell a Keybow 2040 from a Pico.
+3. **Flashing**: the image is written to RPI-RP2 and flushed. The board restarts
+   the moment the last block lands, taking the drive with it, so an error once
+   the drive has gone is success. Then CIRCUITPY is awaited: by the board's
+   unique ID when it's known, else as a new drive of the right board.
+4. **The firmware**: only files that differ are written, libraries first and
+   `code.py` last, since the board restarts its program as files change. What's
+   replaced is copied to `Keypad Backups` first, and `code.txt` — which would run
+   in place of `code.py` — is set aside the same way. Files are written plainly,
+   without the extended attributes that become `._` files on a FAT drive.
+5. **A restart**, so `boot.py` turns the data port on: the drive is ejected,
+   which writes everything out, and the board restarted as in step 2. A restart
+   is recognised by the ports' IO registry IDs changing, however quickly the
+   board comes back.
+6. **Hello**: done when the app's link to it has heard `HELLO`.
 
 ---
 
@@ -497,6 +534,7 @@ should explain a refusal rather than failing silently.
 | Contacts | The tree editor's *Look Up in Contacts*; asked for when first used |
 | Network (Anthropic API) | `{{#ai}}` blocks: prompts go to `api.anthropic.com` with an API key from the Keychain. No permission prompt; the key is the gate |
 | Location Services | `{{location}}` and its parts, including in a data source's URL. Asked for when first needed. The app isn't under the hardened runtime; if it were, it would also need the `com.apple.security.personal-information.location` entitlement |
+| Files on removable volumes | *Set Up a Keypad…*: reading a keypad's drive, and writing CircuitPython and the firmware to it. Asked for when the setup window first looks |
 | Accessibility | `text.insert`: pressing ⌘V in the app in front. `text.insertDirect`: setting the selected text, or typing. `{{selection}}`: reading the selected text, and sending ⌘C to apps that won't share it. `window`: moving and sizing the window in front. Asked for when first needed, or from Settings → Selected Text |
 
 `url.open`, `clipboard.copy` and `maps.search` need nothing. `clock.timer` needs

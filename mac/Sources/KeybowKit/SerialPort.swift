@@ -68,7 +68,11 @@ public final class SerialPort {
     public var descriptor: Int32 { fileDescriptor }
 
     public func write(line: String) throws {
-        let bytes = Array((line + "\n").utf8)
+        try write(Data((line + "\n").utf8))
+    }
+
+    public func write(_ data: Data) throws {
+        let bytes = Array(data)
         var offset = 0
         while offset < bytes.count {
             let written = bytes.withUnsafeBytes { buffer in

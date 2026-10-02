@@ -37,6 +37,8 @@ public enum DeviceMessage: Equatable, Sendable {
     case down(key: Int)
     case up(key: Int)
     case pong
+    /// The answer to STOP: the program has ended, leaving the console's prompt free.
+    case bye
     case deviceError(String)
     /// A line we did not recognise, kept verbatim rather than dropped.
     case unrecognised(String)
@@ -58,6 +60,8 @@ public enum DeviceMessage: Equatable, Sendable {
             self = Int(parts[1]).map { .up(key: $0) } ?? .unrecognised(trimmed)
         case "PONG":
             self = .pong
+        case "BYE":
+            self = .bye
         case "ERR":
             self = .deviceError(String(trimmed.dropFirst(verb.count)).trimmingCharacters(in: .whitespaces))
         default:
@@ -71,12 +75,17 @@ public enum HostCommand: Equatable, Sendable {
     case ping
     /// Exactly `KeybowProtocol.keyCount` colours, in logical key order.
     case leds([KeyColour])
+    /// Ends the firmware's program, so the console's prompt can be used: the
+    /// program ignores Ctrl-C there.
+    case stop
 
     /// The wire form, without its trailing newline.
     public var line: String {
         switch self {
         case .ping:
             return "PING"
+        case .stop:
+            return "STOP"
         case .leds(let colours):
             var padded = colours.prefix(KeybowProtocol.keyCount).map(\.hex)
             while padded.count < KeybowProtocol.keyCount { padded.append(KeyColour.off.hex) }

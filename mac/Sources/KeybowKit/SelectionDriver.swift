@@ -151,6 +151,11 @@ public final class SelectionDriver: @unchecked Sendable {
         }
     }
 
+    /// Sends a command straight to the keypad: STOP, before it's set up again.
+    public func send(_ command: HostCommand) {
+        connection.send(command)
+    }
+
     /// Feeds a key event in as though it came from the device. The device's own
     /// events arrive this way too; the demo uses it to simulate presses.
     public func inject(_ message: DeviceMessage) {

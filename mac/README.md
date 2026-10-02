@@ -40,7 +40,7 @@ scripts/build-app.sh --install   # and copy it to /Applications, quitting a runn
 ```
 
 A universal (Intel and Apple Silicon) release build, with its Info.plist, icon,
-example config and templates, signed with the first "Apple Development"
+example config and templates, and the keypad firmware from `../firmware`, signed with the first "Apple Development"
 identity in your keychain. macOS remembers permissions by signature, and a real
 identity keeps them across rebuilds; an ad-hoc signature would be asked about
 again after every build. The first signing asks whether `codesign` may use your
@@ -61,6 +61,11 @@ Once installed it runs like any menu-bar app:
   outliner with the keypad's rules built in, an inspector that edits a node's
   settings as syntax, and a drawing of the keys. Saving puts it in use at once.
   See [docs/TREE-EDITOR.md](../docs/TREE-EDITOR.md).
+- **Set Up a Keypad…** puts CircuitPython and the firmware on a keypad — new, or
+  one to bring up to date — and restarts it. Files it replaces are kept in
+  `Keypad Backups` beside the tree; CircuitPython downloads are cached in
+  `~/Library/Caches/KeybowNotes/CircuitPython`. See
+  [firmware/README.md](../firmware/README.md#install).
 - **Settings** (⌘, from the menu): Open at login, dry run, key brightness, which
   screen the overlay uses, timings, the default calendar and reminders list, and
   which tree to load. Settings belong to this Mac and live in
@@ -99,6 +104,12 @@ rather than KeybowNotes; each app you drive asks once.
 | `--simulate "4 8 12"` | press these keys (0-15) in turn, with or without a Keybow |
 | `--pace 1.5` | seconds between simulated presses |
 | `--debug-snapshots <dir>` | write each overlay state as a PNG and log its window frame |
+| `--set-up-keypad` | open *Set Up a Keypad…* on launch |
+
+A development build sets keypads up from the repository's `firmware` folder;
+`KEYBOW_FIRMWARE` names another. For trying the setup window out,
+`KEYBOW_SETUP_SELECT` chooses a board by its ID (or `new`), and
+`KEYBOW_SETUP_START=1` presses Set Up once it can be — development builds only.
 
 Two details that are easy to get wrong, both learned the hard way:
 
@@ -122,7 +133,12 @@ swift build
 ./.build/debug/keybow watch     # print key events until Ctrl-C
 ./.build/debug/keybow demo      # light each key in turn
 ./.build/debug/keybow leds ff0000 00ff00 0000ff 000000
+./.build/debug/keybow setup     # set a keypad up: CircuitPython, the firmware, a restart
 ```
+
+`setup` takes the model for a board that can't say — `keybow setup rgbkeypad` for
+one waiting in its bootloader — and `--keep-circuitpython` to copy only the
+firmware to a board whose CircuitPython is supported.
 
 `leds` takes 1-16 `rrggbb` values; the last one fills the remaining keys.
 Device commands talk to the first keypad found. With more than one connected,

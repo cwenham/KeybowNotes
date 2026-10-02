@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var settingsWindow: SettingsWindowController?
     private var editorWindow: EditorWindowController?
+    private var setupWindow: KeypadSetupWindowController?
     /// Keeps the menu bar's clock up to date while a module's clock runs.
     private var moduleClock: Timer?
     /// Modules' commands go after this, rebuilt each time the menu opens.
@@ -104,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if options.showSettings { showSettings() }
         if options.showDataSources { _ = ModuleRegistry.shared.module(id: "api")?.performMenuItem("open", now: Date()) }
         if options.editTree { showEditor() }
+        if options.setUpKeypad { showKeypadSetup() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -681,6 +683,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
 
         addItem(to: menu, "Edit Tree…", #selector(openEditor), key: "e")
+        addItem(to: menu, "Set Up a Keypad…", #selector(openKeypadSetup))
         addItem(to: menu, "Settings…", #selector(openSettings), key: ",")
         addItem(to: menu, "Reload Config", #selector(reloadConfig), key: "r")
         addItem(to: menu, "Open Config Folder", #selector(openConfigFolder))
@@ -782,6 +785,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func openSettings() { showSettings() }
 
     @objc private func openEditor() { showEditor() }
+
+    @objc private func openKeypadSetup() { showKeypadSetup() }
+
+    /// Puts CircuitPython and the firmware on a keypad; done when this app has
+    /// heard it say hello.
+    private func showKeypadSetup() {
+        if setupWindow == nil {
+            setupWindow = KeypadSetupWindowController(
+                backups: ConfigStore.supportDirectory.appendingPathComponent("Keypad Backups", isDirectory: true),
+                stopProgram: { [weak self] serial in await self?.stopKeypadProgram(serial) ?? false },
+                isConnected: { [weak self] serial in await self?.isKeypadConnected(serial) ?? false },
+                openEditor: { [weak self] in self?.showEditor() })
+        }
+        setupWindow?.show()
+    }
+
+    /// Ends the keypad's program so its console can restart it: this app has
+    /// its data port.
+    private func stopKeypadProgram(_ serial: String) -> Bool {
+        guard let link = keypads.first(where: { $0.key.caseInsensitiveCompare(serial) == .orderedSame })?.value,
+              link.status == "connected" else { return false }
+        link.driver.send(.stop)
+        return true
+    }
+
+    private func isKeypadConnected(_ serial: String) -> Bool {
+        keypads.contains { $0.key.caseInsensitiveCompare(serial) == .orderedSame && $0.value.status == "connected" }
+    }
 
     /// The tree editor, on the tree in use — or on `tree.md` beside a
     /// compiled JSON config given for testing.

@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Builds KeybowNotes.app: a universal release binary, an Info.plist, the icon,
-# the example config and templates, all signed.
+# the example config and templates, the keypad firmware, all signed.
 #
 #   scripts/build-app.sh             build into mac/build/KeybowNotes.app
 #   scripts/build-app.sh --install   and copy it into /Applications
@@ -46,6 +46,14 @@ cp "$OUT/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 # there is no tree yet.
 cp tree.demo.md "$APP/Contents/Resources/tree.demo.md"
 cp -R templates "$APP/Contents/Resources/templates"
+
+# The keypad's firmware, for setting keypads up: what the manifest names.
+# Without extended attributes, which would end up as ._ files on a keypad.
+FIRMWARE=$APP/Contents/Resources/Firmware
+mkdir -p "$FIRMWARE"
+cp -X ../firmware/manifest.json ../firmware/boot.py ../firmware/code.py ../firmware/keymap.py "$FIRMWARE/"
+rsync -a --exclude '.*' --exclude 'README.md' --exclude '__pycache__' ../firmware/lib/ "$FIRMWARE/lib/"
+xattr -cr "$FIRMWARE"
 
 echo "==> Signing"
 identity=$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development/ { print $2; exit }')

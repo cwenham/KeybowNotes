@@ -43,10 +43,18 @@ public enum OutlineEditError: Error, Equatable, CustomStringConvertible {
     case atEdge
     case notEmpty
     case notFound
+    /// The bottom tree, with no rows below it for a page's keys.
+    case noRoomForPages
+    /// Turning pages on with keys under keys: a page's keys run actions.
+    case tooDeepForPages
+    /// Turning pages on where a key's keys come from a list.
+    case pageUsesList
+    /// Turning pages off with keys past the first row below.
+    case pagesTooBig
 
     public var description: String {
         switch self {
-        case .rowFull: return "Row full: all four keys are taken."
+        case .rowFull: return "Full: every key here is taken."
         case .tooDeep(let levels): return "Too deep: this tree has \(levels) levels."
         case .nothingAbove: return "There's no node above to indent under."
         case .aboveUsesList: return "The node above takes its children from a list."
@@ -54,6 +62,12 @@ public enum OutlineEditError: Error, Equatable, CustomStringConvertible {
         case .atEdge: return "No key beyond this one."
         case .notEmpty: return "That key is already taken."
         case .notFound: return "That node isn't there any more."
+        case .noRoomForPages: return "The bottom tree can't be pages: there are no rows below it."
+        case .tooDeepForPages:
+            return "Can't be pages yet: a page's keys run actions, and some here have keys under them."
+        case .pageUsesList: return "Can't be pages yet: a key here takes its keys from a list."
+        case .pagesTooBig:
+            return "Can't stop being pages yet: some pages have keys past the first row below, where a tree has none."
         }
     }
 }
@@ -100,7 +114,8 @@ extension OutlineDocument {
         location(of: id).flatMap { node(at: $0) }
     }
 
-    /// The four slots under `parent` — the container's top row for `[]`.
+    /// The slots under `parent` — the container's top row for `[]`: four, or
+    /// under a page, one for every key on the rows below.
     public func level(_ container: OutlineContainer, parent: [Int]) -> [OutlineNode?] {
         var level: [OutlineNode?]
         switch container {
@@ -108,10 +123,54 @@ extension OutlineDocument {
         case .list(let name): level = lists.first { $0.name == name }?.nodes ?? OutlineNode.emptyRow
         }
         for slot in parent {
-            guard let next = level[slot] else { return OutlineNode.emptyRow }
+            guard slot < level.count, let next = level[slot] else { return Array(repeating: nil, count: slots(container, parent: parent)) }
             level = next.children
         }
+        let count = slots(container, parent: parent)
+        if level.count < count { level += Array(repeating: nil, count: count - level.count) }
         return level
+    }
+
+    /// How many keys there are under `parent`.
+    public func slots(_ container: OutlineContainer, parent: [Int]) -> Int {
+        if case .tree(let kind, let keypad) = container, parent.count == 1, isPaged(kind, keypad: keypad) {
+            return kind.pageKeys
+        }
+        return KeybowProtocol.columns
+    }
+
+    /// How deep a container's nodes may go: a tree that's pages has two
+    /// levels — its pages, and their keys.
+    public func levels(_ container: OutlineContainer) -> Int {
+        if case .tree(let kind, let keypad) = container, isPaged(kind, keypad: keypad) { return 2 }
+        return container.levels
+    }
+
+    /// Makes a keypad's tree pages, or a tree again. Refused where the tree
+    /// doesn't fit: pages need their keys to be actions, and a tree has room
+    /// for only one row of keys under each.
+    public mutating func setPages(_ paged: Bool, for tree: TreeKind, keypad: Int = 0) throws {
+        guard tree.canHavePages else { throw OutlineEditError.noRoomForPages }
+        guard paged != isPaged(tree, keypad: keypad) else { return }
+        var roots = self.roots(tree, keypad: keypad)
+        if paged {
+            let pages = roots.compactMap { $0 }
+            guard pages.allSatisfy({ $0.listReference == nil }) else { throw OutlineEditError.pageUsesList }
+            guard pages.allSatisfy({ Self.depth(of: $0) <= 2 }) else { throw OutlineEditError.tooDeepForPages }
+            markPaged(tree, keypad: keypad, true)
+            fillPageSlots()
+        } else {
+            for (column, page) in roots.enumerated() {
+                guard var page else { continue }
+                guard !page.children.dropFirst(KeybowProtocol.columns).contains(where: { $0 != nil }) else {
+                    throw OutlineEditError.pagesTooBig
+                }
+                page.children = Array(page.children.prefix(KeybowProtocol.columns))
+                roots[column] = page
+            }
+            setRoots(roots, tree, keypad: keypad)
+            markPaged(tree, keypad: keypad, false)
+        }
     }
 
     private mutating func setLevel(_ container: OutlineContainer, parent: [Int], to newLevel: [OutlineNode?]) {
@@ -173,8 +232,8 @@ extension OutlineDocument {
     /// A new node on a particular empty key — typing into a placeholder.
     @discardableResult
     public mutating func insertNode(at location: OutlineLocation, label: String = "") throws -> UUID {
-        guard location.path.count <= location.container.levels else {
-            throw OutlineEditError.tooDeep(levels: location.container.levels)
+        guard location.path.count <= levels(location.container) else {
+            throw OutlineEditError.tooDeep(levels: levels(location.container))
         }
         var row = level(location.container, parent: location.parentPath)
         guard row[location.slot] == nil else { throw OutlineEditError.notEmpty }
@@ -193,9 +252,11 @@ extension OutlineDocument {
             throw OutlineEditError.nothingAbove
         }
         guard above.listReference == nil else { throw OutlineEditError.aboveUsesList }
-        guard location.path.count + Self.depth(of: node) <= location.container.levels else {
-            throw OutlineEditError.tooDeep(levels: location.container.levels)
+        guard location.path.count + Self.depth(of: node) <= levels(location.container) else {
+            throw OutlineEditError.tooDeep(levels: levels(location.container))
         }
+        let keys = slots(location.container, parent: location.parentPath + [aboveSlot])
+        if above.children.count < keys { above.children += Array(repeating: nil, count: keys - above.children.count) }
         guard let free = above.children.firstIndex(where: { $0 == nil }) else { throw OutlineEditError.rowFull }
 
         above.children[free] = node
@@ -207,12 +268,18 @@ extension OutlineDocument {
     /// Moves a node up to its parent's row, on the first free key after the
     /// parent — then any free key before it.
     public mutating func outdent(_ id: UUID) throws {
-        let (location, node) = try locate(id)
+        let (location, moved) = try locate(id)
         guard location.path.count >= 2 else { throw OutlineEditError.alreadyAtTop }
         let parentPath = location.parentPath
         let parentSlot = parentPath.last!
         let grandparentPath = Array(parentPath.dropLast())
         var upperRow = level(location.container, parent: grandparentPath)
+        // A page's key, out among the pages, is a page: with room for keys.
+        var node = moved
+        let keys = slots(location.container, parent: grandparentPath + [parentSlot])
+        if grandparentPath.isEmpty, node.listReference == nil, node.children.count < keys {
+            node.children += [OutlineNode?](repeating: nil, count: keys - node.children.count)
+        }
         let order = Array((parentSlot + 1)..<upperRow.count) + Array(0..<parentSlot)
         guard let free = order.first(where: { upperRow[$0] == nil }), var parent = upperRow[parentSlot] else {
             throw OutlineEditError.rowFull
@@ -374,6 +441,7 @@ extension OutlineDocument {
         guard source != target else { return }
         for kind in TreeKind.allCases {
             setRoots(roots(kind, keypad: source).map { $0?.copyWithNewIDs() }, kind, keypad: target)
+            markPaged(kind, keypad: target, isPaged(kind, keypad: source))
         }
     }
 

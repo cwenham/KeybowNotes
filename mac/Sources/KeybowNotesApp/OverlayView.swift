@@ -14,6 +14,8 @@ struct OverlayView: View {
                         .font(.system(size: 15, weight: .medium))
                 } else if !model.snapshot.isIdle {
                     ChoosingView(snapshot: model.snapshot, pending: model.pendingSummary)
+                } else if let page = model.page {
+                    PageView(page: page, colours: model.snapshot.colours)
                 } else if let working = model.working {
                     WorkingView(working: working, cancel: { model.onCancel?() })
                 } else {
@@ -61,8 +63,46 @@ private struct ChoosingView: View {
     }
 }
 
+/// A page turned to: its name, and its keys where they sit on the keypad.
+private struct PageView: View {
+    let page: SelectionSnapshot.Page
+    let colours: [KeyColour]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    TreeBadge(tree: page.tree, pages: true)
+                    HStack(spacing: 8) {
+                        Circle().fill(page.colour.swatch).frame(width: 10, height: 10)
+                        Text(page.label).font(.system(size: 17, weight: .semibold)).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+                KeypadMirror(colours: colours)
+            }
+            VStack(spacing: 8) {
+                ForEach(0..<page.tree.pageKeys / KeybowProtocol.columns, id: \.self) { row in
+                    HStack(spacing: 8) {
+                        ForEach(0..<KeybowProtocol.columns, id: \.self) { column in
+                            if let key = page.keys.first(where: { $0.column == row * KeybowProtocol.columns + column }) {
+                                OptionTile(option: key)
+                            } else {
+                                RoundedRectangle(cornerRadius: 9)
+                                    .strokeBorder(.white.opacity(0.08), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                                    .frame(maxWidth: .infinity, minHeight: 48)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 private struct TreeBadge: View {
     let tree: TreeKind
+    var pages = false
 
     var body: some View {
         // The same diagram and colour as the editor's tab for this tree.
@@ -80,6 +120,7 @@ private struct TreeBadge: View {
     }
 
     private var title: String {
+        if pages { return "Row \(tree.startRow + 1) pages" }
         switch tree {
         case .main: return "Main tree"
         case .row2: return "Row 2 tree  ↓"

@@ -12,12 +12,25 @@ public enum NavigatorEvent: Equatable, Sendable {
     /// to cancel, if it had one — for actions where the moment matters.
     case fire(ResolvedSelection, chosenAt: Date)
     case cleared(reason: ClearReason)
+    /// A page was turned to — or, with nil, left for the trees.
+    case page(ResolvedSelection?)
 
     public enum ClearReason: String, Equatable, Sendable {
         case cancelled      // a press during the commit window
         case longPress
         case idleTimeout
         case completed      // the action fired
+    }
+}
+
+/// A page in use: which tree's pages, and which key on its row.
+public struct KeypadPage: Hashable, Sendable {
+    public let tree: TreeKind
+    public let column: Int
+
+    public init(tree: TreeKind, column: Int) {
+        self.tree = tree
+        self.column = column
     }
 }
 
@@ -33,9 +46,17 @@ public enum NavigatorEvent: Equatable, Sendable {
 /// - a press further along than the next row is ignored
 /// - the top row always restarts the main tree when it is not a legal move in
 ///   the current one — the one way to switch trees without finishing
+///
+/// A tree set as pages works differently. Its first row picks a page, which
+/// stays: the rows below become the page's keys, each running its action the
+/// moment it's pressed, until another page is picked. Pressing the page's own
+/// key again, or any key on a row above, goes back to the trees — the latter
+/// counting as the first press of its tree.
 public struct Navigator {
     public private(set) var tree: TreeKind?
     public private(set) var path: [Int] = []
+    /// The page in use, while the keypad shows one.
+    public private(set) var page: KeypadPage?
     public private(set) var pendingSince: Date?
     /// How long the pending leaf waits: the config's time to cancel, or none
     /// for an action that runs at once.
@@ -60,6 +81,18 @@ public struct Navigator {
     public var selection: ResolvedSelection? {
         guard let tree else { return nil }
         return config.resolve(tree: tree, path: path)
+    }
+
+    /// The page in use, resolved: its label, colour and keys.
+    public var pageSelection: ResolvedSelection? {
+        page.flatMap { config.resolve(tree: $0.tree, path: [$0.column]) }
+    }
+
+    /// Back on a page after the config was reloaded, if it's still there.
+    public mutating func restore(page wanted: KeypadPage?) {
+        guard let wanted, tree == nil, config.isPaged(wanted.tree),
+              config.resolve(tree: wanted.tree, path: [wanted.column]) != nil else { return }
+        page = wanted
     }
 
     /// The options on offer in the current tree, as four slots of the next row.
@@ -89,22 +122,61 @@ public struct Navigator {
         let row = key / KeybowProtocol.columns
         let column = key % KeybowProtocol.columns
 
+        // On a page: its row turns pages, and the rows below are its keys.
+        if let page {
+            if row == page.tree.startRow {
+                // Its own key again: back to the trees.
+                if column == page.column { return leavePage() }
+                return turn(to: KeypadPage(tree: page.tree, column: column), key: key)
+            }
+            if let slot = page.tree.pageSlot(ofKey: key) {
+                guard let resolved = config.resolve(tree: page.tree, path: [page.column, slot]),
+                      resolved.node.isLeaf else { return [.invalidPress(key: key) ] }
+                return [.fire(resolved, chosenAt: now)]
+            }
+            // A row above: back to the trees, this press the first in one.
+            let left = leavePage()
+            return left + press(row: row, column: column, key: key, at: now)
+        }
+        return press(row: row, column: column, key: key, at: now)
+    }
+
+    /// A press while choosing in the trees.
+    private mutating func press(row: Int, column: Int, key: Int, at now: Date) -> [NavigatorEvent] {
         // A legal move in the tree already in play?
         if let tree, let depth = tree.rows.firstIndex(of: row), depth <= path.count {
             return choose(tree: tree, path: Array(path.prefix(depth)) + [column], at: now, key: key)
         }
 
-        // Starting fresh: the row picks the tree.
+        // Starting fresh: the row picks the tree — or, for pages, the page.
         if tree == nil, let fresh = TreeKind.starting(at: row) {
+            if config.isPaged(fresh) { return turn(to: KeypadPage(tree: fresh, column: column), key: key) }
             return choose(tree: fresh, path: [column], at: now, key: key)
         }
 
-        // Mid-path, the top row escapes to the main tree.
+        // Mid-path, the top row escapes to the main tree — or to its pages.
         if tree != nil, row == TreeKind.main.startRow, config.roots(.main)[column] != nil {
+            if config.isPaged(.main) {
+                reset()
+                return [.selectionChanged(nil)] + turn(to: KeypadPage(tree: .main, column: column), key: key)
+            }
             return choose(tree: .main, path: [column], at: now, key: key)
         }
 
         return [.invalidPress(key: key)]
+    }
+
+    private mutating func turn(to candidate: KeypadPage, key: Int) -> [NavigatorEvent] {
+        guard let resolved = config.resolve(tree: candidate.tree, path: [candidate.column]) else {
+            return [.invalidPress(key: key)]
+        }
+        page = candidate
+        return [.page(resolved)]
+    }
+
+    private mutating func leavePage() -> [NavigatorEvent] {
+        page = nil
+        return [.page(nil)]
     }
 
     public mutating func keyUp(_ key: Int, at now: Date) -> [NavigatorEvent] {

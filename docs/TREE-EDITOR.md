@@ -48,7 +48,15 @@ it. Nothing the editor knows is kept anywhere but the outline.
   — the trees before any `# keypad` section, for every keypad without trees of
   its own — then one tab per section. Resting on a tab says which keypads use
   it, of those connected. See [Keypads](#keypads).
-- **Tree tabs** switch between the four trees, or ⌘1 to ⌘4. Each has a diagram of the
+- **Tree tabs** switch between the four trees, or ⌘1 to ⌘4. Beside them,
+  **Pages** makes the main, row 2 or row 3 tree a set of pages: its row's keys
+  pick a page, and the items under each page are its keys on the rows below,
+  numbered 1 to 12 across then down, each running its action when pressed. The
+  tab then reads "Row 2 pages", the keypad drawing shows a page's keys where
+  they sit, and the inspector says where each key is. It's refused where the
+  tree doesn't fit — a tree with keys under its second level, or using a list,
+  can't become pages, and pages with keys past the first row below can't become
+  a tree — with the reason. See [CONFIG-LANGUAGE.md](CONFIG-LANGUAGE.md#pages). Each has a diagram of the
   keypad in the tree's colour — Main blue, Row 2 teal, Row 3 orange, Bottom
   pink — with its starting row at full strength and the rows it goes on to
   fading in order, so it shows which way the tree runs. The overlay's tree badge

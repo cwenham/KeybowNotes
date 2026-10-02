@@ -26,6 +26,8 @@ final class OverlayModel {
     /// How the last selection ended; shown briefly before fading.
     var outcome: Outcome?
     var notice: Notice?
+    /// A page just turned to: its keys, for a moment.
+    var page: SelectionSnapshot.Page?
     /// What modules are doing in the background: a running stopwatch.
     var moduleStatuses: [ModuleStatus] = []
 
@@ -126,6 +128,7 @@ final class OverlayController {
     // MARK: - Inputs
 
     func handle(_ snapshot: SelectionSnapshot) {
+        let previousPage = model.snapshot.page
         model.snapshot = snapshot
         if let selection = snapshot.selection, snapshot.pending != nil, selection.action != nil {
             model.pendingSummary = ActionSummary(selection: selection, config: config)
@@ -136,8 +139,19 @@ final class OverlayController {
         if !snapshot.isIdle {
             model.outcome = nil
             model.notice = nil
+            model.page = nil
             show()
-        } else if model.outcome == nil && model.notice == nil && model.working == nil {
+        } else if let page = snapshot.page, page.tree != previousPage?.tree || page.column != previousPage?.column {
+            // A page turned to: what's on it, while it's new.
+            model.outcome = nil
+            model.notice = nil
+            model.page = page
+            show()
+            hide(after: 2.6)
+        } else if snapshot.page == nil, previousPage != nil {
+            model.page = nil
+            flashNotice("Back to the trees", symbol: "arrow.uturn.backward.circle")
+        } else if model.outcome == nil && model.notice == nil && model.working == nil && model.page == nil {
             // An outcome usually follows within a moment; don't blink out before it.
             hide(after: 0.3)
         }
@@ -206,6 +220,7 @@ final class OverlayController {
     private func present(_ outcome: OverlayModel.Outcome, for duration: TimeInterval) {
         model.outcome = outcome
         model.notice = nil
+        model.page = nil
         show()
         hide(after: duration)
     }
@@ -323,6 +338,7 @@ final class OverlayController {
                 guard let self, self.hideTask != nil, self.model.snapshot.isIdle else { return }
                 self.model.outcome = nil
                 self.model.notice = nil
+                self.model.page = nil
                 // Still waiting on replies: back to the timer, not away.
                 if self.model.working != nil {
                     self.panel.alphaValue = 1

@@ -106,6 +106,12 @@ description. API keys stay in the Keychain and go only to their own API.
 all four rows, rows 2 and 3 are shorter trees of their own, and row 4 runs upwards.
 Four menus on one keypad, with the top row always a way back to the main one.
 
+**Pages** — the main, row 2 or row 3 tree can be pages instead, as on a macro
+pad: each key on its row picks a page, which stays, and the rows below become
+that page's keys, lit in its colour, each doing its one thing the moment it's
+pressed. A key on a row above goes back to the trees. `# row 2 [pages]` in the
+outline, or the *Pages* checkbox in the editor.
+
 **Several keypads** — plug in more than one, and each can have trees of its own:
 a `# keypad Desk [RGB Keypad]` section of the outline, chosen by model or by the
 board's unique ID, and a tab of its own in the tree editor. Without one, every

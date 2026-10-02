@@ -118,10 +118,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         model.keypad = keypad
         model.tab = tree
         let container = OutlineContainer.tree(tree, keypad: keypad)
-        if let node = model.document.node(at: OutlineLocation(container, path)) {
-            model.selection = .node(node.id)
-        } else {
-            model.selection = .empty(OutlineLocation(container, path))
+        // After the tab's change has cleared the selection, not before.
+        DispatchQueue.main.async { [model] in
+            if let node = model.document.node(at: OutlineLocation(container, path)) {
+                model.selection = .node(node.id)
+            } else {
+                model.selection = .empty(OutlineLocation(container, path))
+            }
         }
     }
 
@@ -242,6 +245,13 @@ struct EditorRootView: View {
             KeypadBar(model: model)
             HStack(spacing: 12) {
                 TreeTabs(selection: $model.tab, title: tabTitle)
+                if model.tab.canHavePages {
+                    Toggle("Pages", isOn: Binding(get: { model.isPaged(model.tab) }, set: setPages))
+                        .toggleStyle(.checkbox)
+                        .help("Pages: each key on row \(model.tab.startRow + 1) picks a page, which stays. The rows "
+                              + "below become its keys, each running its action when it's pressed, in the page's "
+                              + "colour. Its key again, or a key on a row above, goes back to the trees.")
+                }
                 Spacer()
                 if model.isDirty {
                     Text("Edited").font(.caption).foregroundStyle(.secondary)
@@ -254,14 +264,21 @@ struct EditorRootView: View {
         .padding(.vertical, 8)
     }
 
+    private func setPages(_ paged: Bool) {
+        let tree = model.tab
+        let keypad = min(model.keypad, model.document.keypads.count)
+        _ = model.edit(paged ? "Make Pages" : "Make a Tree") { try $0.setPages(paged, for: tree, keypad: keypad) }
+    }
+
     private func tabTitle(_ tree: TreeKind) -> String {
-        let base: String
+        var base: String
         switch tree {
         case .main: base = "Main ↓"
         case .row2: base = "Row 2 ↓"
         case .row3: base = "Row 3 ↓"
         case .bottom: base = "Bottom ↑"
         }
+        if model.isPaged(tree) { base = "Row \(tree.startRow + 1) pages" }
         return model.hasProblems(tree) ? base + " •" : base
     }
 

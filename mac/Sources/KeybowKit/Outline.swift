@@ -253,6 +253,8 @@ public struct OutlineKeypad: Equatable, Sendable {
     /// board of a model there are two of.
     public var annotations: [Annotation]
     public var trees: [TreeKind: [OutlineNode?]] = [:]
+    /// Its trees set as pages: `# row 2 [pages]` in its section.
+    public var pages: Set<TreeKind> = []
 
     public init(name: String, annotations: [Annotation] = [], trees: [TreeKind: [OutlineNode?]] = [:]) {
         self.name = name
@@ -282,6 +284,8 @@ public struct OutlineDocument: Equatable, Sendable {
     public var preamble: [String] = []
     /// The first keypad's trees: those before any `# keypad` heading.
     public var trees: [TreeKind: [OutlineNode?]] = [:]
+    /// The first keypad's trees set as pages: `# row 2 [pages]`.
+    public var pages: Set<TreeKind> = []
     /// Keypads with trees of their own, after the first.
     public var keypads: [OutlineKeypad] = []
     public var lists: [OutlineList] = []
@@ -312,6 +316,38 @@ public struct OutlineDocument: Equatable, Sendable {
 
     /// How many keypads: the first, and one per section.
     public var keypadCount: Int { keypads.count + 1 }
+
+    /// Whether a keypad's tree is pages: its first row picks one, and the
+    /// items under each are its keys on the rows below.
+    public func isPaged(_ tree: TreeKind, keypad: Int = 0) -> Bool {
+        guard tree.canHavePages else { return false }
+        if keypad == 0 { return pages.contains(tree) }
+        return keypad <= keypads.count && keypads[keypad - 1].pages.contains(tree)
+    }
+
+    /// Sets the mark alone; `setPages` checks the tree suits it first.
+    mutating func markPaged(_ tree: TreeKind, keypad: Int, _ paged: Bool) {
+        if keypad == 0 {
+            if paged { pages.insert(tree) } else { pages.remove(tree) }
+        } else if keypad <= keypads.count {
+            if paged { keypads[keypad - 1].pages.insert(tree) } else { keypads[keypad - 1].pages.remove(tree) }
+        }
+    }
+
+    /// Every page's keys as a full set of slots — one per key on the rows
+    /// below — so any of them can be filled.
+    mutating func fillPageSlots() {
+        for keypad in 0..<keypadCount {
+            for tree in TreeKind.allCases where isPaged(tree, keypad: keypad) {
+                let roots = self.roots(tree, keypad: keypad).map { page -> OutlineNode? in
+                    guard var page, page.listReference == nil, page.children.count < tree.pageKeys else { return page }
+                    page.children += Array(repeating: nil, count: tree.pageKeys - page.children.count)
+                    return page
+                }
+                setRoots(roots, tree, keypad: keypad)
+            }
+        }
+    }
 }
 
 public struct OutlineDiagnostic: Equatable, Sendable {
@@ -367,10 +403,26 @@ public enum OutlineParser {
                     started = true
                     continue
                 }
-                if let next = sectionNamed(title, keypad: keypad, in: &document) {
+                // `# row 2 [pages]`: what's in brackets says how the tree works.
+                let (heading, marks) = OutlineNode.split(title)
+                if let next = sectionNamed(heading, keypad: keypad, in: &document) {
                     section = next
                     stack = []
                     started = true
+                    for mark in marks {
+                        if case .tree(let kind, let keypad) = next, case .word(let word) = mark,
+                           word.lowercased() == "pages" {
+                            if kind.canHavePages {
+                                document.markPaged(kind, keypad: keypad, true)
+                            } else {
+                                diagnostics.append(.init(.error, line: lineNumber,
+                                                         "The bottom tree can't be pages: there are no rows below it."))
+                            }
+                        } else {
+                            diagnostics.append(.init(.warning, line: lineNumber,
+                                                     "“\(mark.text)” means nothing on this heading; ignored."))
+                        }
+                    }
                 } else if !started {
                     document.preamble.append(rawLine)
                 } else {
@@ -440,8 +492,20 @@ public enum OutlineParser {
                     document.lostChildren.insert(parent.id)
                 }
             }
-            guard (1...KeybowProtocol.columns).contains(number) else {
-                diagnostics.append(.init(.error, line: lineNumber, "Item \(number): keys are numbered 1 to 4."))
+            // A page's keys fill every row below it; anywhere else, one row.
+            var paged: TreeKind?
+            if case .tree(let kind, let keypad) = container, document.isPaged(kind, keypad: keypad) { paged = kind }
+            if paged != nil, parentPath.count >= 2 {
+                diagnostics.append(.init(.error, line: lineNumber,
+                                         "Too deep: a page's keys run actions, and can't have keys under them."))
+                skipped()
+                continue
+            }
+            let keys = paged != nil && parentPath.count == 1 ? paged!.pageKeys : KeybowProtocol.columns
+            guard (1...keys).contains(number) else {
+                diagnostics.append(.init(.error, line: lineNumber, keys == KeybowProtocol.columns
+                                         ? "Item \(number): keys are numbered 1 to 4."
+                                         : "Item \(number): this page's keys are numbered 1 to \(keys)."))
                 skipped()
                 continue
             }
@@ -469,6 +533,7 @@ public enum OutlineParser {
         while let last = document.preamble.last, last.trimmingCharacters(in: .whitespaces).isEmpty {
             document.preamble.removeLast()
         }
+        document.fillPageSlots()
         return (document, diagnostics)
     }
 
@@ -508,7 +573,7 @@ public enum OutlineParser {
         }
         var found: OutlineNode?
         for slot in path {
-            guard let next = level[slot] else { return nil }
+            guard slot < level.count, let next = level[slot] else { return nil }
             found = next
             level = next.children
         }
@@ -518,6 +583,8 @@ public enum OutlineParser {
     private static func place(_ node: OutlineNode, at path: [Int], in section: Section, of document: inout OutlineDocument) {
         func insert(_ node: OutlineNode, at path: [Int], into level: inout [OutlineNode?]) {
             if path.count == 1 {
+                // A page's keys run on past the first four.
+                if path[0] >= level.count { level += Array(repeating: nil, count: path[0] + 1 - level.count) }
                 level[path[0]] = node
             } else if var parent = level[path[0]] {
                 insert(node, at: Array(path.dropFirst()), into: &parent.children)
@@ -549,23 +616,29 @@ public enum OutlineWriter {
 
         // The first keypad's trees, its main tree first and needing no heading;
         // then each keypad of its own, its main tree right under its heading.
+        // A tree that's pages says so on a heading of its own, even empty.
         func trees(_ keypad: Int, under heading: String?) {
             let main = lines(document.roots(.main, keypad: keypad))
-            if let heading {
+            if document.isPaged(.main, keypad: keypad) {
+                if let heading { blocks.append(heading) }
+                blocks.append((["# main [pages]"] + main).joined(separator: "\n"))
+            } else if let heading {
                 blocks.append(([heading] + main).joined(separator: "\n"))
             } else if !main.isEmpty {
                 blocks.append(main.joined(separator: "\n"))
             }
             for tree in TreeKind.allCases where tree != .main {
                 let body = lines(document.roots(tree, keypad: keypad))
-                guard !body.isEmpty else { continue }
-                let heading: String
+                let paged = document.isPaged(tree, keypad: keypad)
+                guard !body.isEmpty || paged else { continue }
+                var heading: String
                 switch tree {
                 case .row2: heading = "# row 2"
                 case .row3: heading = "# row 3"
                 case .bottom: heading = "# bottom"
                 case .main: heading = "# main"
                 }
+                if paged { heading += " [pages]" }
                 blocks.append(([heading] + body).joined(separator: "\n"))
             }
         }

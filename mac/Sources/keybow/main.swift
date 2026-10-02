@@ -142,7 +142,11 @@ func loadConfig(_ arguments: [String]) -> (KeybowConfig, URL) {
 func printTrees(_ config: KeybowConfig) {
     for tree in TreeKind.allCases where config.trees[tree] != nil {
         let rows = tree.rows.map { String($0 + 1) }.joined(separator: " → ")
-        print("\(tree.rawValue) tree (rows \(rows))")
+        if config.isPaged(tree) {
+            print("\(tree.rawValue) pages (on row \(tree.startRow + 1); their keys on rows \(tree.startRow + 2)–4, at once)")
+        } else {
+            print("\(tree.rawValue) tree (rows \(rows))")
+        }
         printTree(config, tree, nodes: config.roots(tree), indent: "  ")
     }
 }
@@ -193,6 +197,9 @@ func describe(_ event: NavigatorEvent) -> String {
         return line
     case .cleared(let reason):
         return "cleared (\(reason.rawValue))"
+    case .page(let page):
+        guard let page else { return "back to the trees" }
+        return "page: \(page.node.label)  [\(page.tree.rawValue) pages]"
     }
 }
 

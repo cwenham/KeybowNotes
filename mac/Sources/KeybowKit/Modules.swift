@@ -699,6 +699,23 @@ extension KeybowConfig {
         return keys
     }
 
+    /// On each page, the keys whose actions are of these types, by their
+    /// place on it: what pulses while the page is showing.
+    public func pageKeys(toActionTypes types: Set<String>) -> [KeypadPage: Set<Int>] {
+        var found: [KeypadPage: Set<Int>] = [:]
+        for tree in TreeKind.allCases where isPaged(tree) {
+            for (column, page) in roots(tree).enumerated() {
+                guard let page else { continue }
+                let slots = Set(page.children.indices.filter { slot in
+                    guard let key = page.children[slot] else { return false }
+                    return leads(to: types, node: key, tree: tree, path: [column, slot])
+                })
+                if !slots.isEmpty { found[KeypadPage(tree: tree, column: column)] = slots }
+            }
+        }
+        return found
+    }
+
     private func leads(to types: Set<String>, node: TreeNode, tree: TreeKind, path: [Int]) -> Bool {
         if node.isLeaf {
             return resolve(tree: tree, path: path)?.action.map { types.contains($0.type) } ?? false

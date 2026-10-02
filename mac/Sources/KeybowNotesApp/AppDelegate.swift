@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var keypadOrder: [String] = []
     /// The keypad whose choosing the overlay shows: the last one pressed.
     private var activeKeypad: String?
+    /// The page each keypad last showed: turning one is using it.
+    private var shownPages: [String: KeypadPage] = [:]
     private var discovery: Timer?
 
     private struct KeypadLink {
@@ -219,7 +221,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .compactMap { registry.module(id: $0.moduleID) }
             .flatMap { $0.manifest.actionTypes.map(\.type) })
         for link in keypads.values {
-            link.driver.setPulsingKeys(busyTypes.isEmpty ? [] : config(for: link).entryKeys(toActionTypes: busyTypes))
+            let config = config(for: link)
+            link.driver.setPulsingKeys(busyTypes.isEmpty ? [] : config.entryKeys(toActionTypes: busyTypes),
+                                       onPages: busyTypes.isEmpty ? [:] : config.pageKeys(toActionTypes: busyTypes))
         }
         updateMenuBarClock(statuses.first)
     }
@@ -892,7 +896,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// The overlay follows the keypad being used: another's going idle
     /// doesn't clear it.
     private func show(_ snapshot: SelectionSnapshot, from serial: String) {
-        if !snapshot.isIdle {
+        let page = snapshot.page.map { KeypadPage(tree: $0.tree, column: $0.column) }
+        let turned = page != shownPages[serial]
+        shownPages[serial] = page
+        if !snapshot.isIdle || turned {
             activeKeypad = serial
         } else if let active = activeKeypad, active != serial {
             return
@@ -956,6 +963,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Log.info(line)
         case .cleared(let reason):
             Log.info("cleared (\(reason.rawValue))")
+        case .page(let page):
+            Log.info(page.map { "page: \($0.node.label)  [\($0.tree.rawValue) pages]" } ?? "back to the trees")
         }
     }
 }

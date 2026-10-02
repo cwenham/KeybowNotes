@@ -35,6 +35,11 @@ struct KeypadPane: View {
 
     private var caption: String {
         let tree = model.tab
+        if model.isPaged(tree) {
+            let rows = tree.levels == 2 ? "row 4" : "rows \(tree.startRow + 2)–4"
+            return "Row \(tree.startRow + 1) pages: each key picks a page, whose \(tree.pageKeys) keys fill \(rows) "
+                + "and run at once. Click a key to select it."
+        }
         let direction = tree == .bottom ? "climbs from row 4" : "runs down from row \(tree.startRow + 1)"
         return "\(treeName(tree)): \(direction), \(tree.levels) levels. Click a key to select it."
     }
@@ -80,10 +85,14 @@ struct KeypadPane: View {
         func colour(_ path: [Int]) -> KeyColour {
             config?.node(in: tree, at: path)?.colour ?? config?.defaultColour ?? KeyColour(red: 90, green: 90, blue: 90)
         }
+        let paged = model.isPaged(tree)
         func put(_ path: [Int], level: Double, selected: Bool = false) {
             let depth = path.count - 1
-            guard depth < tree.levels else { return }
-            let index = KeybowProtocol.key(row: tree.rows[depth], column: path[depth])
+            guard depth < (paged ? 2 : tree.levels) else { return }
+            // A page's keys fill the rows below it, numbered across then down.
+            let index = paged && depth == 1
+                ? tree.key(onPage: path[1])
+                : KeybowProtocol.key(row: tree.rows[depth], column: path[depth])
             let location = OutlineLocation(container, path)
             if let node = model.document.node(at: location) {
                 keys[index] = Key(colour: colour(path), level: level, label: node.label, selected: selected,
@@ -111,6 +120,19 @@ struct KeypadPane: View {
         guard let path else {
             // Nothing chosen: the tree's first row, as the keypad shows it idle.
             for column in 0..<KeybowProtocol.columns { put([column], level: 0.35) }
+            return keys
+        }
+
+        if paged {
+            let page = path[0]
+            for column in 0..<KeybowProtocol.columns {             // the pages
+                put([column], level: column == page ? 1 : 0.35, selected: path.count == 1 && column == page)
+            }
+            guard path.count == 2 || isNode else { return keys }
+            for slot in 0..<tree.pageKeys {                        // its keys
+                let chosen = path.count == 2 && slot == path[1]
+                put([page, slot], level: chosen ? 1 : 0.35, selected: chosen)
+            }
             return keys
         }
 

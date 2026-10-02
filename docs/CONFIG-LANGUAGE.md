@@ -41,6 +41,10 @@ per key. A node with children is a **branch**; choosing it offers its children
 on the next row. A node without children is a **leaf**; choosing it runs an
 **action**, after a short delay in which any key cancels.
 
+**Pages.** The main, row 2 and row 3 trees can be **pages** instead. Each key
+on the tree's row picks a page, and the page stays: the rows below become its
+keys, each running its action the moment it's pressed. See [Pages](#pages).
+
 **Leaves are usually values.** In *Meeting → Tomorrow*, "Meeting" decides the
 action (a calendar event) and "Tomorrow" supplies a value (the date). So an
 action is normally declared on a branch and **inherited** by every leaf beneath
@@ -107,6 +111,7 @@ A heading starts a section, which lasts until the next one:
 | `# row 2` | the row 2 tree |
 | `# row 3` | the row 3 tree |
 | `# bottom`, `# row 4`, `# bottom up` | the bottom tree |
+| `# main [pages]`, `# row 2 [pages]`, `# row 3 [pages]` | a tree as pages — see [Pages](#pages) |
 | `# keypad <name> [model, id: …]` | another keypad's trees — see [Keypads](#keypads) |
 | `# list <name>` | nodes reused with `[@name]` |
 | `# contacts` | people: `- Name [field: value, …]` |
@@ -162,6 +167,49 @@ by ID alone.
 Lists, contacts, projects and defaults are shared, wherever their headings
 fall. A file without `# keypad` headings reads as before: every keypad shares
 its trees.
+
+### Pages
+
+`[pages]` on a tree's heading makes the tree a set of pages, for keys that each
+do one thing at once — macros, snippets, window positions — rather than a walk
+through choices:
+
+```
+# row 2 [pages]
+1. Editing [colour: 20c060, Insert]          ← a page, on row 2, key 1
+   1. Greeting [text: Hello there]           ← row 3, key 1
+   2. Sign-off [text: Best wishes]           ← row 3, key 2
+   5. Today [text: {{date:d MMMM}}]          ← row 4, key 1
+   8. Undo [Copy, colour: e04040]            ← row 4, key 4, in its own colour
+2. Windows [colour: f0a020, Window]
+   1. Left
+   2. Right
+   5. Full
+```
+
+- **The items on the tree's row are pages.** The items under a page are its
+  keys, on every row below, numbered left to right and then down: 1–4 on the
+  next row, 5–8 on the one after, 9–12 on the last. Row 1's pages have 12 keys,
+  row 2's have 8, row 3's have 4. The bottom tree has no rows below it, and
+  can't be pages.
+- **A page's keys are actions.** Each runs the moment it's pressed, with no time
+  to cancel, and has no keys under it. It inherits from its page as any leaf
+  inherits from its branch: `[Insert]` on the page makes every key on it
+  insert text.
+- **Pressing a page's key turns to it, and it stays** — through waiting, through
+  running its keys, through edits to the tree — until another page is chosen.
+  Its keys light in the page's colour, unless they have their own; the page's
+  key is lit fully, and the other pages dimly.
+- **Back to the trees**: the page's own key again, or any key on a row above
+  the pages. That press also counts as the first in its tree, so pressing
+  *Work* on row 1 opens *Work*. Row 1's pages have no row above, so their own
+  key is the way back.
+- While a tree is in play, its next row is its own: with row 2 as pages, the
+  main tree still goes on from row 1 to row 2 as usual. Pages are picked from a
+  keypad at rest.
+
+A page takes its keys from the items under it, not from a list. An empty page
+is noted, and does nothing.
 
 ### Brackets
 
@@ -305,7 +353,8 @@ The tree editor, and `keybow upgrade-outline`, write the outline in one
 consistent form: three spaces per level, numbers as key positions, empty keys
 omitted, and sections in the order main tree, side trees, each keypad's section
 — its heading, its main tree, its side trees — then lists, contacts, projects,
-defaults. The preamble is kept as written.
+defaults. A tree that's pages is written under its heading — `# main [pages]`
+included — even when it's empty. The preamble is kept as written.
 
 ### Upgrading an older outline
 
@@ -331,8 +380,9 @@ refers to, and keeps the original as `tree.md.bak`.
     "row3":   [ … ],
     "bottom": [ … ]
   },
+  "pages": [ "row2" ],                      // §2, Pages
   "keypads": [                              // §2, Keypads
-    { "name": "Desk", "model": "rgbkeypad", "trees": { "main": [ … ] } },
+    { "name": "Desk", "model": "rgbkeypad", "trees": { "main": [ … ] }, "pages": [ "main" ] },
     { "name": "Spare", "model": "keybow2040", "id": "E66000000000AAAA", "trees": { … } }
   ]
 }
@@ -362,7 +412,7 @@ tree.
 | Field | Meaning |
 |---|---|
 | `label` | Shown in the overlay; also a value for templates. Required. |
-| `key` | Position 0–3. Without it, the next free position. |
+| `key` | Position 0–3 — or under a page, 0–11, across then down. Without it, the next free position. |
 | `colour` | `rrggbb` for the key's light (`color` also accepted). Inherited from the parent when absent. |
 | `params` | Values for templates, inherited by everything beneath; deeper nodes override. |
 | `action` | Some or all of an action, inherited by every leaf beneath (§4). |
@@ -1327,7 +1377,7 @@ compiler knows.
 action fields listed in §2.
 
 **Section headings:** `main`, `row 2`, `row 3`, `bottom` (and their variants),
-`keypad …`, `list …`, `contacts`, `projects`, `defaults`.
+`keypad …`, `list …`, `contacts`, `projects`, `defaults`; `[pages]` on a tree's.
 
 **Keypad models:** `Keybow 2040`, `RGB Keypad` (and their variants), with `id`.
 

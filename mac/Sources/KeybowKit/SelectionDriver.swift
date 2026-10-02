@@ -9,6 +9,16 @@ public struct SelectionSnapshot: Equatable, Sendable {
         public let isLeaf: Bool
     }
 
+    /// The page in use: its key, and its keys by their place on it — an
+    /// option's `column` is that place, 0 to 11.
+    public struct Page: Equatable, Sendable {
+        public let tree: TreeKind
+        public let column: Int
+        public let label: String
+        public let colour: KeyColour
+        public let keys: [Option]
+    }
+
     public let tree: TreeKind?
     public let selection: ResolvedSelection?
     /// The row being chosen from, zero-based.
@@ -19,6 +29,9 @@ public struct SelectionSnapshot: Equatable, Sendable {
     public let colours: [KeyColour]
     /// When the pending action runs, if one is waiting.
     public let pending: ClosedRange<Date>?
+    /// While a page is showing. The keypad counts as idle — nothing is being
+    /// chosen — though its keys are the page's.
+    public var page: Page? = nil
 
     public var isIdle: Bool { tree == nil }
 
@@ -43,6 +56,8 @@ public final class SelectionDriver: @unchecked Sendable {
     private var lastSentColours: [KeyColour]?
     private var lastSnapshot: SelectionSnapshot?
     private var flash: (key: Int, until: Date)?
+    /// A page's key, pressed: bright while its action starts.
+    private var firing: (key: Int, until: Date)?
     private var continuation: AsyncStream<NavigatorEvent>.Continuation?
     private var connectionContinuation: AsyncStream<KeybowEvent>.Continuation?
     private var snapshotContinuation: AsyncStream<SelectionSnapshot>.Continuation?
@@ -99,6 +114,7 @@ public final class SelectionDriver: @unchecked Sendable {
             let produced = navigator.tick(at: Date())
             publish(produced)
             if let flash, flash.until <= Date() { self.flash = nil }
+            if let firing, firing.until <= Date() { self.firing = nil }
             refresh()
         }
         source.resume()
@@ -128,7 +144,10 @@ public final class SelectionDriver: @unchecked Sendable {
     public func replaceConfig(_ newConfig: KeybowConfig) {
         queue.async { [self] in
             config = newConfig
+            // A page stays up through an edit, if it's still there.
+            let page = navigator.page
             navigator = Navigator(config: newConfig)
+            navigator.restore(page: page)
             flash = nil
             refresh()
         }
@@ -142,11 +161,13 @@ public final class SelectionDriver: @unchecked Sendable {
         }
     }
 
-    /// Idle keys to pulse: those leading to a module that's busy.
-    public func setPulsingKeys(_ keys: Set<Int>) {
+    /// Idle keys to pulse: those leading to a module that's busy — and, on
+    /// pages, the keys that run its actions.
+    public func setPulsingKeys(_ keys: Set<Int>, onPages: [KeypadPage: Set<Int>] = [:]) {
         queue.async { [self] in
-            guard lighting.pulsing != keys else { return }
+            guard lighting.pulsing != keys || lighting.pulsingOnPages != onPages else { return }
             lighting.pulsing = keys
+            lighting.pulsingOnPages = onPages
             refresh()
         }
     }
@@ -161,7 +182,7 @@ public final class SelectionDriver: @unchecked Sendable {
     public func inject(_ message: DeviceMessage) {
         switch message {
         case .down(let key):
-            apply { $0.keyDown(key, at: Date()) }
+            apply(pressing: key) { $0.keyDown(key, at: Date()) }
         case .up(let key):
             apply { $0.keyUp(key, at: Date()) }
         default:
@@ -169,12 +190,16 @@ public final class SelectionDriver: @unchecked Sendable {
         }
     }
 
-    private func apply(_ body: @escaping (inout Navigator) -> [NavigatorEvent]) {
+    private func apply(pressing pressed: Int? = nil, _ body: @escaping (inout Navigator) -> [NavigatorEvent]) {
         queue.async { [self] in
             let produced = body(&navigator)
             for event in produced {
                 if case .invalidPress(let key) = event {
                     flash = (key, Date().addingTimeInterval(flashDuration))
+                }
+                // A page's key runs its action as it's pressed.
+                if case .fire = event, let pressed, navigator.page != nil {
+                    firing = (pressed, Date().addingTimeInterval(flashDuration))
                 }
             }
             publish(produced)
@@ -188,7 +213,7 @@ public final class SelectionDriver: @unchecked Sendable {
 
     /// Sends LEDs and a snapshot, each only when something actually changed.
     private func refresh() {
-        let colours = lighting.colours(for: navigator, config: config, flashing: flash?.key)
+        let colours = lighting.colours(for: navigator, config: config, flashing: flash?.key, firing: firing?.key)
         if colours != lastSentColours {
             lastSentColours = colours
             connection.send(.leds(colours))
@@ -199,13 +224,23 @@ public final class SelectionDriver: @unchecked Sendable {
             return .init(column: column, label: node.label, colour: node.colour ?? config.defaultColour,
                          isLeaf: node.isLeaf)
         }
+        var page: SelectionSnapshot.Page?
+        if let current = navigator.page, let resolved = navigator.pageSelection {
+            let colour = resolved.node.colour ?? config.defaultColour
+            let keys = resolved.node.children.enumerated().compactMap { slot, node -> SelectionSnapshot.Option? in
+                guard let node else { return nil }
+                return .init(column: slot, label: node.label, colour: node.colour ?? colour, isLeaf: node.isLeaf)
+            }
+            page = .init(tree: current.tree, column: current.column, label: resolved.node.label, colour: colour, keys: keys)
+        }
         let snapshot = SelectionSnapshot(
             tree: navigator.tree,
             selection: navigator.selection,
             currentRow: navigator.currentRow,
             options: options,
             colours: colours,
-            pending: navigator.pendingWindow
+            pending: navigator.pendingWindow,
+            page: page
         )
         if snapshot != lastSnapshot {
             lastSnapshot = snapshot

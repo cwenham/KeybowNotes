@@ -103,6 +103,25 @@ public enum TreeKind: String, CaseIterable, Sendable {
     public var startRow: Int { rows[0] }
     public var levels: Int { rows.count }
 
+    /// As pages: how many keys a page holds — every key on the rows below its
+    /// own. The bottom tree has no rows below, so it can't have pages.
+    public var pageKeys: Int { self == .bottom ? 0 : (levels - 1) * KeybowProtocol.columns }
+
+    public var canHavePages: Bool { pageKeys > 0 }
+
+    /// The keypad key a page's key sits on: numbered from 0, left to right,
+    /// row by row down from the one under the pages.
+    public func key(onPage slot: Int) -> Int {
+        KeybowProtocol.key(row: startRow + 1 + slot / KeybowProtocol.columns, column: slot % KeybowProtocol.columns)
+    }
+
+    /// The page key a keypad key is, or nil when it's off the page.
+    public func pageSlot(ofKey key: Int) -> Int? {
+        let row = key / KeybowProtocol.columns
+        guard canHavePages, row > startRow else { return nil }
+        return (row - startRow - 1) * KeybowProtocol.columns + key % KeybowProtocol.columns
+    }
+
     public static func starting(at row: Int) -> TreeKind? {
         allCases.first { $0.startRow == row }
     }
@@ -195,13 +214,26 @@ public struct KeybowConfig: Sendable {
         /// One board's unique ID, for two keypads of the same model.
         public let id: String?
         public let trees: [TreeKind: [TreeNode?]]
+        public let pages: Set<TreeKind>
 
-        public init(name: String, model: KeypadDevice.Model?, id: String?, trees: [TreeKind: [TreeNode?]]) {
+        public init(name: String, model: KeypadDevice.Model?, id: String?, trees: [TreeKind: [TreeNode?]],
+                    pages: Set<TreeKind> = []) {
             self.name = name
             self.model = model
             self.id = id
             self.trees = trees
+            self.pages = pages
         }
+    }
+
+    /// Trees whose first row picks a page: pressing one of its keys turns the
+    /// rows below into that page's keys, each running its action at once,
+    /// until another page is chosen — or a row above, which goes back to
+    /// choosing in the trees.
+    public internal(set) var pages: Set<TreeKind> = []
+
+    public func isPaged(_ tree: TreeKind) -> Bool {
+        tree.canHavePages && pages.contains(tree)
     }
 
     public static let emptyRow: [TreeNode?] = [nil, nil, nil, nil]
@@ -219,7 +251,7 @@ public struct KeybowConfig: Sendable {
             idleTimeout: idleTimeout ?? self.idleTimeout,
             longPressCancel: longPressCancel ?? self.longPressCancel,
             dateRules: dateRules, trees: trees, defaultAction: defaultAction, typeDefaults: typeDefaults,
-            contacts: contacts, projects: projects, defaults: defaults, keypads: keypads
+            contacts: contacts, projects: projects, defaults: defaults, keypads: keypads, pages: pages
         )
     }
 
@@ -231,7 +263,7 @@ public struct KeybowConfig: Sendable {
             version: version, defaultColour: defaultColour, commitDelay: commitDelay, idleTimeout: idleTimeout,
             longPressCancel: longPressCancel, dateRules: dateRules, trees: keypads[index - 1].trees,
             defaultAction: defaultAction, typeDefaults: typeDefaults, contacts: contacts, projects: projects,
-            defaults: defaults, keypads: keypads
+            defaults: defaults, keypads: keypads, pages: keypads[index - 1].pages
         )
     }
 
@@ -310,6 +342,8 @@ public struct KeybowConfig: Sendable {
     /// module may ask for its action to run at once — a stopwatch has to start
     /// on the press, not a second later.
     public func commitDelay(for selection: ResolvedSelection) -> TimeInterval {
+        // A page's keys are the action, pressed: there's nothing to cancel.
+        if isPaged(selection.tree), selection.path.count == 2 { return 0 }
         guard let action = selection.action else { return commitDelay }
         if case .bool(let instant)? = action.fields["instant"] { return instant ? 0 : commitDelay }
         if let module = ModuleRegistry.shared.module(handling: action.type) {
@@ -422,10 +456,14 @@ public struct ResolvedSelection: Equatable, @unchecked Sendable {
 public enum ConfigError: Error, CustomStringConvertible {
     case unreadable(URL, Error)
     case malformedJSON(String)
-    case tooManyNodes(at: String, count: Int)
-    case keyOutOfRange(at: String, key: Int)
+    case tooManyNodes(at: String, count: Int, limit: Int)
+    case keyOutOfRange(at: String, key: Int, limit: Int)
     case duplicateKey(at: String, key: Int)
     case tooDeep(at: String, tree: TreeKind)
+    /// Under a page's keys: they run actions, and have no keys of their own.
+    case tooDeepForPage(at: String)
+    /// The bottom tree has no rows below to make pages of.
+    case noRoomForPages(TreeKind)
     case unknownList(at: String, name: String)
     case unknownTree(String)
     case badColour(at: String, value: String)
@@ -442,15 +480,19 @@ public enum ConfigError: Error, CustomStringConvertible {
             return "cannot read \(url.path): \(error.localizedDescription)"
         case .malformedJSON(let detail):
             return "malformed JSON: \(detail)"
-        case .tooManyNodes(let location, let count):
-            return "\(location): a row holds at most 4 keys, found \(count)"
-        case .keyOutOfRange(let location, let key):
-            return "\(location): key \(key) is outside 0-3"
+        case .tooManyNodes(let location, let count, let limit):
+            return "\(location): \(limit == 4 ? "a row" : "a page") holds at most \(limit) keys, found \(count)"
+        case .keyOutOfRange(let location, let key, let limit):
+            return "\(location): key \(key) is outside 0-\(limit - 1)"
         case .duplicateKey(let location, let key):
             return "\(location): two nodes both claim key \(key)"
         case .tooDeep(let location, let tree):
             return "\(location): too deep — the \(tree.rawValue) tree has only \(tree.levels) levels"
                 + " (a list that includes itself also ends up here)"
+        case .tooDeepForPage(let location):
+            return "\(location): a page's keys run actions, and can't have keys under them"
+        case .noRoomForPages(let tree):
+            return "the \(tree.rawValue) tree can't be pages: there are no rows below it"
         case .unknownList(let location, let name):
             return "\(location): no list called \"\(name)\" under \"lists\""
         case .unknownTree(let name):
@@ -480,6 +522,7 @@ private struct RawConfig: Decodable {
     /// Version 1 had a single tree.
     var tree: [RawNode]?
     var trees: [String: [RawNode]]?
+    var pages: [String]?
     var keypads: [RawKeypad]?
 }
 
@@ -488,6 +531,7 @@ private struct RawKeypad: Decodable {
     var model: String?
     var id: String?
     var trees: [String: [RawNode]]?
+    var pages: [String]?
 }
 
 private enum RawChildren: Decodable {
@@ -648,10 +692,28 @@ extension KeybowConfig {
             rawTrees[kind] = nodes
         }
 
+        /// Trees named as pages, of those that can be.
+        func pageTrees(_ names: [String]?) throws -> Set<TreeKind> {
+            var found = Set<TreeKind>()
+            for name in names ?? [] {
+                do {
+                    guard let kind = TreeKind(name: name) else { throw ConfigError.unknownTree(name) }
+                    guard kind.canHavePages else { throw ConfigError.noRoomForPages(kind) }
+                    found.insert(kind)
+                } catch let error as ConfigError {
+                    guard let skipped else { throw error }
+                    skipped(error.description)
+                }
+            }
+            return found
+        }
+
         let builder = TreeBuilder(lists: raw.lists ?? [:], skipped: skipped)
+        let pages = try pageTrees(raw.pages)
         var trees: [TreeKind: [TreeNode?]] = [:]
         for (kind, nodes) in rawTrees {
-            trees[kind] = try builder.slots(from: nodes, at: kind.rawValue, tree: kind, depth: 1, inheritedColour: nil)
+            trees[kind] = try builder.slots(from: nodes, at: kind.rawValue, tree: kind, depth: 1, inheritedColour: nil,
+                                            paged: pages.contains(kind))
         }
 
         return KeybowConfig(
@@ -668,6 +730,7 @@ extension KeybowConfig {
             projects: stringTable(raw.projects),
             defaults: defaults,
             keypads: try (raw.keypads ?? []).enumerated().map { index, keypad in
+                let keypadPages = try pageTrees(keypad.pages)
                 var keypadTrees: [TreeKind: [TreeNode?]] = [:]
                 for (name, nodes) in keypad.trees ?? [:] {
                     guard let kind = TreeKind(name: name) else {
@@ -676,11 +739,12 @@ extension KeybowConfig {
                         continue
                     }
                     keypadTrees[kind] = try builder.slots(from: nodes, at: "keypads[\(index)].\(kind.rawValue)", tree: kind,
-                                                          depth: 1, inheritedColour: nil)
+                                                          depth: 1, inheritedColour: nil, paged: keypadPages.contains(kind))
                 }
                 return Keypad(name: keypad.name ?? "Keypad \(index + 2)", model: keypad.model.flatMap(KeypadDevice.Model.init(words:)),
-                              id: keypad.id, trees: keypadTrees)
-            }
+                              id: keypad.id, trees: keypadTrees, pages: keypadPages)
+            },
+            pages: pages
         )
     }
 
@@ -703,36 +767,40 @@ private struct TreeBuilder {
     /// Given, a node that doesn't fit is left out and reported here.
     let skipped: ((String) -> Void)?
 
-    /// Places nodes into the four key positions of a row.
+    /// Places nodes into the four key positions of a row — or, under a page,
+    /// into every key on the rows below it.
     func slots(from nodes: [RawNode], at location: String, tree: TreeKind, depth: Int,
-               inheritedColour: KeyColour?) throws -> [TreeNode?] {
-        guard nodes.count <= KeybowProtocol.columns || skipped != nil else {
-            throw ConfigError.tooManyNodes(at: location, count: nodes.count)
+               inheritedColour: KeyColour?, paged: Bool = false) throws -> [TreeNode?] {
+        let width = paged && depth == 2 ? tree.pageKeys : KeybowProtocol.columns
+        guard nodes.count <= width || skipped != nil else {
+            throw ConfigError.tooManyNodes(at: location, count: nodes.count, limit: width)
         }
 
-        var placed: [TreeNode?] = Array(repeating: nil, count: KeybowProtocol.columns)
+        var placed: [TreeNode?] = Array(repeating: nil, count: width)
         var nextFree = 0
         for (index, raw) in nodes.enumerated() {
             let here = "\(location)[\(index)] (\"\(raw.label)\")"
             do {
+                if paged, depth > 2 { throw ConfigError.tooDeepForPage(at: here) }
                 guard depth <= tree.levels else { throw ConfigError.tooDeep(at: here, tree: tree) }
 
                 let position: Int
                 if let explicit = raw.key {
-                    guard (0..<KeybowProtocol.columns).contains(explicit) else {
-                        throw ConfigError.keyOutOfRange(at: here, key: explicit)
+                    guard (0..<width).contains(explicit) else {
+                        throw ConfigError.keyOutOfRange(at: here, key: explicit, limit: width)
                     }
                     position = explicit
                 } else {
                     position = nextFree
-                    guard position < KeybowProtocol.columns else {
-                        throw ConfigError.tooManyNodes(at: location, count: nodes.count)
+                    guard position < width else {
+                        throw ConfigError.tooManyNodes(at: location, count: nodes.count, limit: width)
                     }
                 }
                 guard placed[position] == nil else {
                     throw ConfigError.duplicateKey(at: here, key: position)
                 }
-                placed[position] = try node(from: raw, at: here, tree: tree, depth: depth, inheritedColour: inheritedColour)
+                placed[position] = try node(from: raw, at: here, tree: tree, depth: depth, inheritedColour: inheritedColour,
+                                            paged: paged)
                 nextFree = max(nextFree, position + 1)
             } catch let error as ConfigError {
                 // Leave this node, and what's under it, out; keep the rest.
@@ -744,7 +812,7 @@ private struct TreeBuilder {
     }
 
     private func node(from raw: RawNode, at location: String, tree: TreeKind, depth: Int,
-                      inheritedColour: KeyColour?) throws -> TreeNode {
+                      inheritedColour: KeyColour?, paged: Bool) throws -> TreeNode {
         var colour = inheritedColour
         do {
             colour = try KeybowConfig.colour(from: raw.colour ?? raw.color, at: "\(location).colour") ?? inheritedColour
@@ -775,7 +843,8 @@ private struct TreeBuilder {
         let action = (raw.action?.isEmpty ?? true) ? nil : raw.action
         let children = childNodes.isEmpty
             ? KeybowConfig.emptyRow
-            : try slots(from: childNodes, at: childLocation, tree: tree, depth: depth + 1, inheritedColour: colour)
+            : try slots(from: childNodes, at: childLocation, tree: tree, depth: depth + 1, inheritedColour: colour,
+                        paged: paged)
         // Still a branch, not a leaf with an action it was never meant to run.
         if !childNodes.isEmpty, children.allSatisfy({ $0 == nil }) {
             throw ConfigError.nothingLeftUnder(at: location)

@@ -9,6 +9,10 @@ import Foundation
 /// - rows that cannot be used yet stay dark
 /// - while idle, keys in `pulsing` breathe in their own colours: a module is
 ///   busy behind them, like a running stopwatch
+/// - on a page: its key lit, the other pages on offer, its keys on offer in
+///   its colour — unless they have their own — and the rows above glowing
+///   faintly, since pressing them goes back to the trees. A key pressed
+///   flashes bright as its action runs.
 public struct Lighting {
     public var chosenLevel: Double = 1.0
     public var optionLevel: Double = 0.35
@@ -18,14 +22,19 @@ public struct Lighting {
     public var brightness: Double = 1
     /// Idle keys to pulse.
     public var pulsing: Set<Int> = []
+    /// On each page, the keys to pulse while it's showing, by their place on it.
+    public var pulsingOnPages: [KeypadPage: Set<Int>] = [:]
     /// One breath, dim to bright and back.
     public var pulsePeriod: TimeInterval = 2
 
     public init() {}
 
     public func colours(for navigator: Navigator, config: KeybowConfig, flashing key: Int? = nil,
-                        now: Date = Date()) -> [KeyColour] {
+                        firing: Int? = nil, now: Date = Date()) -> [KeyColour] {
         var colours = [KeyColour](repeating: .off, count: KeybowProtocol.keyCount)
+        // Rising from the idle level to full and back, smoothly.
+        let phase = now.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: pulsePeriod) / pulsePeriod
+        let pulseLevel = optionLevel + (chosenLevel - optionLevel) * (0.5 - 0.5 * cos(2 * .pi * phase))
 
         func paint(row: Int, nodes: [TreeNode?], level: Double) {
             for (column, node) in nodes.enumerated() {
@@ -59,10 +68,25 @@ public struct Lighting {
             if !usedRows.contains(top) {
                 paint(row: top, nodes: config.roots(.main), level: escapeLevel)
             }
+        } else if let page = navigator.page {
+            let tree = page.tree
+            for above in TreeKind.allCases where above.startRow < tree.startRow {
+                paint(row: above.startRow, nodes: config.roots(above), level: escapeLevel)
+            }
+            let roots = config.roots(tree)
+            paint(row: tree.startRow, nodes: roots, level: optionLevel)
+            if page.column < roots.count, let pageNode = roots[page.column] {
+                let colour = pageNode.colour ?? config.defaultColour
+                colours[KeybowProtocol.key(row: tree.startRow, column: page.column)] = scale(colour, by: chosenLevel)
+                let busy = pulsingOnPages[page] ?? []
+                for (slot, node) in pageNode.children.enumerated() {
+                    guard let node, slot < tree.pageKeys else { continue }
+                    let key = tree.key(onPage: slot)
+                    let level = key == firing ? chosenLevel : busy.contains(slot) ? pulseLevel : optionLevel
+                    colours[key] = scale(node.colour ?? colour, by: level)
+                }
+            }
         } else {
-            // Rising from the idle level to full and back, smoothly.
-            let phase = now.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: pulsePeriod) / pulsePeriod
-            let pulseLevel = optionLevel + (chosenLevel - optionLevel) * (0.5 - 0.5 * cos(2 * .pi * phase))
             for tree in TreeKind.allCases {
                 paint(row: tree.startRow, nodes: config.roots(tree), level: optionLevel)
                 for (column, node) in config.roots(tree).enumerated() {

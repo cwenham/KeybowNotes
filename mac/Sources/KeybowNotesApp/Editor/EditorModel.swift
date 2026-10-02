@@ -60,6 +60,9 @@ final class EditorModel {
 
     var container: OutlineContainer { .tree(tab, keypad: min(keypad, document.keypads.count)) }
 
+    /// Whether the shown keypad's tree is pages.
+    func isPaged(_ tree: TreeKind) -> Bool { document.isPaged(tree, keypad: min(keypad, document.keypads.count)) }
+
     /// The compiled config, with the shown keypad's trees.
     var keypadConfig: KeybowConfig? { compilation.config?.forKeypad(min(keypad, document.keypads.count)) }
 

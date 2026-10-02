@@ -219,7 +219,15 @@ private struct NodeInspector: View {
             Text(chain.map(\.label).joined(separator: " › "))
                 .font(.headline)
                 .lineLimit(2)
-            if let tree {
+            if let tree, model.isPaged(tree) {
+                let place = location.path.count == 1
+                    ? "a page, on row \(tree.startRow + 1) · key \(location.slot + 1)"
+                    : "row \(tree.key(onPage: location.slot) / KeybowProtocol.columns + 1) · "
+                        + "key \(location.slot % KeybowProtocol.columns + 1) · runs at once"
+                Text("Row \(tree.startRow + 1) pages · \(place)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if let tree {
                 let depth = location.path.count - 1
                 Text("\(treeName(tree)) · row \(tree.rows[depth] + 1) · key \(location.slot + 1)")
                     .font(.caption)

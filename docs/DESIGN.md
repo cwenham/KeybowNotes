@@ -163,6 +163,38 @@ entry points. Only the main tree is required; the others are optional.
   reaches an action in two presses. Configurable, including off.
 - **Idle timeout:** an incomplete selection clears itself after ~10 seconds.
 
+### Pages
+
+A tree can instead be **pages** — the main, row 2 or row 3 tree; the bottom one
+has no rows below. Some keys are better as one press, one action, the way a
+macro pad works: snippets, window positions, media keys. Pages give those keys
+the rows below without giving up the trees above.
+
+- **Picking a page.** At rest, the pages' row shows a key per page. Pressing one
+  turns to it: every key on the rows below becomes one of its keys, lit in the
+  page's colour unless it has its own — up to 12 for row 1's pages, 8 for row 2's,
+  4 for row 3's.
+- **It stays.** The idle timeout and the long press leave it alone, and a reload
+  of the tree keeps it if it's still there. That's the point: a page is somewhere
+  to be, not a step on the way to something.
+- **Its keys run at once.** No commit delay, nothing to cancel: the press is
+  the decision. The key flashes bright as its action starts, and the overlay
+  shows its result as for any action.
+- **Leaving.** The page's own key again, or any key on a row above it — which
+  also counts as the first press in its tree, so the way back costs nothing.
+  Rows above glow faintly while a page is up, as the main tree's top row does in
+  a side tree. Row 1's pages have no row above: their own key is the way back.
+- **Trees first.** While a tree is in play, its next row is its own, pages or
+  not: with row 2 as pages, the main tree still runs from row 1 into row 2.
+  Pages are picked only from a keypad at rest, or by the top row's escape when
+  the main tree is pages.
+
+The overlay shows a page as it's turned to — its name and its keys, where they
+sit — then gets out of the way; the keypad shows the rest. To the navigator a
+page is a state beside the walk through a tree, not part of it: `page` is set
+while `tree` is nil, so everything that waits for a selection to finish treats
+a keypad on a page as at rest.
+
 ### Settings
 
 Settings that belong to this Mac rather than the tree live in UserDefaults and

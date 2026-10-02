@@ -237,6 +237,10 @@ private struct Compiler {
     }
 
     mutating func run() -> String {
+        func pages(keypad: Int) -> OrderedJSON? {
+            let paged = TreeKind.allCases.filter { document.isPaged($0, keypad: keypad) }
+            return paged.isEmpty ? nil : .array(paged.map { .string($0.rawValue) })
+        }
         func compileTrees(keypad: Int) -> [(String, OrderedJSON)] {
             var trees: [(String, OrderedJSON)] = []
             for kind in TreeKind.allCases {
@@ -261,6 +265,7 @@ private struct Compiler {
                 warnings.append("Keypad “\(keypad.name)”: “\(word)” isn't a model — Keybow 2040 or RGB Keypad.")
             }
             fields.append(("trees", .object(compileTrees(keypad: index + 1))))
+            if let paged = pages(keypad: index + 1) { fields.append(("pages", paged)) }
             keypads.append(.object(fields))
         }
 
@@ -281,6 +286,7 @@ private struct Compiler {
         if !projects.isEmpty { output.append(("projects", .object(projects))) }
         if !lists.isEmpty { output.append(("lists", .object(lists))) }
         output.append(("trees", .object(trees)))
+        if let paged = pages(keypad: 0) { output.append(("pages", paged)) }
         if !keypads.isEmpty { output.append(("keypads", .array(keypads))) }
         return OrderedJSON.object(output).render() + "\n"
     }
@@ -426,8 +432,18 @@ private struct Compiler {
             note(.error, "Takes its children from @\(listReference!) and has its own; one or the other.")
         }
 
+        // A page: its keys are the items under it, and it runs nothing itself.
+        let isPage = tree.map { document.isPaged($0, keypad: keypad) } == true && path.count == 1
+        var unusablePage = false
+        if isPage, let listReference {
+            note(.error, "A page's keys can't come from a list (@\(listReference)): write them under it.")
+            unusablePage = true
+        } else if isPage, !node.hasChildren {
+            note(.warning, "An empty page: its keys are the items under it.")
+        }
+
         // What a leaf means, given what it inherits.
-        if node.isLeaf {
+        if node.isLeaf, !isPage {
             leafValues(node, context: context, declaredHere: declaredType != nil, action: action, params: &params,
                        inList: list != nil, note: note)
         }
@@ -455,7 +471,7 @@ private struct Compiler {
 
         infos[node.id] = OutlineNodeInfo(tree: tree, keypad: keypad, listName: list, path: path, roles: roles,
                                          diagnostics: diagnostics, actionType: context.type)
-        return emptied ? nil : .object(fields)
+        return emptied || unusablePage ? nil : .object(fields)
     }
 
     private mutating func leafValues(_ node: OutlineNode, context: Context, declaredHere: Bool,

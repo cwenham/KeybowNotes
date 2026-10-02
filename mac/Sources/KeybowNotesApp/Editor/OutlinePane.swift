@@ -474,11 +474,13 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
             model.flash("“\(node.label)” takes its children from @\(list).")
             return false
         }
-        guard location.path.count < location.container.levels else {
-            model.flash("“\(node.label)” is on this tree's last row, so it can't have children.")
+        guard location.path.count < model.document.levels(location.container) else {
+            model.flash(model.document.levels(location.container) == 2
+                        ? "“\(node.label)” is a page's key: it runs an action, and can't have keys of its own."
+                        : "“\(node.label)” is on this tree's last row, so it can't have children.")
             return false
         }
-        guard let slot = node.children.firstIndex(where: { $0 == nil }) else {
+        guard let slot = model.document.level(location.container, parent: location.path).firstIndex(where: { $0 == nil }) else {
             model.flash("“\(node.label)” already has a node on every key below it.")
             return false
         }

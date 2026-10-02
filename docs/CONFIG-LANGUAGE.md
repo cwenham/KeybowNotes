@@ -945,6 +945,28 @@ screen, or to another screen.
 - On a screen with a menu bar of its own, macOS keeps windows below it.
 - It needs **Accessibility** access, like Insert and `{{selection}}`.
 
+### `expose` — Mission Control, an app's windows, or the desktop
+
+A module. Shows every window — Mission Control, Exposé as was — the windows of
+the app in front, or the desktop. Pressing it again puts things back, as the
+keyboard shortcuts do. It runs on the press, with no time to cancel.
+
+| Field | |
+|---|---|
+| `show` | `all` (Mission Control), `app` (the app in front's windows) or `desktop`. Without it, the leaf's label when it says *app* or *desktop*; else `all`. |
+
+```
+1. Windows [Exposé]
+   1. All windows
+   2. App windows
+   3. Desktop
+2. Spaces [Mission Control]
+```
+
+Keywords: `Exposé`, `Expose`, `Mission Control`. It asks macOS's own Mission
+Control launcher, so it needs no permissions, and Mission Control's settings —
+grouping by app, separate spaces per display — apply.
+
 ### `ask` — ask for something, and hand it on
 
 A module, built on `display`. Shows a question with a field to type in, and on
@@ -1369,7 +1391,8 @@ the app; edit it only while KeybowNotes isn't running.
 **Outline words:** `Notes`, `Calendar`, `Reminders`, `Messages`, `Mail`, `Call`,
 `FaceTime`, `Link`, `Browser`, `Copy`, `Clipboard`, `Insert`, `Paste`, `Direct Insert`, `Type`,
 `Timer`, `Maps`, `Music`,
-`Stopwatch`, `Display`, `Show`, `Ask`, `Prompt`, `Window`, `Arrange` (and any other module's keywords),
+`Stopwatch`, `Display`, `Show`, `Ask`, `Prompt`, `Window`, `Arrange`, `Exposé`, `Expose`, `Mission Control`
+(and any other module's keywords),
 `append`, `new`, `create`, `… alert`, `….md`, `@…`, and the app names the
 compiler knows.
 
@@ -1384,7 +1407,7 @@ action fields listed in §2.
 **Action types:** `notes.create`, `notes.append`, `calendar.createEvent`,
 `reminders.create`, `messages.compose`, `mail.compose`, `phone.call`, `app.open`,
 `url.open`, `clipboard.copy`, `text.insert`, `text.insertDirect`, `clock.timer`, `maps.search`, `music.play`, `shortcut`,
-and from modules, `stopwatch`, `display`, `ask` and `window`.
+and from modules, `stopwatch`, `display`, `ask`, `window` and `expose`.
 
 **Computed values:** `leaf`, `parent`, `level1`–`level4`, `path`, `folderPath`,
 `parentPath`, `tree`, `contact.*`, `project.*`, `selection`, `clipboard`, `frontApp`,

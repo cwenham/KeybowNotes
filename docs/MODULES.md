@@ -45,7 +45,7 @@ KeybowData           a module: data sources, using KeybowAI to write rules
 KeybowLocation       a module: where the Mac is, from Location Services
 KeybowQuotes         a module: {{quote}}, portions of a file
 KeybowDisplay        modules: the display and ask actions
-KeybowWindows        a module: the window action
+KeybowWindows        modules: the window action, and Exposé
 KeybowModules        the list of built-in modules
 KeybowNotesApp       registers them at launch; shows their status
 keybow               registers them too, so their keywords compile
@@ -287,6 +287,13 @@ keywords `Display` and `Show`.
 - `KEYBOW_DEBUG_WINDOW_PID` limits it to one process's window, whatever's in
   front, for testing without moving anyone's work. It only narrows what's moved,
   so the app honours it too.
+
+`ExposeModule`, beside it: action type `expose`, keywords `Exposé`, `Expose`
+and `Mission Control`. It runs macOS's Mission Control launcher
+(`com.apple.exposelauncher`), which asks the Dock: with no argument for
+Mission Control, `1` for the desktop, `2` for the app in front's windows. Each
+toggles, as the keyboard shortcuts do. It fires at once and answers quietly:
+what it did is on the screen.
 
 ## Ask
 

@@ -139,3 +139,30 @@ final class WindowModuleTests: XCTestCase {
         XCTAssertEqual(module.summary(of: request(["place": "full", "screen": "2"], leaf: "x"), now: Date()).details, ["on screen 2"])
     }
 }
+
+final class ExposeModuleTests: XCTestCase {
+    private func request(_ fields: [String: String], leaf: String) -> ModuleRequest {
+        ModuleRequest(type: ExposeModule.type, fields: fields, labels: ["Windows", leaf])
+    }
+
+    func testWhatToShowComesFromTheFieldOrTheLabel() {
+        XCTAssertEqual(ExposeModule.show(request(["show": "app"], leaf: "Anything")).show, .app)
+        XCTAssertEqual(ExposeModule.show(request([:], leaf: "App windows")).show, .app)
+        XCTAssertEqual(ExposeModule.show(request([:], leaf: "Show desktop")).show, .desktop)
+        XCTAssertEqual(ExposeModule.show(request([:], leaf: "All windows")).show, .all)
+        XCTAssertEqual(ExposeModule.show(request([:], leaf: "Spaces")).show, .all, "else everything")
+        XCTAssertEqual(ExposeModule.Show.app.argument, "2")
+        XCTAssertNil(ExposeModule.Show.all.argument)
+    }
+
+    func testMistakesAndThePreview() {
+        let module = ExposeModule()
+        XCTAssertEqual(module.problem(with: request(["show": "everything twice"], leaf: "x")),
+                       "“everything twice” isn't something to show: all, app or desktop.")
+        XCTAssertNil(module.problem(with: request([:], leaf: "Desktop")))
+        XCTAssertTrue(module.firesAtOnce(request([:], leaf: "Desktop")))
+        let summary = module.summary(of: request([:], leaf: "App windows"), now: Date())
+        XCTAssertEqual(summary.verb, "Show")
+        XCTAssertEqual(summary.subject, "the app's windows")
+    }
+}

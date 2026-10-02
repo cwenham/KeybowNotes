@@ -510,6 +510,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.follow(next, of: selection, values: outcome.values, text: outcome.followUpText)
             } else if !outcome.isQuiet {
                 overlay.showFinished(outcome, summary: summary, warnings: planned.warnings)
+            } else {
+                // Nothing to say: what it did is on the screen.
+                overlay.stepAside()
             }
         }
     }

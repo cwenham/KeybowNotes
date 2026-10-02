@@ -12,6 +12,11 @@ import KeybowKit
 /// `show` is all (Mission Control: every window), app (the windows of the app
 /// in front) or desktop — else the label, when it says "app" or "desktop".
 /// Pressing it again puts things back, as the keyboard shortcuts do.
+///
+/// It asks the Dock as Mission Control's own launcher does, through
+/// `CoreDockSendNotification`. Running the launcher as a child process does
+/// nothing — it's gone before the Dock hears it — so the call is made here,
+/// in a process that stays; failing that, the launcher is opened as an app.
 public final class ExposeModule: KeybowModule, @unchecked Sendable {
     public static let type = "expose"
 
@@ -26,8 +31,17 @@ public final class ExposeModule: KeybowModule, @unchecked Sendable {
             }
         }
 
-        /// What Mission Control's launcher is given: nothing for Mission
-        /// Control, 1 for the desktop, 2 for the app's windows.
+        /// What the Dock is sent.
+        var notification: String {
+            switch self {
+            case .all: return "com.apple.expose.awake"
+            case .app: return "com.apple.expose.front.awake"
+            case .desktop: return "com.apple.showdesktop.awake"
+            }
+        }
+
+        /// What Mission Control's launcher is given instead: nothing for
+        /// Mission Control, 1 for the desktop, 2 for the app's windows.
         var argument: String? {
             switch self {
             case .all: return nil
@@ -97,16 +111,32 @@ public final class ExposeModule: KeybowModule, @unchecked Sendable {
     public func run(_ request: ModuleRequest, now: Date) async -> ActionOutcome {
         let (show, problem) = Self.show(request)
         if let problem { return .failure(problem) }
-        guard let launcher = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.exposelauncher"),
-              let executable = Bundle(url: launcher)?.executableURL else {
+        if let send = Self.sendToDock {
+            await MainActor.run { send(show.notification as CFString, nil) }
+            // Nothing to say on top of what's now on screen.
+            return .quiet
+        }
+        guard let launcher = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.exposelauncher") else {
             return .failure("Mission Control isn't on this Mac")
         }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        configuration.arguments = show.argument.map { [$0] } ?? []
         do {
-            try Process.run(executable, arguments: show.argument.map { [$0] } ?? [])
+            _ = try await NSWorkspace.shared.openApplication(at: launcher, configuration: configuration)
+            return .quiet
         } catch {
             return .failure("Mission Control didn't start", error.localizedDescription)
         }
-        // Nothing to say on top of what's now on screen.
-        return .quiet
     }
+
+    /// The Dock's own way in, as the launcher uses it; nil if it's gone.
+    private typealias DockNotification = @convention(c) (CFString, UnsafeMutableRawPointer?) -> Void
+    private static let sendToDock: DockNotification? = {
+        let services = "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices"
+        guard let handle = dlopen(services, RTLD_LAZY), let symbol = dlsym(handle, "CoreDockSendNotification") else {
+            return nil
+        }
+        return unsafeBitCast(symbol, to: DockNotification.self)
+    }()
 }

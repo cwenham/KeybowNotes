@@ -963,9 +963,9 @@ keyboard shortcuts do. It runs on the press, with no time to cancel.
 2. Spaces [Mission Control]
 ```
 
-Keywords: `Exposé`, `Expose`, `Mission Control`. It asks macOS's own Mission
-Control launcher, so it needs no permissions, and Mission Control's settings —
-grouping by app, separate spaces per display — apply.
+Keywords: `Exposé`, `Expose`, `Mission Control`. It asks the Dock, as macOS's
+own Mission Control launcher does, so it needs no permissions, and Mission
+Control's settings — grouping by app, separate spaces per display — apply.
 
 ### `ask` — ask for something, and hand it on
 

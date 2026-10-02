@@ -153,6 +153,9 @@ final class ExposeModuleTests: XCTestCase {
         XCTAssertEqual(ExposeModule.show(request([:], leaf: "Spaces")).show, .all, "else everything")
         XCTAssertEqual(ExposeModule.Show.app.argument, "2")
         XCTAssertNil(ExposeModule.Show.all.argument)
+        XCTAssertEqual(ExposeModule.Show.all.notification, "com.apple.expose.awake")
+        XCTAssertEqual(ExposeModule.Show.app.notification, "com.apple.expose.front.awake")
+        XCTAssertEqual(ExposeModule.Show.desktop.notification, "com.apple.showdesktop.awake")
     }
 
     /// An event's `show` is yes or no; Exposé's is what to show — whichever

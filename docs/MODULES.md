@@ -289,11 +289,15 @@ keywords `Display` and `Show`.
   so the app honours it too.
 
 `ExposeModule`, beside it: action type `expose`, keywords `Exposé`, `Expose`
-and `Mission Control`. It runs macOS's Mission Control launcher
-(`com.apple.exposelauncher`), which asks the Dock: with no argument for
-Mission Control, `1` for the desktop, `2` for the app in front's windows. Each
-toggles, as the keyboard shortcuts do. It fires at once and answers quietly:
-what it did is on the screen.
+and `Mission Control`. It asks the Dock as macOS's Mission Control launcher
+(`com.apple.exposelauncher`) does: `CoreDockSendNotification`, from
+ApplicationServices, with `com.apple.expose.awake`, `.expose.front.awake` or
+`.showdesktop.awake`. Each toggles, as the keyboard shortcuts do. The call is
+made in the app: running the launcher as a child process does nothing, since
+it exits before the Dock hears it. Should the function go, the launcher is
+opened as an app instead — no argument for Mission Control, `1` for the
+desktop, `2` for the app's windows. It fires at once and answers quietly: what
+it did is on the screen, and the overlay steps aside.
 
 ## Ask
 

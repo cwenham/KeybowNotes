@@ -41,9 +41,10 @@ public enum ActionPlan: Equatable, Sendable {
     /// A web link in the default browser, any other link in the app that
     /// handles it, or a file in its default app.
     case openLink(URL)
-    case copyToClipboard(String)
+    /// As plain text, and — formatted — as HTML and RTF too.
+    case copyToClipboard(String, format: TextFormat = .auto)
     /// Pasted at the cursor in the app in front, the clipboard put back after.
-    case insertText(String)
+    case insertText(String, format: TextFormat = .auto)
     /// At the cursor without the clipboard: through accessibility, or typed.
     case insertTextDirectly(String, via: DirectInsertion.Method)
     /// A timer in Clock, started by a helper shortcut: Clock can't be
@@ -78,6 +79,7 @@ public enum ActionPlanError: Error, Equatable, CustomStringConvertible {
     case notALength(String)
     case timerTooLong(String)
     case unknownInsertion(String)
+    case unknownFormat(String)
     /// A block in a field where its reply could decide where the action goes.
     case blockNotAllowed(field: String, block: String)
     /// A template that can't be read as written: a block never closed.
@@ -111,6 +113,8 @@ public enum ActionPlanError: Error, Equatable, CustomStringConvertible {
             return "{{#\(block)}} wasn't worked out before the action ran."
         case .unknownInsertion(let word):
             return "“\(word)” isn't a way to insert text: accessibility or typing, or leave it empty for either."
+        case .unknownFormat(let word):
+            return "“\(word)” isn't a format: auto, rich or plain."
         case .notALength(let text):
             return "“\(text)” isn't a length of time or a time of day."
         case .timerTooLong(let text):
@@ -379,10 +383,10 @@ private struct Planner {
             return .playPlaylist(playlist, shuffle: shuffle)
 
         case "clipboard.copy":
-            return .copyToClipboard(try snippet(for: "text to copy"))
+            return .copyToClipboard(try snippet(for: "text to copy"), format: try format())
 
         case "text.insert":
-            return .insertText(try snippet(for: "text to insert"))
+            return .insertText(try snippet(for: "text to insert"), format: try format())
 
         case "text.insertDirect":
             let way = optional("via").lowercased()
@@ -475,6 +479,14 @@ private struct Planner {
 
     private func missingError(_ names: [String], for purpose: String) -> ActionPlanError {
         names.contains("selection") ? .nothingSelected(app: frontApp, for: purpose) : .missing(names, for: purpose)
+    }
+
+    /// Plain or formatted text: `format`, else formatted where it's Markdown.
+    private mutating func format() throws -> TextFormat {
+        let word = optional("format").lowercased()
+        guard !word.isEmpty else { return .auto }
+        guard let format = TextFormat(rawValue: word) else { throw ActionPlanError.unknownFormat(word) }
+        return format
     }
 
     /// Text to copy or insert: a template, then the text field, then the label

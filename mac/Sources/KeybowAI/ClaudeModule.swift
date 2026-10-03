@@ -22,6 +22,8 @@ public struct URLSessionTransport: ClaudeTransport {
 ///
 /// The contents are filled in first — placeholders and any blocks inside —
 /// then sent as the prompt; the reply takes the block's place as plain text.
+/// An image or PDF in them — {{clipboard}} holding a screenshot — goes as
+/// itself, where it's written among the text.
 /// The API key is kept in the Keychain by the host; the model and effort
 /// default to the Settings window's choices.
 public final class ClaudeModule: KeybowModule, @unchecked Sendable {
@@ -183,7 +185,7 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
             "model": model.id,
             "max_tokens": Self.maxTokens,
             "system": system,
-            "messages": [["role": "user", "content": prompt]],
+            "messages": [["role": "user", "content": try Self.content(prompt)]],
         ]
         // Thinking is left to the model — always on for Opus 5.5 — and effort
         // is the control for how much, and so for speed and cost.
@@ -201,6 +203,29 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
         if model.fallbacks { request.setValue("server-side-fallback-2026-07-01", forHTTPHeaderField: "anthropic-beta") }
         request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
         return request
+    }
+
+    /// The prompt as Claude takes it: the text alone — or, with images or PDFs
+    /// in it, text, image and document blocks in the order they're written.
+    static func content(_ prompt: String) throws -> Any {
+        guard MediaToken.contains(prompt) else { return prompt }
+        var blocks: [[String: Any]] = []
+        for part in MediaToken.parts(of: prompt) {
+            switch part {
+            case .text(let text):
+                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    blocks.append(["type": "text", "text": text])
+                }
+            case .media(let item):
+                if let problem = item.problem { throw ModuleError("Claude can't take that \(item.kind == .pdf ? "PDF" : "image")", problem) }
+                let source: [String: Any] = ["type": "base64", "media_type": item.mediaType,
+                                             "data": item.data.base64EncodedString()]
+                blocks.append(["type": item.kind == .pdf ? "document" : "image", "source": source])
+            case .missing:
+                throw ModuleError("The image to send is no longer to hand", "Copy it again, then press the key again.")
+            }
+        }
+        return blocks
     }
 
     /// "Opus 5.5", "opus-5.5", "claude-opus-5-5" — or a family, "opus", for
@@ -232,7 +257,7 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
             case 401: throw ModuleError("Claude didn't accept the API key", "Check it in Settings → Claude.")
             case 403: throw ModuleError("The API key isn't allowed to do that", message)
             case 404: throw ModuleError("Claude doesn't recognise that model", message)
-            case 413: throw ModuleError("That's too much text to send to Claude", message)
+            case 413: throw ModuleError("That's too much to send to Claude", message)
             case 429:
                 let wait = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "retry-after")
                 throw ModuleError("Too many requests to Claude just now",

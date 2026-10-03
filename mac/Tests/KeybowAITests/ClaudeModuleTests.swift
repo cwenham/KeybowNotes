@@ -72,6 +72,32 @@ final class ClaudeModuleTests: XCTestCase {
         XCTAssertNotNil(body["system"])
     }
 
+    func testImagesAndPDFsGoAsThemselvesWhereTheyreWritten() async throws {
+        let (module, transport) = module()
+        let image = MediaStore.shared.token(for: MediaItem(kind: .image, data: Data([1, 2]), mediaType: "image/png",
+                                                           summary: "image 4×3"))
+        let pdf = MediaStore.shared.token(for: MediaItem(kind: .pdf, data: Data([3]), mediaType: "application/pdf",
+                                                         summary: "PDF, 1 page"))
+        _ = try await module.reply(to: TemplateBlockCall(name: "ai", body: "What's in this? \(image)\nAnd \(pdf)"))
+        let messages = try XCTUnwrap(try sent(XCTUnwrap(transport.requests.first))["messages"] as? [[String: Any]])
+        let content = try XCTUnwrap(messages.first?["content"] as? [[String: Any]])
+        XCTAssertEqual(content.map { $0["type"] as? String }, ["text", "image", "text", "document"])
+        XCTAssertEqual(content[0]["text"] as? String, "What's in this? ")
+        let source = try XCTUnwrap(content[1]["source"] as? [String: String])
+        XCTAssertEqual(source, ["type": "base64", "media_type": "image/png", "data": Data([1, 2]).base64EncodedString()])
+        XCTAssertEqual((content[3]["source"] as? [String: String])?["media_type"], "application/pdf")
+    }
+
+    func testMediaThatCantGoIsRefused() async {
+        let (module, _) = module()
+        let long = MediaStore.shared.token(for: MediaItem(kind: .pdf, data: Data([3]), mediaType: "application/pdf",
+                                                          summary: "PDF, 140 pages", problem: "Too long"))
+        await assertFails(module, TemplateBlockCall(name: "ai", body: "Summarise \(long)"),
+                          message: "Claude can't take that PDF", detail: "Too long")
+        await assertFails(module, TemplateBlockCall(name: "ai", body: "Describe ⟦media:00000000⟧"),
+                          message: "The image to send is no longer to hand")
+    }
+
     func testAttributesAndSettingsChooseTheModel() async throws {
         let (module, transport) = module(model: "sonnet-5")
         _ = try await module.reply(to: TemplateBlockCall(name: "ai", body: "x"))

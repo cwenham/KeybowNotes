@@ -176,6 +176,14 @@ dependency at all: another module's values are in every action's placeholders.
   reply together, a system prompt asking for just the text wanted, and, on
   Opus 5.5 / Opus 5 / Fable 5.1, `fallbacks: "default"` so a classifier decline
   is retried on the recommended model.
+- Images and PDFs: a block's text can hold media tokens (`Media.swift` in
+  KeybowKit) — `{{clipboard}}` holding a screenshot, say. Then the message's
+  content is a list of `text`, `image` and `document` blocks, base64, in the
+  order written; without tokens it's the text alone, as before. Filling in a
+  template describes tokens everywhere but inside a block's contents, so only
+  Claude ever gets the bytes. The host reads clipboard media only when an
+  action needs `{{clipboard}}`, scaling images to 1568 on the long edge; the
+  store keeps the newest eight in memory, never on disk.
 - The reply is the response's `text` blocks, after checking `stop_reason` for a
   refusal or a cut-off. HTTP errors become messages that say what to do.
 - The transport is a protocol, so tests check the exact request and replay

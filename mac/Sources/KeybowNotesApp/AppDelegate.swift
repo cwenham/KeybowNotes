@@ -324,6 +324,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let given = ActionPlanner.values(for: selection, context: context)
         let fetchedNames = registry.fetchedNames(in: used).filter { given[$0] == nil }
         let needed = used.union(registry.valuesNeeded(toFetch: fetchedNames))
+        // An image or PDF on the clipboard, for what uses it: read only then,
+        // since it's scaled to size first.
+        if needed.contains("clipboard"), let media = ClipboardMedia.tokens(from: .general) {
+            context.environment["clipboard"] = media
+        }
         let waits = !blockTexts.isEmpty || !fetchedNames.isEmpty
         if waits, pendingWork != nil {
             overlay.showRefused("Still waiting on the last fetch or replies. Cancel it, or let it finish, then press again.",
@@ -484,7 +489,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Switched apps while waiting on replies: don't type into the wrong one.
         if inserts, let frontApp, NSWorkspace.shared.frontmostApplication?.processIdentifier != frontApp {
             switch planned.plan {
-            case .insertText(let text), .insertTextDirectly(let text, _):
+            case .insertText(let text, _), .insertTextDirectly(let text, _):
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(text, forType: .string)
             default:

@@ -49,8 +49,10 @@ public enum Template {
                 value(for: body, params: params, now: now, calendar: calendar, locale: locale, missing: &missing)
             },
             replies: blocks, standIn: standIn, encode: encode)
-        return Result(text: rendering.text ?? "", missing: rendering.missing, unresolved: rendering.pending,
-                      problems: document.problems)
+        // An image or PDF stands as a token: only a block's contents keep it
+        // — for Claude — and everywhere else it's described.
+        return Result(text: MediaToken.describe(rendering.text ?? ""), missing: rendering.missing,
+                      unresolved: rendering.pending, problems: document.problems)
     }
 
     /// The names a template uses, without fallbacks or formats: "selection",

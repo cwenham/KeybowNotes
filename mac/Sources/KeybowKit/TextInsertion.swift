@@ -17,14 +17,14 @@ public enum TextInsertion {
     public static let settleTime: Duration = .milliseconds(400)
 
     @MainActor
-    public static func insert(_ text: String) async throws {
+    public static func insert(_ text: String, format: TextFormat = .plain) async throws {
         guard AXIsProcessTrusted() else { throw Failure.notAllowed }
         let pasteboard = NSPasteboard.general
         let saved = PasteboardContents(pasteboard)
 
         pasteboard.clearContents()
         let item = NSPasteboardItem()
-        item.setString(text, forType: .string)
+        PasteboardText(text, format: format).write(to: item)
         item.setData(Data(), forType: PasteboardContents.transient)
         pasteboard.writeObjects([item])
         let ours = pasteboard.changeCount
@@ -33,6 +33,62 @@ public enum TextInsertion {
         try? await Task.sleep(for: settleTime)
         // Only if it's still ours: something else may have copied meanwhile.
         if pasteboard.changeCount == ours { saved.restore(to: pasteboard) }
+    }
+}
+
+/// How text goes on the clipboard: as itself, or formatted too.
+public enum TextFormat: String, CaseIterable, Sendable {
+    /// Formatted when it's written in Markdown: a heading, a list, bold or
+    /// italic, a link.
+    case auto
+    /// Formatted, from Markdown, always.
+    case rich
+    /// The text alone.
+    case plain
+}
+
+/// Text for the clipboard. Always there as plain text — Markdown as written,
+/// for a plain field or a Markdown editor — and, formatted, as HTML and RTF
+/// too, which Mail, Notes and Pages paste as headings, lists and bold.
+public struct PasteboardText {
+    public let plain: String
+    public let html: String?
+    public let rtf: Data?
+
+    @MainActor
+    public init(_ text: String, format: TextFormat) {
+        plain = text
+        let body = NotesHTML.from(markdown: text, links: true)
+        guard format == .rich || (format == .auto && Self.isFormatted(body)) else {
+            html = nil
+            rtf = nil
+            return
+        }
+        // The system font rather than a browser's Times, at the size the
+        // pasted-into app gives text.
+        let page = "<html><head><meta charset=\"utf-8\"></head>"
+            + "<body style=\"font-family: -apple-system, 'Helvetica Neue', sans-serif\">\(body)</body></html>"
+        html = page
+        let attributed = try? NSAttributedString(
+            data: Data(page.utf8),
+            options: [.documentType: NSAttributedString.DocumentType.html,
+                      .characterEncoding: String.Encoding.utf8.rawValue],
+            documentAttributes: nil)
+        rtf = attributed.flatMap {
+            try? $0.data(from: NSRange(location: 0, length: $0.length),
+                         documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf])
+        }
+    }
+
+    /// Markdown that came out formatted: more than plain lines of text.
+    static func isFormatted(_ html: String) -> Bool {
+        ["<h1>", "<h2>", "<h3>", "<ul>", "<ol>", "<b>", "<i>", "<a href"].contains { html.contains($0) }
+    }
+
+    public func write(to item: NSPasteboardItem) {
+        item.setString(plain, forType: .string)
+        if let html { item.setString(html, forType: .html) }
+        if let rtf { item.setData(rtf, forType: .rtf) }
     }
 }
 

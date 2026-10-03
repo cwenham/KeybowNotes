@@ -778,6 +778,7 @@ values come from the module, not the core.
 |---|---|
 | `text` | The text, placeholders and `\n` new lines included; kept exactly, spaces and all. |
 | `template` | A file whose text is inserted instead. |
+| `format` | `auto` (the default): pasted formatted when the text is Markdown, where the app takes formatting. `rich`: formatted always. `plain`: the text alone. See [Formatted text](#formatted-text). |
 
 With neither, the leaf's label is inserted. Like typing it, it goes wherever
 the cursor is in the app in front, and replaces any selected text — so
@@ -832,6 +833,7 @@ typing would go wrong. Both ways need **Accessibility access**.
 |---|---|
 | `text` | The text, placeholders and `\n` new lines included; kept exactly, spaces and all. |
 | `template` | A file whose text is copied instead. |
+| `format` | `auto` (the default), `rich` or `plain`, as below. |
 
 With neither, the leaf's label is copied, so a list of snippets needs only
 labels. A value that `text` needs but can't find stops the action rather than
@@ -845,6 +847,23 @@ copying something incomplete.
 2. Numbers [Copy, text: "{{contact.phone}}"]
    1. Rudy Rudolph
 ```
+
+#### Formatted text
+
+Copy and Insert put Markdown on the clipboard formatted as well as plain:
+headings (`#` to `###`), lists, `**bold**`, `*italic*` or `_italic_`, and
+`[links](https://…)`. Mail, Notes, Pages and other rich editors paste it
+formatted; a plain field, a terminal or a Markdown editor gets the Markdown as
+written. Most useful for a Claude reply, which comes back in Markdown:
+
+```
+1. Draft [Copy, text: "{{#ai}}Write release notes for: {{selection}}{{/ai}}"]
+```
+
+With `format: auto`, the default, text with none of that formatting goes on
+plain, so a phone number or a sentence pastes in the style of where it lands.
+`format: rich` formats even plain text, in the system font; `format: plain`
+never does.
 
 ### `display` — show text on screen
 
@@ -1055,6 +1074,13 @@ the block's place. `{{#ai}}` asks Claude:
   Blocks side by side are asked at the same time; the same block twice is asked
   once. Nesting can go as deep as you like — nothing about it is recursive — but
   one key press may ask for at most 24 replies, since each can cost money.
+- **Images and PDFs go as themselves.** When `{{clipboard}}` holds an image or a
+  PDF (see [What you were doing](#where-values-come-from)), a block sends it to
+  Claude where it's written among the text:
+  `{{#ai}}What does this error mean? {{clipboard}}{{/ai}}`. Images are scaled
+  to 1568 points on their long side first, the size Claude works best at; a PDF
+  goes as it is, up to Claude's limit of 100 pages. Anywhere outside a block,
+  an image stands as a description — "[image 1568×980]" — never as itself.
 - **The reply is plain text.** It's never read as a template: `{{…}}` in a reply
   stays as written.
 - **Attributes** go in the opening tag, `key="value"` (or `key=value` without
@@ -1084,8 +1110,9 @@ the block's place. `{{#ai}}` asks Claude:
 
 Claude needs an **API key**, kept in the Keychain from Settings → Claude. Make
 it in a Claude Console workspace with a spend limit. Requests go to Anthropic
-with `{{selection}}` or `{{clipboard}}` text in them when the prompt uses them;
-neither the prompts nor the replies are written to the log. With Opus 5.5,
+with `{{selection}}` or `{{clipboard}}` in them — text, an image or a PDF — when
+the prompt uses them; neither the prompts nor the replies are written to the
+log, and images and PDFs are held in memory only while the action runs. With Opus 5.5,
 Opus 5 and Fable 5.1, a request Claude's safety classifiers decline is retried
 on the model Anthropic recommends for it (`fallbacks: "default"`).
 
@@ -1289,6 +1316,13 @@ Highest priority first:
 4. **What you were doing:** `{{selection}}` (the selected text, trimmed),
    `{{clipboard}}` (its text, trimmed) and `{{frontApp}}` (the app in front when
    the key was pressed — KeybowNotes never takes focus).
+
+   `{{clipboard}}` can be an image or a PDF too, when that's what was copied:
+   a screenshot copied with ⌃⇧⌘4, an image copied in Preview or a browser, or
+   image and PDF files copied in the Finder — up to five, a line each. Text
+   wins when there's text: a file copied in the Finder that isn't an image or a
+   PDF is its name, as before. A Claude block sends an image or PDF as itself;
+   everywhere else it's a description, "[image 1568×980]" or "[PDF, 12 pages]".
 
    The selection is read only when the action uses it, through the
    accessibility API, which needs **Accessibility access** (Privacy & Security).

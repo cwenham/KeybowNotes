@@ -240,6 +240,11 @@ enum FieldHelp {
                 A file whose text is copied instead.
                 Example: signature.md
                 """,
+            "format": """
+                auto: formatted too when the text is Markdown — headings, lists, **bold**, *italic*, links — so Mail, \
+                Notes and Pages paste it formatted; plain fields get the Markdown. rich: formatted always. plain: the text alone.
+                Example: plain
+                """,
         ],
         "text.insert": [
             "text": """
@@ -249,6 +254,11 @@ enum FieldHelp {
             "template": """
                 A file whose text is inserted instead.
                 Example: signature.md
+                """,
+            "format": """
+                auto: pasted formatted when the text is Markdown — headings, lists, **bold**, *italic*, links — where \
+                the app takes formatting; elsewhere, the Markdown. rich: formatted always. plain: the text alone.
+                Example: plain
                 """,
         ],
         "text.insertDirect": [

@@ -202,10 +202,10 @@ public enum ActionRunner {
             }
             return .success("Opened \(url.host ?? url.scheme ?? "the link")", url.absoluteString)
 
-        case .insertText(let text):
+        case .insertText(let text, let format):
             let app = await MainActor.run { NSWorkspace.shared.frontmostApplication?.localizedName }
             do {
-                try await TextInsertion.insert(text)
+                try await TextInsertion.insert(text, format: format)
             } catch TextInsertion.Failure.notAllowed {
                 throw RunError("KeybowNotes needs Accessibility access to type into other apps",
                                "Allow it in System Settings → Privacy & Security → Accessibility.")
@@ -231,8 +231,8 @@ public enum ActionRunner {
             return .success("Inserted “\(flat.count > 50 ? String(flat.prefix(50)) + "…" : flat)”",
                             app.map { "into \($0), \(how)" } ?? how.capitalized)
 
-        case .copyToClipboard(let text):
-            await copy(text)
+        case .copyToClipboard(let text, let format):
+            await copy(text, format: format)
             let flat = text.replacingOccurrences(of: "\n", with: " ")
             let lines = text.split(separator: "\n", omittingEmptySubsequences: false).count
             return .success("Copied “\(flat.count > 50 ? String(flat.prefix(50)) + "…" : flat)”",
@@ -241,10 +241,12 @@ public enum ActionRunner {
     }
 
     @MainActor
-    private static func copy(_ text: String) {
+    private static func copy(_ text: String, format: TextFormat) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        let item = NSPasteboardItem()
+        PasteboardText(text, format: format).write(to: item)
+        pasteboard.writeObjects([item])
     }
 
     /// Runs a shortcut, handing it text as a file: the command line takes no

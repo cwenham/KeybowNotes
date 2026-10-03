@@ -33,6 +33,14 @@ final class LinkAndClipboardTests: XCTestCase {
             templatesDirectory: templates, environment: environment)).plan
     }
 
+    func testCopyAndInsertCanBeFormattedOrPlain() throws {
+        let outline = "1. Snippets [Copy]\n   1. Default\n   2. Plain [format: plain]\n   3. Pasted [Insert, format: rich]\n   4. Odd [format: fancy]\n"
+        XCTAssertEqual(try plan(outline, path: [0, 0]), .copyToClipboard("Default", format: .auto))
+        XCTAssertEqual(try plan(outline, path: [0, 1]), .copyToClipboard("Plain", format: .plain))
+        XCTAssertEqual(try plan(outline, path: [0, 2]), .insertText("Pasted", format: .rich))
+        assertRefused(outline, path: [0, 3], with: .unknownFormat("fancy"))
+    }
+
     private func assertRefused(_ outline: String, path: [Int], environment: [String: String] = [:],
                                with expected: ActionPlanError, file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertThrowsError(try plan(outline, path: path, environment: environment), file: file, line: line) {
@@ -176,7 +184,7 @@ final class LinkAndClipboardTests: XCTestCase {
         2. Quote [Paste, quote.md]
         """
         XCTAssertEqual(try plan(outline, path: [0, 0]), .insertText("Kind regards"))
-        guard case .insertText(let stamp) = try plan(outline, path: [0, 1]) else { return XCTFail() }
+        guard case .insertText(let stamp, _) = try plan(outline, path: [0, 1]) else { return XCTFail() }
         XCTAssertTrue(stamp.hasSuffix(" "), "kept exactly, trailing space and all")
         XCTAssertEqual(try plan(outline, path: [0, 2], environment: ["selection": "to be"]), .insertText("“to be”"),
                        "pasting replaces the selection, so this wraps it")

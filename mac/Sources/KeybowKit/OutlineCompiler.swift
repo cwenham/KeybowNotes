@@ -89,7 +89,7 @@ public enum OutlineCompiler {
         "start", "duration", "alertMinutes", "calendar", "calendarId", "notes", "show",
         "due", "list", "to", "body", "subject",
         "app", "bundleId", "open", "url", "target", "name", "input", "via", "text",
-        "shortcut", "query", "playlist", "album", "artist", "shuffle", "instant",
+        "shortcut", "query", "playlist", "album", "artist", "shuffle", "instant", "format",
     ]
     /// The types built in, for checking a type named in a pair.
     public static let builtInTypes: Set<String> = [

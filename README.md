@@ -76,6 +76,10 @@ where an action goes — links, phone numbers, apps — so text you select can't
 it there. Claude Opus 5.5 at low effort by default; your API key stays in the
 Keychain.
 
+Copy a screenshot, an image or a PDF, and `{{clipboard}}` sends it to Claude as
+itself — *What does this error mean? {{clipboard}}*. Replies come back in
+Markdown, and Copy and Insert paste them formatted into Mail, Notes or Pages.
+
 **Values from APIs** — bring a live value from a web API into whatever a key writes
 or opens: the temperature, an exchange rate, the next train, a parcel's status. In
 *Data Sources*, from the menu bar, give the API's address and its key if it needs

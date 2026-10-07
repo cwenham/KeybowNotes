@@ -30,7 +30,16 @@ struct SettingsView: View {
 
     private var general: some View {
         Section("General") {
-            LabeledContent("Keypads", value: settings.keybowStatus)
+            LabeledContent("Keypads") {
+                HStack {
+                    Text(settings.keybowStatus).foregroundStyle(.secondary)
+                    Button("Troubleshoot…") { actions.troubleshoot(nil) }
+                        .controlSize(.small)
+                }
+            }
+            ForEach(settings.missingKeypads) { missing in
+                MissingKeypadRow(missing: missing, actions: actions)
+            }
             Toggle("Open at login", isOn: Binding(get: { settings.openAtLogin }, set: actions.setOpenAtLogin))
             if let note = settings.openAtLoginNote {
                 Text(note).font(.caption).foregroundStyle(.secondary)
@@ -247,6 +256,37 @@ struct SettingsView: View {
 
     private func abbreviated(_ path: String) -> String {
         (path as NSString).abbreviatingWithTildeInPath
+    }
+}
+
+/// A keypad that was set up, or that the tree names, and isn't connected.
+private struct MissingKeypadRow: View {
+    let missing: MissingKeypad
+    let actions: SettingsActions
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("The \(missing.keypad.name) isn’t connected")
+                Text(seen).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if missing.canForget, let serial = missing.keypad.serial {
+                Button("Forget") { actions.forgetKeypad(serial) }
+                    .controlSize(.small)
+                    .help("For a keypad given away: stop looking for it")
+            }
+            Button("Find It…") { actions.troubleshoot(missing.id) }
+                .controlSize(.small)
+        }
+    }
+
+    private var seen: String {
+        guard let last = missing.keypad.lastSeen else {
+            return missing.keypad.serial.map { "ID \($0) — not seen on this Mac yet" } ?? "Not seen on this Mac yet"
+        }
+        return "Last seen \(Troubleshooter.when(last))" + (missing.keypad.lastPlace.map { ", on \($0)" } ?? "")
     }
 }
 

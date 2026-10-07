@@ -49,16 +49,27 @@ final class KeypadSetupModel {
     var steps: [KeypadSetup.Step: StepState] = [:]
     private var task: Task<Void, Never>?
     private var poll: Timer?
+    /// Finding out why a keypad hasn't turned up: listening from the start,
+    /// shown when nothing's found soon, a wait goes on, or setting up fails.
+    let troubleshooter: TroubleshooterModel
+    private(set) var troubleshooterShown = false
+    private var opened = Date()
+    /// Since when a step has waited on the person.
+    private var waitingSince: Date?
+    /// When setting up began: it restarts the keypad, on purpose.
+    private var runStarted: Date?
     /// The board the CircuitPython choice was last set for, so a new choice
     /// gets a fresh default.
     private var defaultsFor: String?
 
     init(package: FirmwarePackage?, backups: URL, stopProgram: @escaping @Sendable (String) async -> Bool,
-         isConnected: @escaping @Sendable (String) async -> Bool) {
+         isConnected: @escaping @Sendable (String) async -> Bool, connectedKeypads: @escaping () -> Set<String>) {
         self.package = package
         self.backups = backups
         self.stopProgram = stopProgram
         self.isConnected = isConnected
+        troubleshooter = TroubleshooterModel(sought: [], since: Date().addingTimeInterval(-1800), package: package,
+                                             inSetup: true, connected: connectedKeypads)
     }
 
     var isRunning: Bool {
@@ -102,9 +113,14 @@ final class KeypadSetupModel {
     // MARK: Looking
 
     func start() {
+        opened = Date()
+        troubleshooter.listen()
         refresh()
         poll = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refresh() }
+            MainActor.assumeIsolated {
+                self?.refresh()
+                self?.considerTroubleshooting()
+            }
         }
     }
 
@@ -112,14 +128,47 @@ final class KeypadSetupModel {
         poll?.invalidate()
         poll = nil
         task?.cancel()
+        troubleshooter.stop()
+    }
+
+    /// Brings the troubleshooter in when a keypad hasn't turned up: none
+    /// found a few seconds after opening, or one said not to be listed, or
+    /// a wait on the person going on too long.
+    private func considerTroubleshooting() {
+        guard !troubleshooterShown else { return }
+        switch phase {
+        case .choosing:
+            let none = candidates.isEmpty && Date().timeIntervalSince(opened) >= 4
+            if none || selection == Self.newBoard && Date().timeIntervalSince(opened) >= 4 { showTroubleshooter() }
+        case .running:
+            if let waitingSince, Date().timeIntervalSince(waitingSince) >= 15 { showTroubleshooter() }
+        case .failed:
+            showTroubleshooter()
+        case .finished:
+            break
+        }
+    }
+
+    func showTroubleshooter() {
+        if let serial = selected?.serial {
+            troubleshooter.sought = [SoughtKeypad(name: model.title, model: model, serial: serial)]
+        } else {
+            troubleshooter.sought = []
+        }
+        troubleshooter.restarts = runStarted.map { [DateInterval(start: $0, end: Date().addingTimeInterval(3600))] } ?? []
+        troubleshooter.allowsDeviceActions = !isRunning
+        troubleshooterShown = true
+        troubleshooter.start()
     }
 
     /// What's plugged in, read off the main thread: it reads the drives.
     func refresh() {
         guard !isRunning else { return }
         let package = package
+        let demo = TroubleshooterDemo.scenario != nil
         Task.detached {
-            let found = SetupCandidate.all(package: package)
+            // Trying the troubleshooter out: nothing's plugged in.
+            let found = demo ? [] : SetupCandidate.all(package: package)
             await MainActor.run { [weak self] in self?.update(found) }
         }
     }
@@ -195,6 +244,9 @@ final class KeypadSetupModel {
         let model = model
         steps = Dictionary(uniqueKeysWithValues: KeypadSetup.Step.allCases.map { ($0, StepState.pending) })
         phase = .running
+        runStarted = Date()
+        waitingSince = nil
+        troubleshooterShown = false
         let setup = KeypadSetup(package: package, stopProgram: stopProgram, isConnected: isConnected)
         task = Task { [weak self] in
             let (events, sink) = AsyncStream.makeStream(of: KeypadSetup.Event.self)
@@ -219,12 +271,19 @@ final class KeypadSetupModel {
 
     func again() {
         phase = .choosing
+        troubleshooterShown = false
+        opened = Date()
         steps = [:]
         defaultsFor = nil
         refresh()
     }
 
     private func apply(_ event: KeypadSetup.Event) {
+        if case .waiting = event {
+            if waitingSince == nil { waitingSince = Date() }
+        } else {
+            waitingSince = nil
+        }
         switch event {
         case .started(let step, let text): steps[step] = .running(text)
         case .waiting(let step, let text): steps[step] = .waiting(text)
@@ -238,6 +297,7 @@ final class KeypadSetupModel {
         switch result {
         case .success(let outcome):
             phase = .finished(outcome, model)
+            troubleshooterShown = false
             Log.info("set up a \(model.title): \(outcome.serial)")
         case .failure(let error):
             let (message, detail): (String, String?) = error is CancellationError ? ("Stopped", nil)
@@ -250,6 +310,7 @@ final class KeypadSetupModel {
             }
             phase = .failed(message, detail)
             Log.error("keypad setup: \(message)")
+            if !(error is CancellationError) { showTroubleshooter() }
         }
     }
 }
@@ -277,15 +338,49 @@ struct KeypadSetupView: View {
                       systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
             }
-            switch model.phase {
-            case .choosing: chooser
-            default: progress
+            ScrollViewReader { scroller in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        switch model.phase {
+                        case .choosing: chooser
+                        default: progress
+                        }
+                    }
+                    .padding(.trailing, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .onChange(of: model.troubleshooterShown) { _, shown in
+                    guard shown else { return }
+                    withAnimation { scroller.scrollTo("troubleshooter", anchor: .top) }
+                }
             }
-            Spacer(minLength: 0)
             footer
         }
         .padding(20)
-        .frame(width: 580, height: 560)
+        .frame(width: 600, height: model.troubleshooterShown ? 700 : 560)
+    }
+
+    /// Why a keypad hasn't turned up, and what to do.
+    @ViewBuilder
+    private var troubleshooting: some View {
+        if model.troubleshooterShown {
+            GroupBox {
+                TroubleshooterPanel(model: model.troubleshooter)
+                    .padding(6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } label: {
+                Label(troubleshootingTitle, systemImage: "stethoscope").font(.headline)
+            }
+            .id("troubleshooter")
+        }
+    }
+
+    private var troubleshootingTitle: String {
+        switch model.phase {
+        case .choosing: return "Don’t see your keypad?"
+        case .running: return "Still waiting? Here’s what the Mac sees"
+        default: return "What went wrong"
+        }
     }
 
     // MARK: Choosing
@@ -301,6 +396,7 @@ struct KeypadSetupView: View {
             } label: {
                 Text("Keypad").font(.headline)
             }
+            troubleshooting
             if model.selected == nil || model.selected?.inBootloader == true {
                 modelChoice
             }
@@ -484,6 +580,7 @@ struct KeypadSetupView: View {
             default:
                 EmptyView()
             }
+            troubleshooting
         }
     }
 
@@ -546,23 +643,29 @@ final class KeypadSetupWindowController: NSObject, NSWindowDelegate {
     private let backups: URL
     private let stopProgram: @Sendable (String) async -> Bool
     private let isConnected: @Sendable (String) async -> Bool
+    private let connectedKeypads: () -> Set<String>
     private let openEditor: () -> Void
 
     init(backups: URL, stopProgram: @escaping @Sendable (String) async -> Bool,
-         isConnected: @escaping @Sendable (String) async -> Bool, openEditor: @escaping () -> Void) {
+         isConnected: @escaping @Sendable (String) async -> Bool, connectedKeypads: @escaping () -> Set<String>,
+         openEditor: @escaping () -> Void) {
         self.backups = backups
         self.stopProgram = stopProgram
         self.isConnected = isConnected
+        self.connectedKeypads = connectedKeypads
         self.openEditor = openEditor
     }
 
     func show() {
         if window == nil {
             let model = KeypadSetupModel(package: FirmwarePackage.locate(), backups: backups, stopProgram: stopProgram,
-                                         isConnected: isConnected)
+                                         isConnected: isConnected, connectedKeypads: connectedKeypads)
             let view = KeypadSetupView(model: model, openEditor: { [weak self] in self?.openEditor() },
                                        close: { [weak self] in self?.window?.performClose(nil) })
-            let window = NSWindow(contentViewController: NSHostingController(rootView: view))
+            let hosting = NSHostingController(rootView: view)
+            // Taller when the troubleshooter comes in.
+            hosting.sizingOptions = [.preferredContentSize]
+            let window = NSWindow(contentViewController: hosting)
             window.title = "Set Up a Keypad"
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
@@ -571,6 +674,7 @@ final class KeypadSetupWindowController: NSObject, NSWindowDelegate {
             self.window = window
             self.model = model
             model.start()
+            WindowSnapshots.keep(window, as: "setup")
         }
         window?.bringToFront()
     }

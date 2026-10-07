@@ -129,3 +129,32 @@ final class ConfigStore {
         (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
     }
 }
+
+/// Pictures of a window as drawn, for checking a layout without screen
+/// recording: development builds only, with KEYBOW_WINDOW_SNAPSHOTS=<folder>.
+/// Each window writes <name>.png there every two seconds while it's open.
+@MainActor
+enum WindowSnapshots {
+    static func keep(_ window: NSWindow, as name: String) {
+        guard Bundle.main.bundleIdentifier == nil,
+              let folder = ProcessInfo.processInfo.environment["KEYBOW_WINDOW_SNAPSHOTS"] else { return }
+        let url = URL(fileURLWithPath: folder).appendingPathComponent("\(name).png")
+        Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak window] timer in
+            MainActor.assumeIsolated {
+                guard let window, window.isVisible, let view = window.contentView else { return timer.invalidate() }
+                // The layers, as drawn: caching the display leaves SwiftUI's text out.
+                guard let layer = view.layer, let picture = NSBitmapImageRep(
+                    bitmapDataPlanes: nil, pixelsWide: Int(view.bounds.width * 2), pixelsHigh: Int(view.bounds.height * 2),
+                    bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                    bytesPerRow: 0, bitsPerPixel: 0), let context = NSGraphicsContext(bitmapImageRep: picture) else { return }
+                let cg = context.cgContext
+                cg.setFillColor(NSColor.windowBackgroundColor.cgColor)
+                cg.fill(CGRect(x: 0, y: 0, width: picture.pixelsWide, height: picture.pixelsHigh))
+                cg.translateBy(x: 0, y: CGFloat(picture.pixelsHigh))
+                cg.scaleBy(x: 2, y: -2)
+                layer.render(in: cg)
+                try? picture.representation(using: .png, properties: [:])?.write(to: url)
+            }
+        }
+    }
+}

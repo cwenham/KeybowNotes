@@ -56,6 +56,21 @@ firmware is all that's copied. The app carries this folder in its Resources as
    runs at power-on, and until it does there is no data port. From the console,
    `import microcontroller; microcontroller.reset()` does the same.
 
+## What the keys say
+
+The firmware lights the keys to say what's wrong when it can't say it on USB:
+
+| Keys | Meaning |
+|---|---|
+| Slowly pulsing red | Running, and no host is talking to it |
+| Steady blue | Running, but `boot.py` hasn't turned the data port on: restart it |
+| Flashing purple every few seconds | Crashing and starting again: its console says why |
+| Dark | No power — or in its bootloader, or not running this firmware |
+
+Pulsing red while the Mac sees nothing of the keypad is almost always a cable
+that only charges. The app's troubleshooter (*Find a Missing Keypad…*) asks
+about the keys and works the rest out from the USB log.
+
 ## Ports
 
 After the reset the keypad presents two serial ports:

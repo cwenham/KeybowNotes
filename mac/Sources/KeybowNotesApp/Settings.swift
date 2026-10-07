@@ -35,6 +35,8 @@ final class AppSettings {
     // MARK: Live status, shown in the window but not saved
 
     var keybowStatus = "Looking for keypads…"
+    /// Keypads known, or named in the tree, that aren't connected.
+    var missingKeypads: [MissingKeypad] = []
     var openAtLogin = false
     var accessibilityAllowed = false
     /// Why Open at Login isn't simply on or off, when it isn't.
@@ -133,6 +135,19 @@ struct SettingsActions {
     var reloadConfig: () -> Void
     var loadCalendarChoices: () async -> (calendars: [EventKitService.Choice], lists: [EventKitService.Choice])
     var setOpenAtLogin: (Bool) -> Void
+    /// Opens the troubleshooter on a keypad, by unique ID or model; nil for
+    /// every one that's missing.
+    var troubleshoot: (String?) -> Void
+    var forgetKeypad: (String) -> Void
+}
+
+/// A keypad Settings shows as not connected.
+struct MissingKeypad: Identifiable, Equatable {
+    let keypad: SoughtKeypad
+    /// Known from having been plugged in, rather than named in the tree.
+    let canForget: Bool
+
+    var id: String { keypad.serial ?? keypad.model?.rawValue ?? keypad.name }
 }
 
 @MainActor
@@ -157,6 +172,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             window.center()
             window.setFrameAutosaveName("KeybowNotesSettings")
             self.window = window
+            WindowSnapshots.keep(window, as: "settings")
         }
         window?.bringToFront()
     }

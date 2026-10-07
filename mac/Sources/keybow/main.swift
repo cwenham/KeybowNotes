@@ -36,6 +36,13 @@ usage: keybow <command>
                      supports, then the firmware, then a restart. Files it
                      replaces are backed up first. A board running CircuitPython
                      is found by itself; KEYBOW_DEVICE=<id> picks one of two
+  troubleshoot [--since 3h] [--for <id|model>] [--keys dark|red|blue|purple|lit]
+               [--console] [--watch]
+                     look for the keypads this Mac has known and the tree
+                     names, and say what's wrong and how to fix it: from
+                     what's plugged in, the USB log, drives and ports.
+                     --console starts a keypad's program again to read what it
+                     says; --watch watches while you unplug one and plug it in
   upgrade-outline <outline>
                      rewrite an older outline in the current syntax: [brackets]
                      instead of (parentheses), plus # contacts and # projects
@@ -474,6 +481,72 @@ case "setup":
         } catch {
             fail("\(error)")
         }
+    }
+    dispatchMain()
+
+case "troubleshoot":
+    var rest = Array(arguments.dropFirst())
+    func option(_ name: String) -> String? {
+        guard let index = rest.firstIndex(of: name), index + 1 < rest.count else { return nil }
+        defer { rest.removeSubrange(index...index + 1) }
+        return rest[index + 1]
+    }
+    var hours = 3.0
+    if let since = option("--since") {
+        guard let value = Double(since.trimmingCharacters(in: CharacterSet(charactersIn: "hH"))) else {
+            fail("--since takes hours: 3h")
+        }
+        hours = value
+    }
+    let wanted = option("--for")
+    var keys: KeyLights?
+    if let word = option("--keys") {
+        let words: [String: KeyLights] = ["dark": .dark, "red": .pulsingRed, "blue": .steadyBlue,
+                                          "purple": .flashingPurple, "lit": .treeColours]
+        guard let lights = words[word.lowercased()] else { fail("--keys is dark, red, blue, purple or lit") }
+        keys = lights
+    }
+    let readConsoles = rest.contains("--console")
+    let watchPlugIn = rest.contains("--watch")
+    let known = KnownKeypads.load(UserDefaults(suiteName: KnownKeypads.appDomain) ?? .standard)
+    let config = try? ConfigFile.load(configURL([])).config
+    var sought = SoughtKeypad.all(known: known, config: config)
+    if let wanted {
+        sought = sought.filter { Troubleshooter.same($0.serial, wanted) || $0.model == KeypadDevice.Model(words: wanted) }
+        if sought.isEmpty { sought = [KeypadDevice.Model(words: wanted).map { SoughtKeypad(name: $0.title, model: $0) }
+                                      ?? SoughtKeypad(name: "Keypad \(wanted)", serial: wanted)] }
+    }
+
+    Task {
+        let package = FirmwarePackage.locate()
+        var watched: DateInterval?
+        var heard: [USBLogEvent] = []
+        if watchPlugIn {
+            let watcher = USBLogWatcher()
+            let events = watcher.start()
+            let listening = Task { for await event in events { heard.append(event); print("  … \(event.location) \(event.kind)") } }
+            let start = Date()
+            print("Watching for 30 seconds: unplug the keypad, then plug it back in.")
+            try? await Task.sleep(for: .seconds(30))
+            watcher.stop()
+            await listening.value
+            watched = DateInterval(start: start, end: Date())
+        }
+        var facts = await TroubleshootingFacts.gather(sought: sought, since: Date().addingTimeInterval(-hours * 3600),
+                                                     connected: nil, package: package)
+        // What the log hadn't written down yet, from watching.
+        for event in heard where !facts.events.contains(event) { facts.events.append(event) }
+        facts.events.sort { $0.date < $1.date }
+        facts.watchedPlugIn = watched
+        facts.keys = keys
+        if readConsoles {
+            for board in facts.boards {
+                guard let console = board.consolePort, let text = try? CircuitPythonConsole.listen(port: console) else { continue }
+                facts.console[board.serial.uppercased()] = ConsoleReading(text: text)
+            }
+        }
+        print(Troubleshooter.report(facts, findings: Troubleshooter.diagnose(facts)))
+        exit(0)
     }
     dispatchMain()
 

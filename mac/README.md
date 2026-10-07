@@ -29,6 +29,10 @@ swift test
 | `ActionPlan.swift` | A selection into exactly what to do, or a clear reason it can't — pure, tested |
 | `ActionRunner.swift` | Carries a plan out: AppleScript via `osascript`, `NSWorkspace`, `shortcuts` |
 | `EventKitService.swift` | Events and reminders through EventKit, in the packaged app |
+| `USBInventory.swift` | Every USB device plugged in, where (location IDs into words), and what an RP2040 is running |
+| `USBLog.swift` | macOS's USB log, read (`log show`) and watched (`log stream`): arrivals, departures, failed attempts |
+| `Troubleshooting.swift` | What a diagnosis is drawn from: keypads known and sought, drives, ports, console readings, key lights |
+| `Troubleshooter.swift` | The rules: what's wrong with a missing or silent keypad, and what to do — plus a plain-text report |
 
 ## The app
 
@@ -105,11 +109,17 @@ rather than KeybowNotes; each app you drive asks once.
 | `--pace 1.5` | seconds between simulated presses |
 | `--debug-snapshots <dir>` | write each overlay state as a PNG and log its window frame |
 | `--set-up-keypad` | open *Set Up a Keypad…* on launch |
+| `--troubleshoot` | open *Find a Missing Keypad…* on launch |
 
 A development build sets keypads up from the repository's `firmware` folder;
 `KEYBOW_FIRMWARE` names another. For trying the setup window out,
 `KEYBOW_SETUP_SELECT` chooses a board by its ID (or `new`), and
 `KEYBOW_SETUP_START=1` presses Set Up once it can be — development builds only.
+`KEYBOW_TROUBLESHOOT_DEMO=hub` (or `nodata`, `dataport`, `setup`) gives the
+troubleshooter made-up keypads in made-up trouble, and `KEYBOW_WINDOW_SNAPSHOTS=<dir>`
+has the setup, troubleshooter and settings windows write a PNG of themselves
+there every two seconds — for checking layouts without anyone's own devices or
+screen recording.
 
 Two details that are easy to get wrong, both learned the hard way:
 
@@ -134,7 +144,15 @@ swift build
 ./.build/debug/keybow demo      # light each key in turn
 ./.build/debug/keybow leds ff0000 00ff00 0000ff 000000
 ./.build/debug/keybow setup     # set a keypad up: CircuitPython, the firmware, a restart
+./.build/debug/keybow troubleshoot   # what's wrong with a keypad that isn't working
 ```
+
+`troubleshoot` looks for the keypads the app has seen and the tree names, and
+prints what it finds and what to do, with what it was drawn from: the USB devices,
+the USB log (`--since 6h` reads further back), drives and ports. `--watch` watches
+for 30 seconds while you unplug a keypad and plug it back in; `--keys red` (or
+`dark`, `blue`, `purple`, `lit`) says what its keys are doing; `--console` starts
+each keypad's program again and reads what it prints.
 
 `setup` takes the model for a board that can't say — `keybow setup rgbkeypad` for
 one waiting in its bootloader — and `--keep-circuitpython` to copy only the

@@ -124,6 +124,13 @@ public enum USBSerialPorts {
         public let registryIDs: [UInt64]
 
         public var consolePort: String? { ports.first }
+
+        public init(serial: String, model: KeypadDevice.Model, ports: [String], registryIDs: [UInt64]) {
+            self.serial = serial
+            self.model = model
+            self.ports = ports
+            self.registryIDs = registryIDs
+        }
     }
 
     /// Every keypad board running CircuitPython, in a steady order.

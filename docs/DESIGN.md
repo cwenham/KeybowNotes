@@ -118,6 +118,40 @@ majors they run on — so *Set Up a Keypad…* can make a keypad from a bare boa
    board comes back.
 6. **Hello**: done when the app's link to it has heard `HELLO`.
 
+**Finding a keypad that's gone missing.** `Troubleshooter`, in KeybowKit, works
+out why a keypad isn't working without AI or an internet connection: each rule is
+a known way a keypad goes missing, and what fixes it. It draws on what anyone can
+read without an admin's password:
+
+- **What's plugged in**, from the IO registry — every USB device, where it is
+  (macOS's location ID: a byte for the bus, a nibble per port from the Mac out, so
+  `0x14420000` is port 2 of a hub in socket 4), and what its vendor and product
+  IDs say an RP2040 is running: the firmware, its bootloader, MicroPython, or
+  something else.
+- **What macOS's USB log says happened**, read with `log show` and watched live
+  with `log stream`. The kernel logs a plug-in even when nothing comes of it:
+  *failed to address device* is something plugged in that the Mac can't talk to,
+  and *persistent enumeration failures* is macOS switching the port off after
+  eight tries. Failures on more than one of a hub's ports point at the hub. macOS
+  keeps these for a day or so, so watching while the person replugs the keypad
+  catches what history misses — and when nothing at all arrives, not even a
+  failed attempt, no data is getting through.
+- **Its drive, ports and console**: `boot_out.txt`, the firmware compared with
+  the app's, who else has its ports open (`lsof`), and — asked for — what it
+  prints when its program is started again (Ctrl-C, then Ctrl-D): a traceback,
+  safe mode and why, or the firmware's own complaint that its data port is off.
+- **What its keys are doing**, which only the person can see: the firmware pulses
+  red with no host, lights steady blue without its data port, and flashes purple
+  as it crashes and restarts. Lit with nothing reaching the Mac is a charge-only
+  cable; dark is no power.
+
+The app remembers each keypad it has seen — when, and where — so Settings can
+show one that's gone and the troubleshooter can say where it was last. It comes
+into *Set Up a Keypad…* by itself when no keypad turns up within a few seconds,
+a step waits on the person for more than 15, or setting up fails. `keybow
+troubleshoot` prints the same findings, and *Copy Report* puts them, with what
+they were drawn from, on the clipboard for someone helping.
+
 ---
 
 ## 3. Interaction model

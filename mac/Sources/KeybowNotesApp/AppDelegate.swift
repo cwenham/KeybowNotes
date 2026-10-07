@@ -35,6 +35,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var settingsWindow: SettingsWindowController?
     private var editorWindow: EditorWindowController?
     private var setupWindow: KeypadSetupWindowController?
+    private var troubleshooterWindow: TroubleshooterWindowController?
+    /// Every keypad this Mac has had plugged in: where, and when last.
+    private var knownKeypads = KnownKeypads.load()
+    /// What was plugged in when they were last noted down, and when.
+    private var noted: (serials: Set<String>, at: Date) = ([], .distantPast)
     /// Keeps the menu bar's clock up to date while a module's clock runs.
     private var moduleClock: Timer?
     /// Modules' commands go after this, rebuilt each time the menu opens.
@@ -108,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if options.showDataSources { _ = ModuleRegistry.shared.module(id: "api")?.performMenuItem("open", now: Date()) }
         if options.editTree { showEditor() }
         if options.setUpKeypad { showKeypadSetup() }
+        if options.troubleshoot { showTroubleshooter() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -150,7 +156,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     return (await EventKitService.shared.writableCalendars(),
                             await EventKitService.shared.reminderLists())
                 },
-                setOpenAtLogin: { [weak self] enabled in self?.setOpenAtLogin(enabled) }
+                setOpenAtLogin: { [weak self] enabled in self?.setOpenAtLogin(enabled) },
+                troubleshoot: { [weak self] keypad in self?.showTroubleshooter(keypad) },
+                forgetKeypad: { [weak self] serial in self?.forgetKeypad(serial) }
             ))
         }
         refreshOpenAtLogin()
@@ -182,6 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         applyConfig()
+        updateMissingKeypads()
         Log.info("config reloaded")
         if store.mistakes.mistakeCount == 0 {
             overlay?.flashNotice("Config reloaded", symbol: "arrow.clockwise")
@@ -696,6 +705,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         addItem(to: menu, "Edit Tree…", #selector(openEditor), key: "e")
         addItem(to: menu, "Set Up a Keypad…", #selector(openKeypadSetup))
+        addItem(to: menu, "Find a Missing Keypad…", #selector(openTroubleshooter))
         addItem(to: menu, "Settings…", #selector(openSettings), key: ",")
         addItem(to: menu, "Reload Config", #selector(reloadConfig), key: "r")
         addItem(to: menu, "Open Config Folder", #selector(openConfigFolder))
@@ -808,9 +818,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 backups: ConfigStore.supportDirectory.appendingPathComponent("Keypad Backups", isDirectory: true),
                 stopProgram: { [weak self] serial in await self?.stopKeypadProgram(serial) ?? false },
                 isConnected: { [weak self] serial in await self?.isKeypadConnected(serial) ?? false },
+                connectedKeypads: { [weak self] in self?.connectedKeypads() ?? [] },
                 openEditor: { [weak self] in self?.showEditor() })
         }
         setupWindow?.show()
+    }
+
+    @objc private func openTroubleshooter() { showTroubleshooter() }
+
+    /// Looks for a keypad that's gone missing, or isn't working: `wanted`
+    /// is one's unique ID or model; nil for those not connected, else all.
+    private func showTroubleshooter(_ wanted: String? = nil) {
+        if troubleshooterWindow == nil {
+            troubleshooterWindow = TroubleshooterWindowController(
+                connected: { [weak self] in self?.connectedKeypads() ?? [] },
+                openSetup: { [weak self] in self?.showKeypadSetup() })
+        }
+        let all = SoughtKeypad.all(known: knownKeypads, config: config)
+        var sought: [SoughtKeypad]
+        if let wanted {
+            sought = all.filter { Troubleshooter.same($0.serial, wanted) || ($0.serial == nil && $0.model?.rawValue == wanted) }
+        } else {
+            sought = all.filter { !isConnected($0) }
+            if sought.isEmpty { sought = all }
+        }
+        if TroubleshooterDemo.scenario != nil { sought = [TroubleshooterDemo.keybow] }
+        troubleshooterWindow?.show(sought: sought)
+    }
+
+    /// The keypads talking to the app, by unique ID.
+    private func connectedKeypads() -> Set<String> {
+        Set(keypads.filter { $0.value.status == "connected" && $0.value.device != nil }.keys.map { $0.uppercased() })
+    }
+
+    private func isConnected(_ keypad: SoughtKeypad) -> Bool {
+        let connected = keypads.values.filter { $0.status == "connected" }.compactMap(\.device)
+        if let serial = keypad.serial { return connected.contains { Troubleshooter.same($0.serial, serial) } }
+        if let model = keypad.model { return connected.contains { $0.model == model } }
+        return !connected.isEmpty
+    }
+
+    /// Notes down where each keypad is: when what's plugged in changes, and
+    /// once a minute besides, so "last seen" stays true.
+    private func noteKeypads(_ present: [KeypadDevice]) {
+        let serials = Set(present.map(\.serial))
+        guard serials != noted.serials || Date().timeIntervalSince(noted.at) > 60 else { return }
+        noted = (serials, Date())
+        if !present.isEmpty {
+            knownKeypads = KnownKeypads.record(present, devices: USBInventory.devices(), into: knownKeypads)
+            KnownKeypads.save(knownKeypads)
+        }
+        updateMissingKeypads()
+    }
+
+    private func forgetKeypad(_ serial: String) {
+        knownKeypads.removeAll { Troubleshooter.same($0.serial, serial) }
+        KnownKeypads.save(knownKeypads)
+        updateMissingKeypads()
+    }
+
+    /// The keypads Settings shows as missing: known, or named in the tree,
+    /// but not talking to the app.
+    private func updateMissingKeypads() {
+        let sections = config.keypads
+        settings.missingKeypads = SoughtKeypad.all(known: knownKeypads, config: config)
+            .filter { !isConnected($0) }
+            .map { keypad in
+                MissingKeypad(keypad: keypad,
+                              canForget: keypad.serial != nil && !sections.contains { Troubleshooter.same($0.id, keypad.serial!) })
+            }
     }
 
     /// Ends the keypad's program so its console can restart it: this app has
@@ -863,10 +939,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Starts a driver for each keypad not yet known. One that goes away keeps
     /// its driver, which reconnects when it's back.
     private func discoverKeypads() {
-        for device in USBSerialPorts.keypads() where keypads[device.serial] == nil {
+        let present = USBSerialPorts.keypads()
+        for device in present where keypads[device.serial] == nil {
             Log.info("keypad found: \(device.model.title) \(device.serial)")
             addKeypad(device, serial: device.serial)
         }
+        noteKeypads(present)
     }
 
     @discardableResult
@@ -953,6 +1031,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         connectionItem.title = real.count == 1 ? "\(real[0].name): \(summary)" : "Keypads: \(summary)"
         settings.keybowStatus = summary.prefix(1).uppercased() + summary.dropFirst()
+        updateMissingKeypads()
     }
 
     private func log(_ event: NavigatorEvent) {

@@ -184,6 +184,19 @@ and menu commands. See [docs/MODULES.md](docs/MODULES.md).
 5. **Try things safely** — *Dry Run* in the menu shows what a key would do without
    doing it.
 
+## When a keypad isn't found
+
+*Set Up a Keypad…* brings in a troubleshooter by itself when no keypad turns up,
+and *Find a Missing Keypad…* in the menu bar — or *Find It…* beside a missing
+keypad in Settings — opens it any time. It works out what's wrong on its own, with
+no AI or account needed: it reads what's plugged in and what macOS's USB log says
+happened, watches while you unplug the keypad and plug it back in, and asks what
+its keys are doing. Then it says what to do: a cable that only charges, a hub
+that's given up and switched its ports off, a port another program has open, a
+keypad in its bootloader or safe mode, firmware that needs a restart or
+reinstalling. *Copy Report* puts everything it found on the clipboard, for anyone
+helping.
+
 ## Permissions
 
 macOS asks the first time each is needed:

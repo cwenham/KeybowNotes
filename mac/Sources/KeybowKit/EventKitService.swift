@@ -189,3 +189,155 @@ public actor EventKitService {
         return CreatedReminder(listTitle: target.title, usedDefault: usedDefault && !list.isEmpty)
     }
 }
+
+// MARK: - Reading, for values and the actions that use them
+
+/// An event, as read from the calendar: what `{{event}}` and `{{agenda}}`
+/// are made from.
+public struct CalendarEvent: Equatable, Sendable {
+    public var id: String
+    public var title: String
+    public var start: Date
+    public var end: Date
+    public var isAllDay: Bool
+    public var location: String
+    public var notes: String
+    public var url: URL?
+    /// Everyone invited but you, by name — or address, when there's no name.
+    /// Rooms aren't people, and are left out.
+    public var attendees: [String]
+    /// Nil when it's you, or nobody.
+    public var organizer: String?
+    public var calendar: String
+    /// You said no.
+    public var declined: Bool
+    public var canceled: Bool
+    /// Its calendar can be changed: not a subscription, or someone else's.
+    public var canEdit: Bool
+
+    public init(id: String = UUID().uuidString, title: String, start: Date, end: Date, isAllDay: Bool = false,
+                location: String = "", notes: String = "", url: URL? = nil, attendees: [String] = [],
+                organizer: String? = nil, calendar: String = "Calendar", declined: Bool = false, canceled: Bool = false,
+                canEdit: Bool = true) {
+        self.id = id
+        self.title = title
+        self.start = start
+        self.end = end
+        self.isAllDay = isAllDay
+        self.location = location
+        self.notes = notes
+        self.url = url
+        self.attendees = attendees
+        self.organizer = organizer
+        self.calendar = calendar
+        self.declined = declined
+        self.canceled = canceled
+        self.canEdit = canEdit
+    }
+}
+
+/// A reminder not yet done.
+public struct CalendarReminder: Equatable, Sendable {
+    public var id: String
+    public var title: String
+    public var list: String
+    public var due: Date?
+    /// Due at a time, not just on a day.
+    public var dueHasTime: Bool
+    public var notes: String
+
+    public init(id: String = UUID().uuidString, title: String, list: String = "Reminders", due: Date? = nil,
+                dueHasTime: Bool = true, notes: String = "") {
+        self.id = id
+        self.title = title
+        self.list = list
+        self.due = due
+        self.dueHasTime = dueHasTime
+        self.notes = notes
+    }
+}
+
+/// Where events and reminders are read and changed: EventKit in the app,
+/// something made up in tests.
+public protocol CalendarSource: Sendable {
+    /// Every event that's on at some point between these, all calendars.
+    func events(from start: Date, to end: Date) async throws -> [CalendarEvent]
+    /// Every reminder not yet done, all lists.
+    func incompleteReminders() async throws -> [CalendarReminder]
+    func completeReminder(id: String) async throws
+    /// Adds a paragraph to an event's notes: the occurrence starting then,
+    /// for one that repeats.
+    func appendToNotes(ofEvent id: String, startingAt start: Date, text: String) async throws
+}
+
+extension EventKitService: CalendarSource {
+    public func events(from start: Date, to end: Date) async throws -> [CalendarEvent] {
+        try await ensureAccess(to: .event)
+        let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
+        return store.events(matching: predicate).map(Self.snapshot)
+    }
+
+    public func incompleteReminders() async throws -> [CalendarReminder] {
+        try await ensureAccess(to: .reminder)
+        let predicate = store.predicateForIncompleteReminders(withDueDateStarting: nil, ending: nil, calendars: nil)
+        return await withCheckedContinuation { continuation in
+            store.fetchReminders(matching: predicate) { reminders in
+                continuation.resume(returning: (reminders ?? []).map(Self.snapshot))
+            }
+        }
+    }
+
+    public func completeReminder(id: String) async throws {
+        try await ensureAccess(to: .reminder)
+        guard let reminder = store.calendarItem(withIdentifier: id) as? EKReminder else {
+            throw AccessError(message: "That reminder isn't there any more", detail: "It may have been done or deleted.")
+        }
+        reminder.isCompleted = true
+        try store.save(reminder, commit: true)
+    }
+
+    public func appendToNotes(ofEvent id: String, startingAt start: Date, text: String) async throws {
+        try await ensureAccess(to: .event)
+        // A repeating event's occurrences share an identifier: the one that
+        // starts then is the one meant.
+        let nearby = store.predicateForEvents(withStart: start.addingTimeInterval(-60), end: start.addingTimeInterval(60),
+                                              calendars: nil)
+        guard let event = store.events(matching: nearby).first(where: { $0.eventIdentifier == id })
+                ?? store.event(withIdentifier: id) else {
+            throw AccessError(message: "That event isn't there any more", detail: "It may have been moved or deleted.")
+        }
+        guard event.calendar.allowsContentModifications else {
+            throw AccessError(message: "“\(event.title ?? "That event")” can't be changed",
+                              detail: "Its calendar, \(event.calendar.title), is read-only.")
+        }
+        let notes = event.notes ?? ""
+        event.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? text : notes + "\n\n" + text
+        try store.save(event, span: .thisEvent, commit: true)
+    }
+
+    private static func snapshot(_ event: EKEvent) -> CalendarEvent {
+        let people = (event.attendees ?? []).filter { $0.participantType != .room && $0.participantType != .resource }
+        return CalendarEvent(
+            id: event.eventIdentifier ?? "", title: event.title ?? "", start: event.startDate, end: event.endDate,
+            isAllDay: event.isAllDay, location: event.location ?? "", notes: event.notes ?? "", url: event.url,
+            attendees: people.filter { !$0.isCurrentUser }.map(name),
+            organizer: event.organizer.flatMap { $0.isCurrentUser ? nil : name($0) },
+            calendar: event.calendar.title,
+            declined: people.first { $0.isCurrentUser }?.participantStatus == .declined,
+            canceled: event.status == .canceled, canEdit: event.calendar.allowsContentModifications)
+    }
+
+    private static func snapshot(_ reminder: EKReminder) -> CalendarReminder {
+        let components = reminder.dueDateComponents
+        return CalendarReminder(
+            id: reminder.calendarItemIdentifier, title: reminder.title ?? "", list: reminder.calendar.title,
+            due: components.flatMap { Calendar.current.date(from: $0) },
+            dueHasTime: components?.hour != nil, notes: reminder.notes ?? "")
+    }
+
+    private static func name(_ person: EKParticipant) -> String {
+        if let name = person.name, !name.isEmpty { return name }
+        let address = person.url.absoluteString
+        return address.hasPrefix("mailto:") ? String(address.dropFirst("mailto:".count)) : address
+    }
+}

@@ -399,6 +399,24 @@ it did is on the screen, and the overlay steps aside.
   are shown — a lamp's brightness, a thermostat's temperature — and *Colour*
   has a colour picker.
 
+## Meetings and Agenda
+
+`mac/Sources/KeybowCalendar/`, module id `agenda`.
+
+- Fetches `{{event…}}`, `{{event.next…}}`, `{{agenda}}`, `{{agenda.today}}`,
+  `{{agenda.tomorrow}}` and `{{reminder…}}` — today's and tomorrow's events,
+  and the reminders not yet done, read once per action.
+- Runs `calendar.join` (opens the meeting's video call), `calendar.addNote`
+  (adds a paragraph to its notes; takes text) and `reminders.complete`.
+- `Meetings` holds the rules — which event is the meeting, its join link by
+  service, the day as Markdown — over plain `CalendarEvent` and
+  `CalendarReminder` values, so they're tested without a calendar.
+- It reads through `CalendarSource`, which `EventKitService` in KeybowKit
+  provides: EventKit's access and objects stay there. A repeating event's
+  occurrences share an identifier, so a note goes to the occurrence that
+  starts when the meeting meant does.
+- Settings: *Calendars* and *Reminder lists*, by name; empty for all.
+
 ## Not yet
 
 - **Loading modules at run time.** They're compiled in. A plugin system would

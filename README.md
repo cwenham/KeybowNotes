@@ -37,6 +37,9 @@ change your mind — press any key — before the action runs.
 - **Calendar and Reminders**: events and reminders from plain dates — *today*,
   *tomorrow 14:00*, *friday*, *+25m* — with alerts; a reminder due in 25 minutes
   makes a handy timer.
+- **Meetings**: join the meeting under way — Zoom, Meet, Teams and more — add
+  to its notes, or tick off the reminder due next. Its title, time and
+  attendees, and the rest of the day's agenda, are values any action can use.
 - **Messages and Mail**: a message or email ready to send — never sent for you.
 - **Calls**: a phone call through your iPhone, or FaceTime audio.
 - **Apps, files and links**: open an app, a file in an app, a web page, or any

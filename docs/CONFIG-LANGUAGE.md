@@ -1085,6 +1085,58 @@ Settings → Home Assistant.
   *Service*, *Mode* and *Value* list what that entity takes; *Colour* has a
   colour picker. Only the fields the entity uses are shown.
 
+### `calendar.join` — join the meeting
+
+A module. Opens the video call of the meeting under way — Zoom, Google Meet,
+Teams, Webex, FaceTime, Whereby, Jitsi, Chime, GoTo or BlueJeans — from the
+link in its URL, location or notes; failing those, whatever link its URL holds.
+
+| Field | |
+|---|---|
+| `which` | `now` (the default): the meeting under way, else the next today. `next`: the next to start, whatever's under way. |
+
+```
+1. Join [Join]
+2. Next call [Join, which: next]
+```
+
+Which meeting is meant, and which calendars count, are as for `{{event}}` (§6).
+A meeting without a link says so: *“Lunch” has no link to join*.
+
+### `calendar.addNote` — add to the meeting's notes
+
+A module. Adds a paragraph to the notes of the meeting under way, in Calendar,
+so what was decided stays with the meeting.
+
+| Field | |
+|---|---|
+| `template`, `text` | What to add, filled in; with neither, the leaf's label. |
+| `which` | `now` or `next`, as for `calendar.join`. |
+
+```
+1. Decision [Add to Event, text: "{{time}} — decided: {{selection}}"]
+```
+
+A repeating meeting gets it on today's occurrence only. A meeting on a
+calendar that can't be changed — a subscription, a holiday calendar — says so.
+
+### `reminders.complete` — tick off a reminder
+
+A module. Marks a reminder done.
+
+| Field | |
+|---|---|
+| `title` | Words from its title: an exact title wins, then the one due soonest. Left out, the reminder due next — overdue first — which is `{{reminder}}`. |
+| `list` | The list to look in. Left out, the lists chosen in Settings, else all. |
+
+```
+1. Done [Done]
+2. Bank [Done, title: Call the bank, list: Errands]
+```
+
+A reminder without a date is never "due next": name it with `title` to tick it
+off. Keywords: `Done`, `Complete Reminder`, `Tick Off`.
+
 ---
 
 ## 6. Values: `{{placeholders}}`
@@ -1101,6 +1153,7 @@ Any text in an action, and every template, can use placeholders:
 | `{{api.weather}}` | a value fetched from an API, found by a rule Claude wrote once (below) |
 | `{{location.latitude}}` | where this Mac is (below) |
 | `{{home.sensor.outdoor_temperature}}` | an entity's state in Home Assistant (below) |
+| `{{event.title}}` | the meeting under way, and the day's agenda (below) |
 | `{{quote file="quotes.md"}}` | a paragraph or list item from a file, at random or in turn (below) |
 
 A fallback in quotes is taken without them: `{{selection|"5 minute timer"}}`
@@ -1352,6 +1405,48 @@ Heating [Display, text: "Hallway: {{home.climate.hallway.current_temperature}}°
   Network. *Check the Connection*, in the menu bar's Home Assistant menu, says
   whether it answers, and to the token.
 
+### Your calendar: `{{event}}`, `{{agenda}}`, `{{reminder}}`
+
+| Name | Example | |
+|---|---|---|
+| `event` | Design review | the meeting under way, else the next today: its title |
+| `event.start`, `event.end` | 14:00, 14:45 | |
+| `event.time` | 14:00–14:45 | |
+| `event.date` | 7 Oct 2026 | |
+| `event.location` | Room 4 | |
+| `event.link` | https://zoom.us/j/… | its video call, as `calendar.join` finds it |
+| `event.attendees` | Alex Example, Sam Sample | everyone invited but you, rooms left out |
+| `event.organizer` | Alex Example | empty when it's you |
+| `event.notes`, `event.calendar` | | |
+| `event.next` | Planning | the next meeting to start, today or tomorrow — and `event.next.start` and the rest |
+| `agenda` | | the rest of today: events, and reminders due or overdue, as a Markdown list |
+| `agenda.today`, `agenda.tomorrow` | | all of today; tomorrow |
+| `reminder` | Call the bank | the reminder due next, overdue first — and `reminder.due`, `.list`, `.notes` |
+
+```
+Meeting notes [Notes, folder: Meetings, title: "{{event|Meeting}} — {{date}}"]
+Today [Display, text: "{{agenda|Nothing more today.}}", button: ok]
+Next [Display, text: "Next: **{{event.next|nothing}}** at {{event.next.start|}}"]
+```
+
+- **A meeting** is an event that isn't all day, declined or called off. The one
+  under way wins — the latest to start, when two overlap — except in its last
+  five minutes, when a meeting starting within ten is meant instead: a key
+  pressed on the way into the next one is about the next one. With nothing
+  under way, it's the next to start today; after the last, `{{event}}` is empty.
+- **The agenda** lists all-day events first, then the rest by time, marking
+  the one under way *(now)*; declined events are left out. Under **Reminders**
+  come those due that day — and before, for today — with their times.
+- **Nothing there is empty,** so `{{event|No meeting}}` and
+  `{{agenda|Nothing more today.}}` say so in your words.
+- **Which calendars and lists,** in Settings → Meetings and Agenda: names,
+  separated by commas. Empty reads every one — birthdays and holidays included.
+- **Read when a key uses them,** through EventKit, which needs full access to
+  Calendars (and Reminders, for `{{reminder}}`; the agenda leaves reminders out
+  without it). Only KeybowNotes.app can ask for that: a development build says
+  so instead. Nothing read is written to the log. **Previews** show
+  `‹the meeting›`.
+
 ### Quotes from a file: `{{quote file="…"}}`
 
 `{{quote}}` picks a **portion** of a text file each time a key uses it — a
@@ -1441,7 +1536,8 @@ Highest priority first:
    the system log.
 5. **Fetched:** `{{api.weather}}` and `{{api.weather.raw}}` from data sources,
    `{{location}}` and its parts from Location Services, `{{home.…}}` from Home
-   Assistant, and `{{quote …}}` from a file (above) — only when the action uses them. A value one of them needs is fetched first: a source's URL
+   Assistant, `{{event}}`, `{{agenda}}` and `{{reminder}}` from your calendar,
+   and `{{quote …}}` from a file (above) — only when the action uses them. A value one of them needs is fetched first: a source's URL
    gets the Mac's place.
 6. **Built-ins:**
 

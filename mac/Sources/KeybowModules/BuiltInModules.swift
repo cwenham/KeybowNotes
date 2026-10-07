@@ -1,4 +1,5 @@
 import KeybowAI
+import KeybowCalendar
 import KeybowData
 import KeybowHome
 import KeybowDisplay
@@ -23,5 +24,6 @@ public enum BuiltInModules {
         ModuleRegistry.shared.register(WindowModule(), host: host)
         ModuleRegistry.shared.register(ExposeModule(), host: host)
         ModuleRegistry.shared.register(HomeAssistantModule(), host: host)
+        ModuleRegistry.shared.register(AgendaModule(), host: host)
     }
 }

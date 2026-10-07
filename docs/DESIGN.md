@@ -645,8 +645,8 @@ should explain a refusal rather than failing silently.
 | Automation → Notes | `notes.create`, `notes.append` |
 | Automation → Mail | `mail.compose` |
 | Automation → Music | `music.play` |
-| Calendars (write) | `calendar.createEvent` |
-| Reminders | `reminders.create` |
+| Calendars (full access) | `calendar.createEvent`; reading, for `{{event}}`, `{{agenda}}`, `calendar.join` and `calendar.addNote` |
+| Reminders (full access) | `reminders.create`; reading, for `{{reminder}}`, `{{agenda}}` and `reminders.complete` |
 | Contacts | The tree editor's *Look Up in Contacts*; asked for when first used |
 | Network (Anthropic API) | `{{#ai}}` blocks: prompts go to `api.anthropic.com` with an API key from the Keychain. No permission prompt; the key is the gate |
 | Location Services | `{{location}}` and its parts, including in a data source's URL. Asked for when first needed. The app isn't under the hardened runtime; if it were, it would also need the `com.apple.security.personal-information.location` entitlement |

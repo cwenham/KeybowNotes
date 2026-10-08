@@ -166,16 +166,16 @@ final class HomeAssistantTests: XCTestCase {
         XCTAssertEqual(try call(["entity": "light.desk_lamp", "data": #"{"transition": 5}"#]).data["transition"], .number(5))
 
         // A thermostat's turn_on takes no temperature: setting it is what's meant.
-        XCTAssertEqual(try call(["entity": "climate.lounge", "service": "turn_on", "temperature": "26", "mode": "heat"]),
+        XCTAssertEqual(try call(["entity": "climate.study", "service": "turn_on", "temperature": "26", "mode": "heat"]),
                        .init(domain: "climate", service: "set_temperature",
-                             data: ["entity_id": .string("climate.lounge"), "temperature": .number(26), "hvac_mode": .string("heat")]))
-        let warm = try call(["entity": "climate.lounge", "service": "turn_on", "temperature": "26"])
+                             data: ["entity_id": .string("climate.study"), "temperature": .number(26), "hvac_mode": .string("heat")]))
+        let warm = try call(["entity": "climate.study", "service": "turn_on", "temperature": "26"])
         XCTAssertEqual(warm.service, "set_temperature")
-        XCTAssertEqual(warm.before, [.init(domain: "climate", service: "turn_on", data: ["entity_id": .string("climate.lounge")])],
+        XCTAssertEqual(warm.before, [.init(domain: "climate", service: "turn_on", data: ["entity_id": .string("climate.study")])],
                        "turned on first, with no mode to turn it on in")
-        XCTAssertEqual(try call(["entity": "climate.lounge", "service": "turn_on", "mode": "heat"]).service, "set_hvac_mode")
-        XCTAssertEqual(try call(["entity": "climate.lounge", "service": "turn_off", "temperature": "26"]).data,
-                       ["entity_id": .string("climate.lounge")])
+        XCTAssertEqual(try call(["entity": "climate.study", "service": "turn_on", "mode": "heat"]).service, "set_hvac_mode")
+        XCTAssertEqual(try call(["entity": "climate.study", "service": "turn_off", "temperature": "26"]).data,
+                       ["entity_id": .string("climate.study")])
         XCTAssertEqual(try call(["entity": "light.desk_lamp", "service": "turn_off", "brightness": "40"]).data,
                        ["entity_id": .string("light.desk_lamp")])
 

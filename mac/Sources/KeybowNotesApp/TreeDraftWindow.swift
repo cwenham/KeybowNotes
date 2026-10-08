@@ -178,7 +178,22 @@ final class DesignModel {
     /// newest is in the person's last turn.
     private func ask(_ claude: ClaudeModule, _ system: String) async throws -> String {
         let sent = turns.map { turn in turn.role == "assistant" ? (turn.role, TreeDraft.withoutOutline(turn.text)) : turn }
-        return try await claude.converse(system: system, turns: sent, effort: "medium", maxTokens: 32_000, timeout: 600)
+        return try await claude.converse(system: system, turns: sent, tools: tools, effort: "medium", maxTokens: 32_000,
+                                         timeout: 600)
+    }
+
+    /// What Claude may look at as it drafts, when what's here is sent: the
+    /// Music library — read the first time it asks, which is when macOS asks
+    /// you whether it may be.
+    private var tools: [ClaudeModule.Tool] {
+        guard context?.music == true else { return [] }
+        let step = working?.step ?? "Claude is drafting…"
+        return [ClaudeModule.Tool(MusicQuery.tool) { [weak self] input in
+            await self?.setStep("Claude is looking through your music…")
+            defer { Task { @MainActor in self?.setStep(step) } }
+            let query = try MusicQuery(input: input)
+            return try await MusicLibrary.shared.contents().answer(query)
+        }]
     }
 
     /// Claude's outline into the working copy, replacing the last draft — and
@@ -218,6 +233,7 @@ final class DesignModel {
         guard sendWhatsHere else { return context }
         context.apps = AppCatalog.all.map(\.name)
         context.shortcuts = await ShortcutsApp.names()
+        context.music = MusicLibrary.canAsk
         if let home = ModuleRegistry.shared.module(id: "home"),
            let entities = try? await home.choices(for: "entity", type: "home", fields: [:]) {
             context.homeEntities = entities.prefix(400).map { entity in

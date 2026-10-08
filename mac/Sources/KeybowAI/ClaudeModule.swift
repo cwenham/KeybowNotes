@@ -119,11 +119,33 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
                                           maxTokens: maxTokens ?? Self.maxTokens, timeout: timeout ?? Self.timeout))
     }
 
+    /// A tool Claude may use while it works out its reply: its definition —
+    /// name, description and input schema — and what answers it. A thrown
+    /// error's text goes back to Claude as the tool's failure, for it to
+    /// work around.
+    public struct Tool: @unchecked Sendable {
+        public let definition: [String: Any]
+        public let answer: @Sendable ([String: Any]) async throws -> String
+
+        public init(_ definition: [String: Any], answer: @escaping @Sendable ([String: Any]) async throws -> String) {
+            self.definition = definition
+            self.answer = answer
+        }
+
+        var name: String { definition["name"] as? String ?? "" }
+    }
+
+    /// How many times Claude may turn to its tools for one reply.
+    static let toolRounds = 12
+
     /// A conversation: turns in order, the person's first, alternating —
     /// ("user", text), ("assistant", text). The system prompt is cached, so a
     /// long one is only paid for in full the first time in a few minutes.
-    public func converse(system: String, turns: [(role: String, text: String)], effort atLeast: String? = nil,
-                         maxTokens: Int? = nil, timeout: TimeInterval? = nil) async throws -> String {
+    /// With `tools`, Claude may use them before it replies: each is answered,
+    /// and it carries on, until it has its reply.
+    public func converse(system: String, turns: [(role: String, text: String)], tools: [Tool] = [],
+                         effort atLeast: String? = nil, maxTokens: Int? = nil,
+                         timeout: TimeInterval? = nil) async throws -> String {
         let modelName = host?.setting("model", for: Self.id) ?? Self.defaultModel
         let model = Self.model(named: modelName) ?? Self.model(named: Self.defaultModel)!
         var effort = host?.setting("effort", for: Self.id) ?? Self.defaultEffort
@@ -133,14 +155,43 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
         }
         // The first turn is cached too: it carries the person's tree and
         // what's here, and stays the same for the whole conversation.
-        let messages: [[String: Any]] = turns.enumerated().map { index, turn in
+        var messages: [[String: Any]] = turns.enumerated().map { index, turn in
             guard index == 0 else { return ["role": turn.role, "content": turn.text] }
             return ["role": turn.role,
                     "content": [["type": "text", "text": turn.text, "cache_control": ["type": "ephemeral"]]]]
         }
         let cached: [[String: Any]] = [["type": "text", "text": system, "cache_control": ["type": "ephemeral"]]]
-        return try await send(try request(model: model, effort: effort, system: cached, messages: messages, schema: nil,
-                                          maxTokens: maxTokens ?? Self.maxTokens, timeout: timeout ?? Self.timeout))
+        for _ in 0..<Self.toolRounds {
+            let reply = try await reply(to: try request(
+                model: model, effort: effort, system: cached, messages: messages, schema: nil,
+                tools: tools.map(\.definition), maxTokens: maxTokens ?? Self.maxTokens, timeout: timeout ?? Self.timeout))
+            guard reply["stop_reason"] as? String == "tool_use", !tools.isEmpty else { return try Self.text(of: reply) }
+            // Its turn as it came — thinking and all — then every answer in
+            // one turn of the person's.
+            let content = reply["content"] as? [[String: Any]] ?? []
+            messages.append(["role": "assistant", "content": content])
+            var results: [[String: Any]] = []
+            for block in content where block["type"] as? String == "tool_use" {
+                var result: [String: Any] = ["type": "tool_result", "tool_use_id": block["id"] as? String ?? ""]
+                let name = block["name"] as? String ?? ""
+                if let tool = tools.first(where: { $0.name == name }) {
+                    do {
+                        result["content"] = try await tool.answer(block["input"] as? [String: Any] ?? [:])
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        result["content"] = "\(error)"
+                        result["is_error"] = true
+                    }
+                } else {
+                    result["content"] = "There's no tool called \(name)."
+                    result["is_error"] = true
+                }
+                results.append(result)
+            }
+            messages.append(["role": "user", "content": results])
+        }
+        throw ModuleError("Claude kept looking things up without replying", "Ask again, perhaps more simply.")
     }
 
     /// Whether there's a key to ask with.
@@ -151,6 +202,11 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
     // MARK: - Sending
 
     private func send(_ request: URLRequest) async throws -> String {
+        try Self.text(of: try await reply(to: request))
+    }
+
+    /// The reply, whole: its content blocks and why it stopped.
+    private func reply(to request: URLRequest) async throws -> [String: Any] {
         let data: Data
         let response: URLResponse
         do {
@@ -167,7 +223,7 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
                 throw ModuleError("Can't reach Claude", error.localizedDescription)
             }
         }
-        return try Self.text(from: data, response: response)
+        return try Self.reply(from: data, response: response)
     }
 
     /// The request for one block: the model and effort it names, or the
@@ -202,7 +258,8 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
 
     /// `system` is text, or blocks of it — cached ones among them.
     func request(model: Model, effort: String, system: Any, messages: [[String: Any]],
-                 schema: [String: Any]?, maxTokens: Int, timeout: TimeInterval) throws -> URLRequest {
+                 schema: [String: Any]?, tools: [[String: Any]] = [], maxTokens: Int,
+                 timeout: TimeInterval) throws -> URLRequest {
         guard let key = host?.secret("apiKey", for: Self.id), !key.isEmpty else {
             throw ModuleError("Claude needs an API key", "Make one in the Claude Console, then add it in Settings → Claude.")
         }
@@ -213,6 +270,8 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
             "system": system,
             "messages": messages,
         ]
+        // Before the system prompt in what's cached: the same each time.
+        if !tools.isEmpty { body["tools"] = tools }
         // Thinking is left to the model — always on for Opus 5.5 — and effort
         // is the control for how much, and so for speed and cost.
         var outputConfig: [String: Any] = [:]
@@ -275,6 +334,11 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
 
     /// The reply's text, or why there isn't any.
     static func text(from data: Data, response: URLResponse) throws -> String {
+        try text(of: reply(from: data, response: response))
+    }
+
+    /// The reply as it came, or why it couldn't be had: a refusal is one.
+    static func reply(from data: Data, response: URLResponse) throws -> [String: Any] {
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 200 else {
@@ -301,6 +365,12 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
             throw ModuleError("Claude declined this request",
                               (details?["explanation"] as? String) ?? (details?["category"] as? String))
         }
+        return json
+    }
+
+    /// The reply's text: its text blocks, together.
+    static func text(of json: [String: Any]) throws -> String {
+        let stop = json["stop_reason"] as? String
         // Text blocks only: thinking and fallback blocks aren't the reply.
         let blocks = json["content"] as? [[String: Any]] ?? []
         let text = blocks.filter { $0["type"] as? String == "text" }

@@ -55,7 +55,7 @@ final class MCPServerTests: XCTestCase {
         let names = tools?.compactMap { $0["name"] as? String } ?? []
         XCTAssertEqual(names, ["get_guide", "list_action_types", "check_outline", "list_keypads", "get_tree", "get_outline",
                                "list_entries", "add_entry", "change_entry", "remove_entry", "replace_tree", "add_keypad",
-                               "run_entry", "stopwatch"])
+                               "run_entry", "music_library", "stopwatch"])
         let remove = tools?.first { $0["name"] as? String == "remove_entry" }
         XCTAssertEqual((remove?["annotations"] as? [String: Any])?["destructiveHint"] as? Bool, true)
         XCTAssertEqual((remove?["inputSchema"] as? [String: Any])?["required"] as? [String], ["path"])
@@ -69,6 +69,10 @@ final class MCPServerTests: XCTestCase {
         XCTAssertEqual(app.asked.last, ["change", "Lights/Lamp", "Desk lamp", "", "Desk"])
         _ = call("run_entry", ["path": "Lights/Lamp"])
         XCTAssertEqual(app.asked.last, ["trigger", "Lights/Lamp", "", ""])
+        _ = call("music_library", ["list": "artists", "genre": "Jazz", "limit": 4])
+        XCTAssertEqual(app.asked.last, ["music", "artists", "Jazz", "", "", "", "4"])
+        _ = call("music_library")
+        XCTAssertEqual(app.asked.last, ["music", "overview", "", "", "", "", ""])
         _ = call("stopwatch")
         XCTAssertEqual(app.asked.last, ["stopwatch", "read"])
         _ = call("stopwatch", ["command": "Start"])

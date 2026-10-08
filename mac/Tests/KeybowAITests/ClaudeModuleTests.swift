@@ -7,6 +7,8 @@ private final class StubTransport: HTTPTransport, @unchecked Sendable {
     var status = 200
     var headers: [String: String] = [:]
     var body: Any = ["content": [["type": "text", "text": "Hello"]], "stop_reason": "end_turn"]
+    /// Answered in turn, before `body`.
+    var bodies: [Any] = []
     var error: Error?
     private(set) var requests: [URLRequest] = []
 
@@ -14,7 +16,7 @@ private final class StubTransport: HTTPTransport, @unchecked Sendable {
         requests.append(request)
         if let error { throw error }
         let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: headers)!
-        return (try JSONSerialization.data(withJSONObject: body), response)
+        return (try JSONSerialization.data(withJSONObject: bodies.isEmpty ? body : bodies.removeFirst()), response)
     }
 }
 
@@ -44,6 +46,72 @@ final class ClaudeModuleTests: XCTestCase {
         } catch {
             XCTFail("unexpected \(error)", file: file, line: line)
         }
+    }
+
+    // MARK: - Tools
+
+    func testClaudeUsesItsToolsThenReplies() async throws {
+        let (module, transport) = module()
+        let thinking: [String: Any] = ["type": "thinking", "thinking": "", "signature": "sig-1"]
+        transport.bodies = [
+            ["content": [thinking, ["type": "tool_use", "id": "toolu_1", "name": "music_library",
+                                    "input": ["list": "genres", "limit": 4]],
+                         ["type": "tool_use", "id": "toolu_2", "name": "teleport", "input": [:]]],
+             "stop_reason": "tool_use"],
+            ["content": [["type": "text", "text": "Here's your tree."]], "stop_reason": "end_turn"],
+        ]
+        let heard = Heard()
+        let tool = ClaudeModule.Tool(["name": "music_library", "description": "The library.",
+                                      "input_schema": ["type": "object"]]) { input in
+            heard.list = input["list"] as? String
+            return "1. Jazz"
+        }
+        let reply = try await module.converse(system: "Design trees.", turns: [("user", "My top genres, please")],
+                                              tools: [tool])
+        XCTAssertEqual(reply, "Here's your tree.")
+        XCTAssertEqual(heard.list, "genres")
+        XCTAssertEqual(transport.requests.count, 2)
+
+        let first = try sent(transport.requests[0])
+        XCTAssertEqual((first["tools"] as? [[String: Any]])?.map { $0["name"] as? String }, ["music_library"])
+        let messages = try XCTUnwrap(try sent(transport.requests[1])["messages"] as? [[String: Any]])
+        XCTAssertEqual(messages.map { $0["role"] as? String }, ["user", "assistant", "user"])
+        let turn = try XCTUnwrap(messages[1]["content"] as? [[String: Any]])
+        XCTAssertEqual(turn.first?["signature"] as? String, "sig-1", "its turn goes back as it came, thinking and all")
+        let results = try XCTUnwrap(messages[2]["content"] as? [[String: Any]])
+        XCTAssertEqual(results.count, 2, "every answer in one turn")
+        XCTAssertEqual(results[0]["tool_use_id"] as? String, "toolu_1")
+        XCTAssertEqual(results[0]["content"] as? String, "1. Jazz")
+        XCTAssertNil(results[0]["is_error"])
+        XCTAssertEqual(results[1]["is_error"] as? Bool, true, "a tool it doesn't have is a failure it hears about")
+    }
+
+    func testAFailingToolIsToldOfAndAnEndlessOneStops() async throws {
+        let (module, transport) = module()
+        let use: [String: Any] = ["content": [["type": "tool_use", "id": "t", "name": "look", "input": [:]]],
+                                  "stop_reason": "tool_use"]
+        transport.body = use
+        let tool = ClaudeModule.Tool(["name": "look", "description": "", "input_schema": ["type": "object"]]) { _ in
+            throw ModuleError("The library can't be read")
+        }
+        do {
+            _ = try await module.converse(system: "S", turns: [("user", "Hi")], tools: [tool])
+            XCTFail("it can't go on for ever")
+        } catch let error as ModuleError {
+            XCTAssertEqual(error.message, "Claude kept looking things up without replying")
+        }
+        XCTAssertEqual(transport.requests.count, ClaudeModule.toolRounds)
+        let messages = try XCTUnwrap(try sent(transport.requests[1])["messages"] as? [[String: Any]])
+        let result = try XCTUnwrap((messages.last?["content"] as? [[String: Any]])?.first)
+        XCTAssertEqual(result["is_error"] as? Bool, true)
+        XCTAssertEqual(result["content"] as? String, "The library can't be read")
+
+        // Without tools, a reply is taken as it is.
+        let (plain, quiet) = self.module()
+        quiet.body = ["content": [["type": "text", "text": "Hello"]], "stop_reason": "end_turn"]
+        let said = try await plain.converse(system: "S", turns: [("user", "Hi")])
+        XCTAssertEqual(said, "Hello")
+        XCTAssertNil(try sent(quiet.requests[0])["tools"])
     }
 
     // MARK: - The request
@@ -192,4 +260,8 @@ final class ClaudeModuleTests: XCTestCase {
             XCTAssertTrue(error is CancellationError)
         }
     }
+}
+
+private final class Heard: @unchecked Sendable {
+    var list: String?
 }

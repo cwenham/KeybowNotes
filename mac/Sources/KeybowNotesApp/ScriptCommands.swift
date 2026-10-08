@@ -145,6 +145,17 @@ final class StopwatchCommand: AutomationCommand {
     }
 }
 
+@objc(KBMusicLibraryCommand)
+final class MusicLibraryCommand: AutomationCommand {
+    override func performDefaultImplementation() -> Any? {
+        answer { [self] automation in
+            try await automation.musicLibrary(direct ?? "overview", genre: text("genre"), artist: text("artist"),
+                                              album: text("album"), rankedBy: text("rankedBy"),
+                                              limit: evaluatedArguments?["limit"] as? Int)
+        }
+    }
+}
+
 @objc(KBStopwatchReadingCommand)
 final class StopwatchReadingCommand: AutomationCommand {
     override func performDefaultImplementation() -> Any? {

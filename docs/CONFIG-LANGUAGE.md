@@ -236,7 +236,7 @@ An annotation is either a **word** or a **pair**.
 | `Direct Insert`, `Type` | the same, without using the clipboard | `"type": "text.insertDirect"` |
 | `Timer` | start a timer in Clock | `"type": "clock.timer"` |
 | `Maps` | search in Maps | `"type": "maps.search"` |
-| `Music` | play a playlist or album in Music | `"type": "music.play"` |
+| `Music` | play a song, an album, an artist, a genre or a playlist in Music | `"type": "music.play"` |
 | `Stopwatch` | KeybowNotes' own stopwatch (a module) | `"type": "stopwatch"` |
 | `Display`, `Show` | show text on screen (a module) | `"type": "display"` |
 | `Ask`, `Prompt` | ask for something to be typed, and hand it on (a module) | `"type": "ask"` |
@@ -708,26 +708,44 @@ Opens Maps with the search, through a `maps:` link.
    3. Look up [query: "{{selection}}"]
 ```
 
-### `music.play` — play a playlist or album
+### `music.play` — play a song, an album, an artist, a genre or a playlist
 
 | Field | |
 |---|---|
-| `playlist` | A playlist by name; the leaf's label if neither this nor `album` is set. |
-| `album` | An album in your library, played in disc and track order. Wins over `playlist`. |
-| `artist` | Narrows an album down when two share a name. Matches the artist or album artist. |
-| `shuffle` | `true` or `false` for a playlist; empty leaves Music's setting alone. Albums play in order. |
+| `song` | One song in your library, by its title. Wins over everything else. |
+| `album` | An album in your library, played in disc and track order. Wins over `playlist`, `artist` and `genre`. |
+| `playlist` | A playlist by name. Wins over `artist` and `genre`. |
+| `artist` | By itself, the artist's songs; with `genre`, those in the genre. With `song` or `album`, picks whose when two share a name. Matches the artist or album artist. |
+| `genre` | The genre's songs — or, with `artist`, that artist's in it. |
+| `shuffle` | `true` or `false`. Empty leaves Music's setting alone for a playlist, and shuffles an artist's or a genre's songs, which have no order of their own. Songs and albums play in order. |
 
-Music only plays a playlist in order, so an album is copied into a playlist of
-KeybowNotes' own, **KeybowNotes Album**, remade each time — deleting a playlist
-never deletes its songs. Only music in your library can be played. The first
-time, macOS asks whether KeybowNotes may control Music.
+With none of `song`, `album`, `playlist`, `artist` or `genre`, the leaf's label
+names a playlist. Names are matched without regard to case.
+
+Music plays a playlist, so a song, an album, an artist's or a genre's songs are
+copied into a playlist of KeybowNotes' own, **KeybowNotes**, remade each time —
+deleting a playlist never deletes its songs. Only music in your library can be
+played. The first time, macOS asks whether KeybowNotes may control Music.
 
 ```
 1. Music [Music]
    1. Focus
    2. Party [shuffle: true]
    3. Kind of Blue [album: Kind of Blue, artist: Miles Davis]
+   4. So What [song: So What]
+2. Jazz [Music, genre: Jazz, artist: "{{leaf}}"]
+   1. Miles Davis
+   2. John Coltrane
+   3. All of it [artist: ""]
 ```
+
+A genre with an artist on each key below it: `artist: "{{leaf}}"` on the genre
+gives every key its own artist, by its label; `artist: ""` on a key clears it,
+for the whole genre.
+
+In the tree editor, *Song*, *Album*, *Playlist*, *Artist* and *Genre* list
+what's in your library — an artist's albums, a genre's artists — most played
+first. Reading the library asks, the first time, for Media & Apple Music access.
 
 ### `stopwatch` — KeybowNotes' own stopwatch
 

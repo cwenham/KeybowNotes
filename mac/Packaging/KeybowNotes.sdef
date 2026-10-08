@@ -152,5 +152,26 @@
 			<cocoa class="KBStopwatchReadingCommand"/>
 			<result type="text"/>
 		</command>
+
+		<command name="music library" code="KBntMusL" description="What's in the Music library, and what's played most: for designing music keys. Asks for Media &amp; Apple Music access the first time.">
+			<cocoa class="KBMusicLibraryCommand"/>
+			<direct-parameter type="text" optional="yes" description="What to list: overview, genres, artists, albums, songs, favourites or playlists. Left out: overview."/>
+			<parameter name="genre" code="KBge" type="text" optional="yes" description="Only this genre's.">
+				<cocoa key="genre"/>
+			</parameter>
+			<parameter name="artist" code="KBar" type="text" optional="yes" description="Only this artist's.">
+				<cocoa key="artist"/>
+			</parameter>
+			<parameter name="album" code="KBal" type="text" optional="yes" description="Only this album's songs.">
+				<cocoa key="album"/>
+			</parameter>
+			<parameter name="ranked by" code="KBrb" type="text" optional="yes" description="plays, songs or name. Left out: plays.">
+				<cocoa key="rankedBy"/>
+			</parameter>
+			<parameter name="limit" code="KBli" type="integer" optional="yes" description="How many, at most. Left out: 25.">
+				<cocoa key="limit"/>
+			</parameter>
+			<result type="text"/>
+		</command>
 	</suite>
 </dictionary>

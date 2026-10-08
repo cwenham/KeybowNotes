@@ -56,6 +56,11 @@ public enum ActionPlan: Equatable, Sendable {
     /// An album from the library, in disc and track order; `artist` narrows
     /// it down when two albums share a name.
     case playAlbum(String, artist: String)
+    /// One song from the library; `artist` picks between songs of one title.
+    case playSong(String, artist: String)
+    /// An artist's songs, a genre's, or an artist's in a genre — either may
+    /// be empty, not both. Nil shuffles.
+    case playMusic(artist: String, genre: String, shuffle: Bool?)
     /// An action for a module to carry out.
     case module(ModuleRequest)
 }
@@ -379,13 +384,22 @@ private struct Planner {
             return .searchMaps(try required(query, for: "place to search for"))
 
         case "music.play":
-            let album = optional("album")
-            if !album.isEmpty { return .playAlbum(album, artist: optional("artist")) }
-            var playlist = optional("playlist")
-            if playlist.isEmpty { playlist = selection.labels.last ?? "" }
-            guard !playlist.isEmpty else { throw ActionPlanError.empty("playlist") }
+            // One song, an album, a playlist, then an artist's or a genre's
+            // songs — and with none of those, the playlist the label names.
             var shuffle: Bool?
             if case .bool(let value)? = action.fields["shuffle"] { shuffle = value }
+            let artist = optional("artist")
+            let song = optional("song")
+            if !song.isEmpty { return .playSong(song, artist: artist) }
+            let album = optional("album")
+            if !album.isEmpty { return .playAlbum(album, artist: artist) }
+            var playlist = optional("playlist")
+            let genre = optional("genre")
+            if playlist.isEmpty, !artist.isEmpty || !genre.isEmpty {
+                return .playMusic(artist: artist, genre: genre, shuffle: shuffle)
+            }
+            if playlist.isEmpty { playlist = selection.labels.last ?? "" }
+            guard !playlist.isEmpty else { throw ActionPlanError.empty("playlist") }
             return .playPlaylist(playlist, shuffle: shuffle)
 
         case "clipboard.copy":

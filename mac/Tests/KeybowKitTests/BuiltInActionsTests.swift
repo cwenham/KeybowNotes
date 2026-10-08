@@ -44,6 +44,7 @@ final class BuiltInActionsTests: XCTestCase {
             "due", "list", "to", "body", "subject",
             "app", "bundleId", "open", "url", "target", "name", "input", "via", "text",
             "shortcut", "query", "playlist", "album", "artist", "shuffle", "instant", "format",
+            "song", "genre",
         ])
         XCTAssertTrue(vocabulary.isNumericField("alertMinutes", type: "calendar.createEvent"))
         XCTAssertTrue(vocabulary.isNumericField("guards.maxBodyBytes", type: "notes.append"))

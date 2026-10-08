@@ -406,7 +406,7 @@ Every text field in an action is expanded through the template system first.
 | `text.insertDirect` | accessibility, else typing | The same without the clipboard: the app replaces its selection, checked; else a key press per character. |
 | `clock.timer` | `shortcuts run` | Clock has no scripting; a helper shortcut runs Start Timer. |
 | `maps.search` | `maps:` URL | Opens Maps searching. |
-| `music.play` | AppleScript | A playlist, or an album in order through a playlist of KeybowNotes' own. |
+| `music.play` | AppleScript | A playlist; or a song, an album in order, an artist's or a genre's songs through a playlist of KeybowNotes' own. |
 | `shortcut` | `shortcuts run` | Escape hatch for anything supporting Shortcuts. |
 | `stopwatch` | module | Built in as a module; see [MODULES.md](MODULES.md). |
 
@@ -610,6 +610,7 @@ should explain a refusal rather than failing silently.
 | Network (Anthropic API) | `{{#ai}}` blocks: prompts go to `api.anthropic.com` with an API key from the Keychain. No permission prompt; the key is the gate |
 | Location Services | `{{location}}` and its parts, including in a data source's URL. Asked for when first needed. The app isn't under the hardened runtime; if it were, it would also need the `com.apple.security.personal-information.location` entitlement |
 | Local Network | `home` and `{{home.…}}`: talking to Home Assistant on your network. Asked for when first used. Plain http is allowed only to local hosts — `.local` names, names without dots, private address ranges |
+| Media & Apple Music | Reading the Music library through iTunesLibrary — the tree editor's lists of songs, albums, artists, genres and playlists, and Claude's `music_library` tool — without opening Music. Asked for when first read; the packaged app only, since it needs `NSAppleMusicUsageDescription` |
 | Files on removable volumes | *Set Up a Keypad…*: reading a keypad's drive, and writing CircuitPython and the firmware to it. Asked for when the setup window first looks |
 | Automation (being controlled) | AppleScript, Shortcuts' *Run AppleScript* and the MCP server: macOS asks, once per app, whether it may control KeybowNotes |
 | Network (Anthropic API), drafting | *Design with Claude…*: the description, and — if ticked — the tree file and the names of apps, shortcuts and Home Assistant entities go to `api.anthropic.com` with the person's key |

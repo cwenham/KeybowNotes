@@ -37,6 +37,7 @@ those prompts can open behind other windows:
 - Calendars and Reminders, Contacts, Location: for the actions that use them.
 - Accessibility, to type text and read the selection in other apps.
 - Local Network, to talk to Home Assistant.
+- Media & Apple Music, to list your music when you set up music keys.
 
 Getting started, the configuration language, and everything else:
 https://github.com/cwenham/KeybowNotes

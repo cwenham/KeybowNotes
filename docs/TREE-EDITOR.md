@@ -241,6 +241,11 @@ For the selected node:
   back to the front), with completion as you type. A name that matches no
   shortcut is flagged. **Edit…** opens the shortcut in Shortcuts, or **Open
   Shortcuts** to make one.
+- **Music** — for *Play music*, *Song*, *Album*, *Playlist*, *Artist* and
+  *Genre* are combo boxes of what's in your Music library, read without opening
+  Music: one choice follows another — a genre's artists, an artist's albums
+  and songs — the most played first. The first time, macOS asks for Media &
+  Apple Music access.
 - **A module's lists** — fields whose module knows what can go in them are
   combo boxes too: for *Home Assistant*, the entities it has, then the services,
   modes, options and warmths that entity takes, each with its name and state.

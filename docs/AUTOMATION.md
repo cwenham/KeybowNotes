@@ -50,6 +50,7 @@ tell application "KeybowNotes"
     reset stopwatch
     toggle stopwatch
     stopwatch reading                               -- "4:12, running"
+    music library "artists" genre "Jazz" limit 4    -- the most played, as text
 end tell
 ```
 
@@ -114,6 +115,7 @@ Its tools:
 | `replace_tree` | A whole tree, from outline text |
 | `add_keypad` | A keypad section with trees of its own |
 | `run_entry` | Runs an entry, for real |
+| `music_library` | What's in the Music library — genres, artists, albums, songs, favourites, playlists — the most played first |
 | `stopwatch` | start, stop, lap, reset, toggle or read |
 
 And a prompt, `design_keypad`, that starts an agent off on designing trees for
@@ -143,8 +145,12 @@ only when you add the draft.
    keypad's trees; or one tree. And what to send with it: your tree file, so
    the draft fits with it and uses your contacts, projects and lists; and the
    names of your apps, shortcuts and Home Assistant entities, so it uses the
-   ones you have. What you write and what's ticked goes to Anthropic with your
-   key.
+   ones you have — and, with that, your Music library for Claude to look
+   through when it makes music keys: your genres, artists, albums, songs,
+   favourites and playlists, and how often each is played. Ask for "my top 4
+   genres, then the top 4 artists in each". The first look asks you for Media &
+   Apple Music access. What you write and what's ticked goes to Anthropic with
+   your key, and of your library only what Claude asks for.
 2. **Say what you'd like** the keypads for, in your own words: the apps you
    use, what you do again and again, the people you message, the lamps you
    switch. Claude is told what KeybowNotes can do — the same guide an agent

@@ -116,6 +116,10 @@ public final class MCPServer {
         case "replace_tree": return try bridge.ask("replace", try required("outline"), text("tree"), text("keypad"))
         case "add_keypad": return try bridge.ask("keypad", try required("name"), text("model"), text("board_id"))
         case "run_entry": return try bridge.ask("trigger", try required("path"), text("tree"), text("keypad"))
+        case "music_library":
+            let limit = (arguments["limit"] as? Int).map(String.init) ?? text("limit")
+            return try bridge.ask("music", text("list").isEmpty ? "overview" : text("list"), text("genre"), text("artist"),
+                                  text("album"), text("rank_by"), limit)
         case "stopwatch":
             let command = text("command").isEmpty ? "read" : text("command").lowercased()
             guard ["start", "stop", "lap", "reset", "toggle", "read"].contains(command) else {
@@ -190,6 +194,9 @@ public final class MCPServer {
              + "creating events, drafting messages, switching lamps — so run one only when the person asks.",
              where_.merging(["path": string("The entry: its labels, separated by slashes.")]) { a, _ in a },
              required: ["path"]),
+        tool("music_library", "Read the Music library", MusicQuery.tool["description"] as? String ?? "",
+             (MusicQuery.tool["input_schema"] as? [String: Any])?["properties"] as? [String: Any] ?? [:],
+             required: ["list"], readOnly: true),
         tool("stopwatch", "Work the stopwatch", "Starts, stops, laps, resets or reads KeybowNotes' stopwatch.",
              ["command": ["type": "string", "enum": ["start", "stop", "lap", "reset", "toggle", "read"],
                           "description": "What to do. Left out: read."]]),
@@ -238,6 +245,8 @@ public struct AppBridge: AppAsking {
             set b to item 3 of argv
             set c to item 4 of argv
             set d to item 5 of argv
+            set e to item 6 of argv
+            set f to item 7 of argv
             with timeout of 600 seconds
                 tell application id "\(AppLocations.bundleID)"
                     if command is "keypads" then return keypad names
@@ -254,6 +263,11 @@ public struct AppBridge: AppAsking {
                     if command is "replace" then return replace tree with outline a tree b keypad c
                     if command is "keypad" then return add keypad a model b board id c
                     if command is "trigger" then return trigger a tree b keypad c
+                    if command is "music" then
+                        set n to 25
+                        if f is not "" then set n to f as integer
+                        return music library a genre b artist c album d ranked by e limit n
+                    end if
                     if command is "stopwatch" then
                         if a is "start" then return start stopwatch
                         if a is "stop" then return stop stopwatch
@@ -269,7 +283,7 @@ public struct AppBridge: AppAsking {
         """
 
     public func ask(_ command: String, _ values: [String]) throws -> String {
-        let padded = (values + Array(repeating: "", count: 4)).prefix(4)
+        let padded = (values + Array(repeating: "", count: 6)).prefix(6)
         let result = try Osascript.runAndWait(Self.script, [command] + padded)
         guard result.status == 0 else { throw TreeControl.Problem(Self.reason(result.errorText)) }
         return result.text.trimmingCharacters(in: .newlines)

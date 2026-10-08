@@ -200,6 +200,19 @@ final class Automation {
         }
     }
 
+    // MARK: Music
+
+    /// What's in the Music library, as Claude's music_library tool answers.
+    func musicLibrary(_ list: String, genre: String?, artist: String?, album: String?, rankedBy: String?,
+                      limit: Int?) async throws -> String {
+        var input: [String: Any] = ["list": list]
+        for (key, value) in [("genre", genre), ("artist", artist), ("album", album), ("rank_by", rankedBy)] {
+            if let value { input[key] = value }
+        }
+        if let limit { input["limit"] = limit }
+        return try await MusicLibrary.shared.contents().answer(try MusicQuery(input: input))
+    }
+
     // MARK: Running
 
     /// Runs an entry as though its keys were pressed, and says how it went.

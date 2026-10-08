@@ -41,6 +41,8 @@
 	<string>KeybowNotes creates notes, reminders, events and email drafts when you choose them on the Keybow.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>KeybowNotes adds the events you choose on the Keybow, and opens them for editing.</string>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>KeybowNotes lists your playlists, albums, artists and genres when you set up music keys, and lets Claude see what you play most when it designs them with you.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>KeybowNotes looks people up in Contacts when you add them to a tree, to fill in their number or address.</string>
 	<key>NSLocationUsageDescription</key>

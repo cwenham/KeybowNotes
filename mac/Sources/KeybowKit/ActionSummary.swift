@@ -133,17 +133,27 @@ public struct ActionSummary: Equatable, Sendable {
             let query = field("query")
             subject = query.isEmpty ? (selection.labels.last ?? "") : query
         case "music.play":
+            // As the planner chooses: a song, an album, a playlist, then an
+            // artist's or a genre's songs, else the label's playlist.
             verb = "Play"
-            let album = field("album")
-            if !album.isEmpty {
+            let song = field("song"), album = field("album"), playlist = field("playlist")
+            let artist = field("artist"), genre = field("genre")
+            var shuffle: Bool?
+            if case .bool(let value)? = action.fields["shuffle"] { shuffle = value }
+            if !song.isEmpty {
+                subject = song
+                details.append(artist.isEmpty ? "song" : "song by \(artist)")
+            } else if !album.isEmpty {
                 subject = album
-                let artist = field("artist")
                 details.append(artist.isEmpty ? "album" : "album by \(artist)")
+            } else if playlist.isEmpty, !artist.isEmpty || !genre.isEmpty {
+                subject = artist.isEmpty ? genre : artist
+                details.append(artist.isEmpty ? "genre" : genre.isEmpty ? "artist" : "artist, in \(genre)")
+                details.append(shuffle == false ? "in order" : "shuffled")
             } else {
-                let playlist = field("playlist")
                 subject = playlist.isEmpty ? (selection.labels.last ?? "") : playlist
                 details.append("playlist")
-                if case .bool(let shuffle)? = action.fields["shuffle"] { details.append(shuffle ? "shuffled" : "in order") }
+                if let shuffle { details.append(shuffle ? "shuffled" : "in order") }
             }
         case "clipboard.copy", "text.insert", "text.insertDirect":
             verb = action.type == "clipboard.copy" ? "Copy" : action.type == "text.insert" ? "Insert" : "Insert directly"

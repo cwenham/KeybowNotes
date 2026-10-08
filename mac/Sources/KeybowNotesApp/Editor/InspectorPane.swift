@@ -1225,9 +1225,12 @@ private struct ModuleChoiceField: View {
     }
 
     private func load() async {
-        guard let module = ModuleRegistry.shared.module(handling: type) else { return }
         do {
-            choices = try await module.choices(for: key, type: type, fields: fields)
+            if let module = ModuleRegistry.shared.module(handling: type) {
+                choices = try await module.choices(for: key, type: type, fields: fields)
+            } else {
+                choices = try await BuiltInChoices.choices(for: key, type: type, fields: fields)
+            }
             problem = nil
         } catch let error as ModuleError {
             choices = []

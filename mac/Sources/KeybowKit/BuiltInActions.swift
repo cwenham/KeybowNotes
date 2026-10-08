@@ -349,20 +349,31 @@ public enum BuiltInActions {
         ModuleActionType(
             type: "music.play", title: "Play music", keywords: ["Music"], symbol: "music.note",
             fields: [
-                ModuleField(key: "playlist", title: "Playlist", hint: "the label, if empty", help: """
-                    A playlist, by name. Empty: the node's label.
+                ModuleField(key: "playlist", title: "Playlist", hint: "the label, if nothing else is set", help: """
+                    A playlist, by name. With no song, album, artist or genre either: the node's label.
                     Example: Focus
-                    """),
-                ModuleField(key: "album", title: "Album", hint: "plays this instead of a playlist", help: """
-                    An album in your library, played in track order. Wins over Playlist.
+                    """, offersChoices: true),
+                ModuleField(key: "song", title: "Song", hint: "plays just this", help: """
+                    One song in your library, by its title. Wins over everything else; Artist picks between \
+                    songs that share a title.
+                    Example: So What
+                    """, offersChoices: true),
+                ModuleField(key: "album", title: "Album", hint: "in track order", help: """
+                    An album in your library, played in track order. Wins over Playlist, Artist and Genre.
                     Example: Kind of Blue
-                    """),
-                ModuleField(key: "artist", title: "Artist", hint: "when two albums share a name", help: """
-                    Picks the album when two share a name. Matches the artist or album artist.
-                    Example: Miles Davis
-                    """),
+                    """, offersChoices: true),
+                ModuleField(key: "artist", title: "Artist", hint: "their songs — or whose album or song", help: """
+                    By itself, plays the artist's songs; with Genre, those in the genre. With a song or an \
+                    album, picks whose when two share a name. Matches the artist or album artist.
+                    Examples: Miles Davis · {{leaf}}
+                    """, offersChoices: true),
+                ModuleField(key: "genre", title: "Genre", hint: "its songs, or an artist's in it", help: """
+                    Plays the genre's songs — or, with Artist, that artist's in it.
+                    Example: Jazz
+                    """, offersChoices: true),
                 ModuleField(key: "shuffle", title: "Shuffle", kind: .flag, help: """
-                    Shuffle a playlist, or play it in order. Inherit leaves Music's setting as it is.
+                    Shuffle, or play in order. Inherit leaves Music's setting as it is for a playlist, and \
+                    shuffles an artist's or a genre's songs, which have no order of their own.
                     """),
             ]))
 

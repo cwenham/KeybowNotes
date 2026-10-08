@@ -184,9 +184,24 @@ public enum ActionRunner {
             return .success("Playing “\(name)”", shuffle == true ? "Shuffled" : nil)
 
         case .playAlbum(let name, let artist):
-            let reply = try await appleScript(Scripts.playAlbum, app: "Music", [name, artist, Scripts.albumQueue])
+            let reply = try await appleScript(Scripts.playAlbum, app: "Music", [name, artist, Scripts.queue])
             let count = reply.split(separator: ":").last.map(String.init) ?? ""
-            return .success("Playing “\(name)”", "\(count) tracks, from the “\(Scripts.albumQueue)” playlist")
+            return .success("Playing “\(name)”", "\(count) tracks, from the “\(Scripts.queue)” playlist")
+
+        case .playSong(let name, let artist):
+            let reply = try await appleScript(Scripts.playSong, app: "Music", [name, artist, Scripts.queue])
+            let by = String(reply.drop { $0 != ":" }.dropFirst())
+            return .success("Playing “\(name)”", by.isEmpty ? nil : "by \(by)")
+
+        case .playMusic(let artist, let genre, let shuffle):
+            let what = [artist, genre.isEmpty ? "" : (artist.isEmpty ? genre : "in \(genre)")].filter { !$0.isEmpty }
+                .joined(separator: " ")
+            let shuffled = shuffle ?? true
+            let reply = try await appleScript(Scripts.playMusic, app: "Music",
+                                              [artist, genre, shuffled ? "on" : "off", Scripts.queue,
+                                               (artist.isEmpty ? "" : "by ") + what])
+            let count = reply.split(separator: ":").last.map(String.init) ?? ""
+            return .success("Playing \(what)", "\(count) songs\(shuffled ? ", shuffled" : ""), from the “\(Scripts.queue)” playlist")
 
         case .openLink(let url):
             if url.isFileURL {
@@ -366,9 +381,14 @@ public enum ActionRunner {
         if error.contains("-1728"), app == "Notes" {
             return RunError("Notes couldn't find that account or folder", Osascript.reason(error))
         }
+        if let range = error.range(of: "NOMUSIC:") {
+            let what = error[range.upperBound...].prefix { $0 != "(" && $0 != "\"" }.trimmingCharacters(in: .whitespaces)
+            return RunError("Nothing in your library is \(what)", "Check the spelling, as Music has it.")
+        }
         for (marker, message) in [("NONOTE:", "There's no note called"), ("NOFOLDER:", "There's no folder called"),
                                   ("NOPLAYLIST:", "There's no playlist called"),
-                                  ("NOALBUM:", "There's no album in your library called")] {
+                                  ("NOALBUM:", "There's no album in your library called"),
+                                  ("NOSONG:", "There's no song in your library called")] {
             if let range = error.range(of: marker) {
                 let name = error[range.upperBound...].prefix { $0 != "\"" && $0 != "(" }
                     .trimmingCharacters(in: .whitespaces)
@@ -410,7 +430,7 @@ public enum ActionRunner {
 /// The scripts. Each takes its values from `argv`, and fetches properties into
 /// variables before using them: compound expressions like "name of container
 /// of x" are evaluated by the app and can fail (see spikes/FINDINGS.md).
-private enum Scripts {
+enum Scripts {
     /// Finds or creates a nested folder path like "Work/Notes/Standup".
     private static let resolveFolder = """
     on resolveFolder(theAccount, folderPath, createMissing)
@@ -603,10 +623,77 @@ private enum Scripts {
     end run
     """
 
-    /// The playlist an album is played from. Music can only play a playlist in
-    /// order, so the album's tracks are put in one of KeybowNotes' own, made
-    /// afresh each time. Deleting a playlist never deletes its songs.
-    static let albumQueue = "KeybowNotes Album"
+    /// The playlist an album, a song, an artist or a genre is played from.
+    /// Music plays a playlist, in order or shuffled, so the songs are put in
+    /// one of KeybowNotes' own, made afresh each time — and the one an album
+    /// used to be played from, by its old name, is cleared away with it.
+    /// Deleting a playlist never deletes its songs.
+    static let queue = "KeybowNotes"
+    static let formerQueue = "KeybowNotes Album"
+
+    /// Removes the last queue, and makes a new one.
+    private static let freshQueue = """
+            set oldQueues to (every user playlist whose name is queueName or name is "\(formerQueue)")
+            repeat with oldQueue in oldQueues
+                delete oldQueue
+            end repeat
+            set theQueue to make new user playlist with properties {name:queueName}
+    """
+
+    static let playSong = """
+    on run argv
+        set songName to item 1 of argv
+        set artistName to item 2 of argv
+        set queueName to item 3 of argv
+        tell application "Music"
+            if artistName is "" then
+                set found to (every track of library playlist 1 whose name is songName)
+            else
+                set found to (every track of library playlist 1 whose name is songName and (artist is artistName or album artist is artistName))
+            end if
+            if (count of found) is 0 then error "NOSONG:" & songName
+            set theSong to item 1 of found
+    \(freshQueue)
+            duplicate theSong to theQueue
+            set shuffle enabled to false
+            play theQueue
+            return "OK:" & (artist of theSong)
+        end tell
+    end run
+    """
+
+    /// An artist's songs, a genre's, or both: found and copied by Music in
+    /// one go, however many there are.
+    static let playMusic = """
+    on run argv
+        set artistName to item 1 of argv
+        set genreName to item 2 of argv
+        set shuffleSetting to item 3 of argv
+        set queueName to item 4 of argv
+        set described to item 5 of argv
+        tell application "Music"
+            if artistName is not "" and genreName is not "" then
+                set howMany to count (every track of library playlist 1 whose (artist is artistName or album artist is artistName) and genre is genreName)
+            else if artistName is not "" then
+                set howMany to count (every track of library playlist 1 whose artist is artistName or album artist is artistName)
+            else
+                set howMany to count (every track of library playlist 1 whose genre is genreName)
+            end if
+            if howMany is 0 then error "NOMUSIC:" & described
+    \(freshQueue)
+            if artistName is not "" and genreName is not "" then
+                duplicate (every track of library playlist 1 whose (artist is artistName or album artist is artistName) and genre is genreName) to theQueue
+            else if artistName is not "" then
+                duplicate (every track of library playlist 1 whose artist is artistName or album artist is artistName) to theQueue
+            else
+                duplicate (every track of library playlist 1 whose genre is genreName) to theQueue
+            end if
+            set shuffle enabled to (shuffleSetting is "on")
+            play theQueue
+            return "OK:" & howMany
+        end tell
+    end run
+    """
 
     static let playAlbum = """
     on run argv
@@ -634,16 +721,12 @@ private enum Scripts {
         end tell
         set ordered to my sortByKey(keyed)
         tell application "Music"
-            set oldQueues to (every user playlist whose name is queueName)
-            repeat with oldQueue in oldQueues
-                delete oldQueue
-            end repeat
-            set albumQueue to make new user playlist with properties {name:queueName}
+    \(freshQueue)
             repeat with pair in ordered
-                duplicate (item 2 of pair) to albumQueue
+                duplicate (item 2 of pair) to theQueue
             end repeat
             set shuffle enabled to false
-            play albumQueue
+            play theQueue
         end tell
         return "OK:" & (count of ordered)
     end run

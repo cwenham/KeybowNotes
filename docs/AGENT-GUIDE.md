@@ -66,6 +66,21 @@ result is **outline text**, the same text the tree file holds.
 10. **Nothing sends by itself.** Messages and emails are only drafted; calls
     are confirmed. Don't promise more.
 
+## Music keys
+
+- **Look first.** The `music_library` tool, when you have it, reads the
+  person's Music library: an `overview`, then `genres`, `artists` — in a genre,
+  if you say which — `albums`, `songs`, `favourites` and `playlists`, the most
+  played first. Use it whenever they want music keys, and use its names as it
+  spells them. "Top" means most played; with no plays recorded, it ranks by
+  songs and says so.
+- **What a key plays:** `[Music]` with `song:`, `album:`, `playlist:`,
+  `artist:` or `genre:` — `artist` and `genre` together for an artist's songs in
+  a genre. With none of them, the label names a playlist.
+- **Let the labels name things.** `Jazz [Music, genre: Jazz, artist: "{{leaf}}"]`
+  with a key per artist below it plays each artist's jazz; a key there with
+  `artist: ""` plays the whole genre.
+
 ## Writing the outline
 
 - Number every entry by its **key position**, 1–4. A missing number leaves

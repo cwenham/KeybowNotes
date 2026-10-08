@@ -25,14 +25,17 @@ public enum TreeDraft {
         public var shortcuts: [String]
         /// "light.desk_lamp — Desk lamp".
         public var homeEntities: [String]
+        /// Their Music library can be read, with the music_library tool.
+        public var music: Bool
 
         public init(outline: String? = nil, keypads: [String] = [], apps: [String] = [], shortcuts: [String] = [],
-                    homeEntities: [String] = []) {
+                    homeEntities: [String] = [], music: Bool = false) {
             self.outline = outline
             self.keypads = keypads
             self.apps = apps
             self.shortcuts = shortcuts
             self.homeEntities = homeEntities
+            self.music = music
         }
     }
 
@@ -73,6 +76,10 @@ public enum TreeDraft {
                         + context.homeEntities.map { "- \($0)" }.joined(separator: "\n"))
         } else {
             have.append("Home Assistant isn't set up: don't use `[Home]`.")
+        }
+        if context.music {
+            have.append("My Music library: look at it with the music_library tool before making music keys, so they "
+                        + "name what's there.")
         }
         parts.append("# What I have\n\n" + have.joined(separator: "\n\n"))
         if let outline = context.outline, !outline.isEmpty {

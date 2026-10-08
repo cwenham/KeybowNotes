@@ -1021,6 +1021,44 @@ OK runs an action of the node's own with what was typed, as `{{answer}}`.
   `{{api.wikipedia term={{answer}}}}` looks it up — nothing is asked or fetched
   for it when the key is pressed.
 
+### `home` — Home Assistant
+
+A module. Calls a Home Assistant service on an entity: switches a lamp, sets a
+thermostat, runs a scene. Its address and a long-lived access token go in
+Settings → Home Assistant.
+
+| Field | |
+|---|---|
+| `entity` | The entity ID — `light.desk_lamp` — or several, separated by commas. *Copy the Entity List*, in the menu bar's Home Assistant menu, lists them. |
+| `service` | What to do: `turn_on`, `turn_off`, `toggle`, or a whole name — `climate.set_preset_mode`. Usually left out (below). |
+| `brightness` | A light's brightness, 0–100. |
+| `color` | A light's colour: a name Home Assistant knows — `orange`, `warm white` — or `#rrggbb`. |
+| `kelvin` | A white light's warmth: 2700 warm, 6500 daylight. |
+| `temperature` | What a thermostat is set to. |
+| `mode` | A thermostat's mode: `heat`, `cool`, `auto`, `off`. |
+| `value` | For a number, text or select entity: the value, or the option. |
+| `data` | Anything else the service takes: `transition: 2, effect: colorloop`, or JSON. |
+
+```
+1. Desk lamp [Home, entity: light.desk_lamp]
+2. Reading [Home, entity: light.desk_lamp, brightness: 40, kelvin: 2700]
+3. Warmer [Home, entity: climate.hallway, temperature: 21.5]
+4. Evening [Home, entity: scene.evening]
+5. All off [Home, entity: "light.lounge, light.kitchen", service: turn_off]
+```
+
+- **Left out, the service is worked out:** a toggle; for a light given a
+  brightness, colour or warmth, `turn_on`; for a thermostat given a
+  temperature, `set_temperature`, or a mode alone, `set_hvac_mode`; for a
+  scene or script, `turn_on`; a button is pressed, an automation triggered, a
+  media player played or paused; a number or select set to its `value`.
+- **Locks and alarms never toggle:** say `service: lock` or `unlock`, `arm_away`
+  or `disarm`. The time to cancel is there for second thoughts.
+- **The overlay says what happened,** from what Home Assistant reports back:
+  *Desk lamp: on, 40%*, *Hallway: heat, 21°*, *Ran Evening*.
+- **What goes wrong is said:** a refused token, an entity it doesn't have, a
+  service it didn't accept — in its own words — or nothing answering.
+
 ---
 
 ## 6. Values: `{{placeholders}}`
@@ -1036,6 +1074,7 @@ Any text in an action, and every template, can use placeholders:
 | `{{selection}}` | the text selected in the app in front when the key was pressed |
 | `{{api.weather}}` | a value fetched from an API, found by a rule Claude wrote once (below) |
 | `{{location.latitude}}` | where this Mac is (below) |
+| `{{home.sensor.outdoor_temperature}}` | an entity's state in Home Assistant (below) |
 | `{{quote file="quotes.md"}}` | a paragraph or list item from a file, at random or in turn (below) |
 
 A fallback in quotes is taken without them: `{{selection|"5 minute timer"}}`
@@ -1243,6 +1282,41 @@ Journal [append, entry: "**{{datetime}}** at {{location}} — {{selection}}"]
   Location Services.
 - The place is never written to the log. **Previews** show `‹your latitude›`.
 
+### Your home: `{{home.…}}`
+
+Any entity in Home Assistant, by its ID after `home.`, with a part after that
+if you like:
+
+| Name | Example | |
+|---|---|---|
+| `home.sensor.outdoor_temperature` | 14.2 | its state |
+| `home.sensor.outdoor_temperature.text` | 14.2 °C | its state with its unit |
+| `home.sensor.outdoor_temperature.unit` | °C | |
+| `home.sensor.outdoor_temperature.name` | Outdoor temperature | its friendly name |
+| `home.sensor.outdoor_temperature.changed` | 09:15 | when its state last changed |
+| `home.climate.hallway.current_temperature` | 19.5 | any attribute, by its name |
+
+```
+Weather [Display, text: "It's {{home.sensor.outdoor_temperature.text|unknown}} outside"]
+Heating [Display, text: "Hallway: {{home.climate.hallway.current_temperature}}°, set to {{home.climate.hallway.temperature}}°"]
+```
+
+- **Read when a key uses them,** fresh each time: one request an entity, or
+  one for all of them when an action uses more than four. An attribute it
+  doesn't have is empty; an entity it doesn't have stops the action and says so.
+- **The address,** in Settings → Home Assistant, is `http://homeassistant.local:8123`
+  unless you say otherwise. Plain http is only used on your local network — a
+  `.local` name, one without dots, or a private address, Tailscale's included —
+  and https everywhere else, Nabu Casa's remote address among them.
+- **The token** is a long-lived access token: in Home Assistant, open your
+  profile, then Security, and create one at the bottom of the page. It's kept
+  in the Keychain, and sent only to that address.
+- **The first time,** macOS asks whether KeybowNotes may find devices on your
+  local network. The prompt can open behind other windows; refused, Home
+  Assistant can't be reached until it's allowed in Privacy & Security → Local
+  Network. *Check the Connection*, in the menu bar's Home Assistant menu, says
+  whether it answers, and to the token.
+
 ### Quotes from a file: `{{quote file="…"}}`
 
 `{{quote}}` picks a **portion** of a text file each time a key uses it — a
@@ -1331,8 +1405,8 @@ Highest priority first:
    turned off in Settings. Neither the selection nor the clipboard is written to
    the system log.
 5. **Fetched:** `{{api.weather}}` and `{{api.weather.raw}}` from data sources,
-   `{{location}}` and its parts from Location Services, and `{{quote …}}` from a
-   file (above) — only when the action uses them. A value one of them needs is fetched first: a source's URL
+   `{{location}}` and its parts from Location Services, `{{home.…}}` from Home
+   Assistant, and `{{quote …}}` from a file (above) — only when the action uses them. A value one of them needs is fetched first: a source's URL
    gets the Mac's place.
 6. **Built-ins:**
 

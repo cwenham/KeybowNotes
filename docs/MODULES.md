@@ -338,6 +338,27 @@ it did is on the screen, and the overlay steps aside.
   `valuesNeeded(toFetch:)` names what's in them, so `{{selection}}` is read
   first if they use it.
 
+## Home Assistant
+
+`mac/Sources/KeybowHome/`, module id `home`.
+
+- Fetches `{{home.<domain>.<object_id>}}` — an entity's state — and
+  `{{home.<entity>.<part>}}`: `name`, `unit`, `text`, `changed`, or any
+  attribute. Up to four entities are asked for one at a time, side by side;
+  more, in one request for every state.
+- Runs `home`: works out the service from the entity's domain and the fields
+  given, and says what changed from the states Home Assistant sends back.
+- `HomeAssistant` is the REST API — `GET /api/states/<entity>`,
+  `POST /api/services/<domain>/<service>`, `GET /api/config` — with the token
+  as a bearer header, behind `HomeTransport` so tests use a made-up Home
+  Assistant. Redirects to another host aren't followed.
+- Plain http is allowed only to local hosts, checked in code; the app's
+  Info.plist lets URLSession make those connections: `NSAllowsLocalNetworking`
+  for `.local` names, and `NSExceptionDomains` for the private address ranges,
+  since a bare IP address isn't local networking to App Transport Security.
+- Menu: *Check the Connection* and *Copy the Entity List*, answered in a
+  display. Settings: *Address*, and *Access token*, kept in the Keychain.
+
 ## Not yet
 
 - **Loading modules at run time.** They're compiled in. A plugin system would

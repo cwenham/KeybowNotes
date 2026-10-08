@@ -51,5 +51,54 @@
 	<string>KeybowNotes adds the reminders and timers you choose on the Keybow.</string>
 	<key>NSRemovableVolumesUsageDescription</key>
 	<string>KeybowNotes sets keypads up: it puts CircuitPython and its firmware on the keypad's drive.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>KeybowNotes talks to Home Assistant on your network, to switch lights and read sensors from your keys.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- Home Assistant at home is usually plain http: at homeassistant.local,
+		     which local networking allows with names without dots, or at a
+		     private address, which needs its range named — a bare IP isn't
+		     local networking to macOS. Plain http goes nowhere else. -->
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>10.0.0.0/8</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+			<key>172.16.0.0/12</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+			<key>192.168.0.0/16</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+			<key>169.254.0.0/16</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+			<key>100.64.0.0/10</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+			<key>fc00::/7</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+			<key>fe80::/10</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 </dict>
 </plist>

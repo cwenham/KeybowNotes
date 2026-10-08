@@ -55,6 +55,8 @@ change your mind — press any key — before the action runs.
   your choosing — a search, a note, text typed where you were.
 - **Windows**: put the window you're working in on a half or a quarter of the
   screen, fill it, or send it to another screen.
+- **Home Assistant**: switch and dim lamps, set the heating, run scenes — and
+  any sensor's reading is a value: *It's 14.2 °C outside*.
 
 **Values** — anything an action writes can include `{{placeholders}}`: the labels
 along the path, a contact's number, the date in any format, **where your Mac is**,

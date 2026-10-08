@@ -600,6 +600,7 @@ should explain a refusal rather than failing silently.
 | Contacts | The tree editor's *Look Up in Contacts*; asked for when first used |
 | Network (Anthropic API) | `{{#ai}}` blocks: prompts go to `api.anthropic.com` with an API key from the Keychain. No permission prompt; the key is the gate |
 | Location Services | `{{location}}` and its parts, including in a data source's URL. Asked for when first needed. The app isn't under the hardened runtime; if it were, it would also need the `com.apple.security.personal-information.location` entitlement |
+| Local Network | `home` and `{{home.…}}`: talking to Home Assistant on your network. Asked for when first used. Plain http is allowed only to local hosts — `.local` names, names without dots, private address ranges |
 | Files on removable volumes | *Set Up a Keypad…*: reading a keypad's drive, and writing CircuitPython and the firmware to it. Asked for when the setup window first looks |
 | Accessibility | `text.insert`: pressing ⌘V in the app in front. `text.insertDirect`: setting the selected text, or typing. `{{selection}}`: reading the selected text, and sending ⌘C to apps that won't share it. `window`: moving and sizing the window in front. Asked for when first needed, or from Settings → Selected Text |
 

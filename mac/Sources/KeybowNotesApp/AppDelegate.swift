@@ -45,9 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var moduleClock: Timer?
     /// Modules' commands go after this, rebuilt each time the menu opens.
     private let moduleMenuAnchor = NSMenuItem.separator()
-    /// Values being fetched and replies worked out for an action; one at a
-    /// time, cancellable.
-    private var pendingWork: Task<Void, Never>?
+    /// What happens between a press and its action.
+    private var pipeline: ActionPipeline?
     private let cancelWorkItem = NSMenuItem(title: "Cancel Waiting", action: nil, keyEquivalent: "")
     private var moduleMenuItems: [NSMenuItem] = []
 
@@ -77,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let overlay = OverlayController(config: config, placement: options.placement ?? settings.placement)
         overlay.debugDirectory = options.debugDirectory
         self.overlay = overlay
+        pipeline = makePipeline(showingOn: overlay)
         setUpMenu()
         updateConfigStatus()
         refreshOpenAtLogin()
@@ -298,269 +298,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Running actions
 
-    /// `chosenAt` is when the key was pressed: the action's "now", so a
-    /// stopwatch starts on the press, not when the overlay has caught up.
-    /// `values` join what the action can use: a display's `{{displayed}}`,
-    /// for the action its OK runs.
-    /// Runs a leaf's action. `report` hears how it went — for a script or an
-    /// agent that asked for it — whichever way it ends.
-    private func fire(_ selection: ResolvedSelection, chosenAt: Date = Date(), values: [String: String] = [:],
-                      report: ((ActionOutcome) -> Void)? = nil) {
-        guard let overlay else { return }
-        let path = selection.pathDescription
-        func refuse(_ message: String) {
-            overlay.showRefused(message, summary: ActionSummary(selection: selection, config: config))
-            report?(.failure(message))
-        }
-
-        if dryRun {
-            let summary = ActionSummary(selection: selection, config: config)
-            overlay.showPreview(summary, path: path)
-            report?(.success("Dry run: nothing done", "It would: \(summary.verb) \(summary.subject)"))
-            return
-        }
-
-        var context = ActionContext(
-            templatesDirectory: store.templatesDirectory,
-            now: chosenAt,
-            environment: environment().merging(values) { _, given in given },
-            defaultCalendarID: settings.defaultCalendarID,
-            defaultReminderListID: settings.defaultReminderListID)
-
-        // Blocks — {{#ai}} — are refused before anything is asked where a
-        // reply could steer the action, and one lot at a time.
-        let blockTexts: [String]
-        do {
-            blockTexts = try ActionPlanner.blockTexts(for: selection, context: context)
-        } catch {
-            Log.info("  can't run: \(error)")
-            refuse("\(error)")
-            return
-        }
-        // Values modules fetch — {{api.weather}} — and what they need first.
-        let registry = ModuleRegistry.shared
-        let used = ActionPlanner.placeholders(for: selection, context: context)
-        // A value the tree gives itself — `location: Office` — isn't fetched.
-        let given = ActionPlanner.values(for: selection, context: context)
-        let fetchedNames = registry.fetchedNames(in: used).filter { given[$0] == nil }
-        let needed = used.union(registry.valuesNeeded(toFetch: fetchedNames))
-        // An image or PDF on the clipboard, for what uses it: read only then,
-        // since it's scaled to size first.
-        if needed.contains("clipboard"), let media = ClipboardMedia.tokens(from: .general) {
-            context.environment["clipboard"] = media
-        }
-        let waits = !blockTexts.isEmpty || !fetchedNames.isEmpty
-        if waits, pendingWork != nil {
-            refuse("Still waiting on the last fetch or replies. Cancel it, or let it finish, then press again.")
-            return
-        }
-
-        let needsSelection = needed.contains("selection")
-        guard needsSelection || waits else {
-            run(selection, context: context, report: report)
-            return
-        }
-        // The app to type into, if it comes to that: waiting leaves time to
-        // switch to another.
-        let frontApp = NSWorkspace.shared.frontmostApplication?.processIdentifier
-        let work = Task { @MainActor in
-            defer { if waits { self.pendingWork = nil } }
-            // Read only when asked for: it can mean sending the app ⌘C.
-            if needsSelection {
+    /// What happens between a press and its action, with the Mac as it is.
+    private func makePipeline(showingOn overlay: OverlayController) -> ActionPipeline {
+        let surroundings = ActionPipeline.Surroundings(
+            values: {
+                // This app never takes focus, so the frontmost app is whatever
+                // you were using when you pressed the key.
+                var values: [String: String] = [:]
+                if let text = NSPasteboard.general.string(forType: .string) {
+                    values["clipboard"] = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                if let app = NSWorkspace.shared.frontmostApplication?.localizedName { values["frontApp"] = app }
+                return values
+            },
+            clipboardMedia: { ClipboardMedia.tokens(from: .general) },
+            frontmostApp: { NSWorkspace.shared.frontmostApplication?.processIdentifier },
+            readSelection: { [settings] in
                 switch await SelectedText.read(copyIfNeeded: settings.copySelection) {
-                case .text(let text):
-                    context.environment["selection"] = text
-                case .nothingSelected:
-                    break
-                case .notAllowed:
-                    Log.info("  can't run: no Accessibility access for {{selection}}")
-                    refuse("KeybowNotes needs Accessibility access to read the selected text. "
-                           + "Allow it in System Settings, then press again.")
-                    SelectedText.requestAccess()
-                    return
+                case .text(let text): return .text(text)
+                case .nothingSelected: return .nothingSelected
+                case .notAllowed: return .notAllowed
                 }
-            }
-            if waits {
-                guard let prepared = await prepare(fetchedNames, blockTexts, selection: selection, context: context) else {
-                    report?(.failure("It didn't run: cancelled, or what it needed couldn't be had — the overlay said which."))
-                    return
-                }
-                context = prepared
-            }
-            run(selection, context: context, typingInto: waits ? frontApp : nil, report: report)
-        }
-        if waits { pendingWork = work }
-    }
-
-    /// Fetches the values the action uses, then works out its blocks —
-    /// innermost first, those that can go together at once — with a timer
-    /// and a Cancel button on the HUD. Nil if cancelled or refused, having
-    /// said so.
-    private func prepare(_ fetchedNames: [String], _ texts: [String], selection: ResolvedSelection,
-                         context: ActionContext) async -> ActionContext? {
-        guard let overlay else { return nil }
-        var context = context
-        let summary = ActionSummary(selection: selection, config: config, environment: context.environment)
-        let registry = ModuleRegistry.shared
-        let askers = Set(texts.flatMap(TemplateBlocks.names(in:)).compactMap { name in
-            registry.module(handlingBlock: name)?.manifest.blocks.first { $0.name == name }?.title
-        })
-        let askTitle = askers.count == 1 ? "Asking \(askers.first!)…" : "Waiting for replies…"
-        let fetchTitle = "Fetching " + registry.fetchSubject(for: fetchedNames,
-                                                            given: ActionPlanner.values(for: selection, context: context)) + "…"
-        // Shown only if the wait lasts: a quote from a file, or a kept
-        // response, is there before it would be seen.
-        let title = WaitTitle(fetchedNames.isEmpty ? askTitle : fetchTitle)
-        let showing = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(300))
-            guard !Task.isCancelled else { return }
-            overlay.showWorking(summary, path: selection.pathDescription, title: title.text) { self?.cancelReplies() }
-        }
-        defer {
-            showing.cancel()
-            overlay.endWorking()
-        }
+            },
+            mayInsertText: { SelectedText.isAllowed },
+            askForAccessibility: { SelectedText.requestAccess() },
+            putOnClipboard: { text in
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+            },
+            bringPromptsForward: Self.bringPermissionPromptsForward,
+            run: { plan in await ActionRunner.run(plan) },
+            log: { Log.info($0) },
+            logError: { Log.error($0) })
+        let pipeline = ActionPipeline(
+            display: overlay, surroundings: surroundings,
+            config: { [unowned self] in config },
+            settings: { [unowned self] in
+                ActionPipeline.Settings(dryRun: dryRun, templatesDirectory: store.templatesDirectory,
+                                        defaultCalendarID: settings.defaultCalendarID,
+                                        defaultReminderListID: settings.defaultReminderListID)
+            })
         // Development builds only: press Cancel after a while, for testing.
-        if Bundle.main.bundleIdentifier == nil,
-           let after = Double(ProcessInfo.processInfo.environment["KEYBOW_DEBUG_CANCEL_AFTER"] ?? "") {
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(after))
-                self?.cancelReplies()
-            }
+        if !isPackaged {
+            pipeline.cancelAfter = ProcessInfo.processInfo.environment["KEYBOW_DEBUG_CANCEL_AFTER"].flatMap(Double.init)
         }
-
-        let started = Date()
-        do {
-            if !fetchedNames.isEmpty {
-                let values = try await registry.fetch(fetchedNames, params: ActionPlanner.values(for: selection, context: context),
-                                                      now: context.now)
-                context.environment.merge(values) { _, fetched in fetched }
-                Log.info(String(format: "  fetched %d value%@ in %.1fs", values.count, values.count == 1 ? "" : "s",
-                                Date().timeIntervalSince(started)))
-            }
-            if !texts.isEmpty {
-                title.text = askTitle
-                overlay.updateWorking(title: askTitle)
-                let replies = try await TemplateBlocks.resolve(
-                    texts, params: ActionPlanner.values(for: selection, context: context),
-                    now: context.now, calendar: context.calendar) { call in
-                    try await ModuleRegistry.shared.reply(to: call)
-                }
-                Log.info(String(format: "  %d repl%@ in %.1fs", replies.count, replies.count == 1 ? "y" : "ies",
-                                Date().timeIntervalSince(started)))
-                context.blockReplies = replies
-            }
-            return context
-        } catch is CancellationError {
-            Log.info("  cancelled while waiting")
-            overlay.handle(.cleared(reason: .cancelled))
-        } catch let error as ModuleError {
-            // Only the headline is logged: the detail can quote a server, and
-            // a server can quote back what it was sent — the selection, say.
-            Log.error("  FAILED while waiting: \(error.message)")
-            overlay.showFinished(.failure(error.message, error.detail), summary: summary, warnings: [])
-        } catch {
-            Log.error("  FAILED while waiting: \(error)")
-            overlay.showRefused("\(error)", summary: summary)
-        }
-        return nil
+        return pipeline
     }
 
     @objc private func cancelReplies() {
-        pendingWork?.cancel()
-    }
-
-    private func run(_ selection: ResolvedSelection, context: ActionContext, typingInto frontApp: pid_t? = nil,
-                     report: ((ActionOutcome) -> Void)? = nil) {
-        guard let overlay else { return }
-        let summary = ActionSummary(selection: selection, config: config, environment: context.environment)
-        let path = selection.pathDescription
-        func refuse(_ message: String) {
-            overlay.showRefused(message, summary: summary)
-            report?(.failure(message))
-        }
-
-        // The system log is kept on disk and readable by any admin, so the
-        // selected text, the clipboard and anything copied stay out of it.
-        var isPrivate = !ActionPlanner.placeholders(for: selection, context: context)
-            .isDisjoint(with: ["selection", "clipboard", "displayed", "answer"])
-
-        let planned: PlannedAction
-        do {
-            planned = try ActionPlanner.plan(selection, config: config, context: context)
-        } catch {
-            Log.info("  can't run: \(isPrivate ? "(details not logged)" : "\(error)")")
-            refuse("\(error)")
-            return
-        }
-        switch planned.plan {
-        case .copyToClipboard, .insertText, .insertTextDirectly: isPrivate = true
-        default: break
-        }
-        // Inserting text into another app needs Accessibility access.
-        let inserts: Bool
-        switch planned.plan {
-        case .insertText, .insertTextDirectly: inserts = true
-        default: inserts = false
-        }
-        if inserts, !SelectedText.isAllowed {
-            Log.info("  can't run: no Accessibility access for inserting text")
-            refuse("KeybowNotes needs Accessibility access to type into other apps. "
-                   + "Allow it in System Settings, then press again.")
-            SelectedText.requestAccess()
-            return
-        }
-        // Switched apps while waiting on replies: don't type into the wrong one.
-        if inserts, let frontApp, NSWorkspace.shared.frontmostApplication?.processIdentifier != frontApp {
-            switch planned.plan {
-            case .insertText(let text, _), .insertTextDirectly(let text, _):
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(text, forType: .string)
-            default:
-                break
-            }
-            Log.info("  not inserted: the app in front changed while waiting")
-            refuse("You switched apps while waiting, so the text wasn't typed in. It's on the clipboard instead.")
-            return
-        }
-
-        bringPermissionPromptsForward(for: planned.plan)
-        overlay.showRunning(summary, path: path)
-        Task { @MainActor [isPrivate] in
-            let started = Date()
-            let outcome = await ActionRunner.run(planned.plan)
-            let seconds = String(format: "%.1fs", Date().timeIntervalSince(started))
-            let line = "  \(outcome.succeeded ? "done" : "FAILED") in \(seconds)"
-                + (isPrivate ? " (details not logged)" : ": \(outcome.message)" + (outcome.detail.map { " — \($0)" } ?? ""))
-            outcome.succeeded ? Log.info(line) : Log.error(line)
-            for warning in planned.warnings where !isPrivate { Log.info("  warning: \(warning)") }
-            report?(outcome)
-            if let next = outcome.followUp {
-                self.follow(next, of: selection, values: outcome.values, text: outcome.followUpText)
-            } else if !outcome.isQuiet {
-                overlay.showFinished(outcome, summary: summary, warnings: planned.warnings)
-            } else {
-                // Nothing to say: what it did is on the screen.
-                overlay.stepAside()
-            }
-        }
-    }
-
-    /// Runs the node's own `ok` or `cancel` action, as though its key had just
-    /// been pressed — or nothing, when it has none.
-    private func follow(_ key: String, of selection: ResolvedSelection, values: [String: String], text: String?) {
-        guard let next = selection.action?.nestedAction(key) else { return }
-        Log.info("  then \(key): \(next.type)")
-        var fields = next.fields
-        // Copy, Insert and the like, given no text: what was shown, or typed.
-        if fields["text"] == nil, fields["template"] == nil, let text { fields["text"] = .string(text) }
-        fire(selection.with(action: ActionSpec(type: next.type, fields: fields)), values: values)
+        pipeline?.cancel()
     }
 
     /// The first event or reminder asks for access. This app never comes to the
     /// front, so without this the prompt can open behind other windows, out of
     /// sight — and the action waits on it.
-    private func bringPermissionPromptsForward(for plan: ActionPlan) {
+    private static func bringPermissionPromptsForward(for plan: ActionPlan) {
         guard EventKitService.isAvailable else { return }
         let type: EKEntityType
         switch plan {
@@ -569,20 +361,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         default: return
         }
         if EventKitService.status(for: type) == .notDetermined { NSApp.activate() }
-    }
-
-    /// {{clipboard}} and {{frontApp}}; {{selection}} is added by `fire` when
-    /// needed. This app never takes focus, so the frontmost app is whatever you
-    /// were using when you pressed the key.
-    private func environment() -> [String: String] {
-        var values = ModuleRegistry.shared.values(now: Date())
-        if let text = NSPasteboard.general.string(forType: .string) {
-            values["clipboard"] = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if let app = NSWorkspace.shared.frontmostApplication?.localizedName {
-            values["frontApp"] = app
-        }
-        return values
     }
 
     private func simulate(_ keys: [Int], pace: TimeInterval) {
@@ -753,7 +531,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         updateAccessItem()
-        cancelWorkItem.isHidden = pendingWork == nil
+        cancelWorkItem.isHidden = pipeline?.isWaiting != true
         updateModuleMenuItems(in: menu)
     }
 
@@ -856,7 +634,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 return editor.model.isDirty ? .unsaved : .clean
             },
             reloadEditor: { [unowned self] in editorWindow?.model.reloadFromFile() },
-            fire: { [unowned self] selection, report in fire(selection, report: report) },
+            fire: { [unowned self] selection, report in pipeline?.fire(selection, report: report) },
             notice: { [unowned self] message, symbol in overlay?.flashNotice(message, symbol: symbol) },
             modulesChanged: { [unowned self] in refreshModules() })
     }
@@ -1012,7 +790,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard let self, let overlay = self.overlay else { continue }
                 overlay.handle(event)
                 self.log(event)
-                if case .fire(let selection, let chosenAt) = event { self.fire(selection, chosenAt: chosenAt) }
+                if case .fire(let selection, let chosenAt) = event { self.pipeline?.fire(selection, chosenAt: chosenAt) }
             }
         }
         Task { @MainActor [weak self] in
@@ -1102,11 +880,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Log.info(page.map { "page: \($0.node.label)  [\($0.tree.rawValue) pages]" } ?? "back to the trees")
         }
     }
-}
-
-/// What the wait is for, as it changes: read when the overlay shows it.
-@MainActor
-private final class WaitTitle {
-    var text: String
-    init(_ text: String) { self.text = text }
 }

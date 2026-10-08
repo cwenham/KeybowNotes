@@ -410,6 +410,15 @@ Every text field in an action is expanded through the template system first.
 | `shortcut` | `shortcuts run` | Escape hatch for anything supporting Shortcuts. |
 | `stopwatch` | module | Built in as a module; see [MODULES.md](MODULES.md). |
 
+Each type's keywords, fields, help and defaults are described once, in
+`BuiltInActions`, as a module's are in its manifest.
+
+What happens between the press and the action — the values it fetches, the
+replies its blocks ask for, the selected text it reads, the checks that refuse
+it, the action, then the one its outcome runs next — is `ActionPipeline`, in
+KeybowKit. It shows each step through the overlay and reaches the Mac through
+stand-ins it's given, so its rules are tested without a keypad or a screen.
+
 Deliberately excluded: an "arbitrary AppleScript" action. It would let a config
 file run any code; revisit only if a real need appears.
 

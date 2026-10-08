@@ -399,3 +399,10 @@ final class OverlayController {
 final class OverlayHostingView: NSHostingView<OverlayView> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
+
+/// The overlay shows each step of an action, as the pipeline takes it.
+extension OverlayController: ActionShowing {
+    func showCancelled() {
+        handle(.cleared(reason: .cancelled))
+    }
+}

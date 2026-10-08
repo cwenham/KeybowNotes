@@ -232,6 +232,16 @@ For the selected node:
   back to the front), with completion as you type. A name that matches no
   shortcut is flagged. **Edit…** opens the shortcut in Shortcuts, or **Open
   Shortcuts** to make one.
+- **A module's lists** — fields whose module knows what can go in them are
+  combo boxes too: for *Home Assistant*, the entities it has, then the services,
+  modes, options and warmths that entity takes, each with its name and state.
+  Anything can still be typed, `{{…}}` values included. A list that can't be
+  had says why under the field — no token, nothing answering. A module can
+  also show only the fields that apply: a thermostat's temperature and mode,
+  not a lamp's brightness; a field that's been set is always shown.
+- **Colour** — for a module field that takes one, a swatch that opens the
+  colour panel, beside the field it's written in: `#ff8800`, or a name from
+  its list. Dragging in the panel is written once it settles.
 - **Key colour** — the key's light: a colour well that opens the colour panel,
   and swatches that read well on the keys, one click each. Shows the colour in
   force and where it comes from; **Use Inherited** removes the node's own. Writes

@@ -142,6 +142,8 @@ enum WindowSnapshots {
         Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak window] timer in
             MainActor.assumeIsolated {
                 guard let window, window.isVisible, let view = window.contentView else { return timer.invalidate() }
+                // Drawn into layers from the next time on, so they can be pictured.
+                if view.layer == nil { view.wantsLayer = true }
                 // The layers, as drawn: caching the display leaves SwiftUI's text out.
                 guard let layer = view.layer, let picture = NSBitmapImageRep(
                     bitmapDataPlanes: nil, pixelsWide: Int(view.bounds.width * 2), pixelsHigh: Int(view.bounds.height * 2),

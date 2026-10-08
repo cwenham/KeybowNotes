@@ -1,5 +1,6 @@
 import AppKit
 import KeybowAI
+import KeybowHome
 import KeybowKit
 import KeybowModules
 
@@ -25,6 +26,44 @@ enum Modules {
         if Bundle.main.bundleIdentifier == nil, let reply = ProcessInfo.processInfo.environment["KEYBOW_DEBUG_CLAUDE_REPLY"] {
             ModuleRegistry.shared.register(ClaudeModule(transport: ScriptedClaude(reply: reply)), host: KeyedHost(host))
         }
+        // Development builds only, on request: a made-up Home Assistant, with
+        // a few lamps, a thermostat and a scene, for trying the editor's
+        // lists and taking pictures of them without anyone's own home.
+        if Bundle.main.bundleIdentifier == nil, ProcessInfo.processInfo.environment["KEYBOW_HOME_DEMO"] != nil {
+            ModuleRegistry.shared.register(HomeAssistantModule(transport: DemoHome()), host: KeyedHost(host))
+        }
+    }
+}
+
+/// Answers as Home Assistant would, about a home that doesn't exist.
+private struct DemoHome: HomeTransport {
+    static let states = """
+        [{"entity_id": "light.desk_lamp", "state": "on", "attributes": {"friendly_name": "Desk lamp", "brightness": 180,
+          "min_color_temp_kelvin": 2200, "max_color_temp_kelvin": 6500}},
+         {"entity_id": "light.floor_lamp", "state": "off", "attributes": {"friendly_name": "Floor lamp"}},
+         {"entity_id": "switch.kettle", "state": "off", "attributes": {"friendly_name": "Kettle"}},
+         {"entity_id": "climate.hallway", "state": "heat", "attributes": {"friendly_name": "Hallway",
+          "hvac_modes": ["off", "heat", "auto"], "temperature": 20, "current_temperature": 19.5}},
+         {"entity_id": "scene.evening", "state": "2026-10-08T19:00:00+00:00", "attributes": {"friendly_name": "Evening"}},
+         {"entity_id": "input_select.mood", "state": "Calm", "attributes": {"friendly_name": "Mood",
+          "options": ["Calm", "Focus", "Movie night"]}},
+         {"entity_id": "sensor.outdoor_temperature", "state": "14.2",
+          "attributes": {"friendly_name": "Outdoor temperature", "unit_of_measurement": "°C"}}]
+        """
+    static let services = """
+        [{"domain": "light", "services": {"turn_on": {"name": "Turn on"}, "turn_off": {"name": "Turn off"},
+          "toggle": {"name": "Toggle"}}},
+         {"domain": "climate", "services": {"set_temperature": {"name": "Set target temperature"},
+          "set_hvac_mode": {"name": "Set HVAC mode"}, "turn_on": {"name": "Turn on"}, "turn_off": {"name": "Turn off"}}},
+         {"domain": "homeassistant", "services": {"turn_on": {"name": "Generic turn on"},
+          "turn_off": {"name": "Generic turn off"}, "toggle": {"name": "Generic toggle"}}}]
+        """
+
+    func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        try await Task.sleep(for: .milliseconds(300))
+        let path = request.url?.path ?? ""
+        let body = path.hasSuffix("/api/states") ? Self.states : path.hasSuffix("/api/services") ? Self.services : "[]"
+        return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
     }
 }
 
@@ -53,7 +92,9 @@ private final class KeyedHost: ModuleHost, @unchecked Sendable {
     func statusChanged() { host.statusChanged() }
     func copy(_ text: String) { host.copy(text) }
     func setting(_ key: String, for module: String) -> String? { host.setting(key, for: module) }
-    func secret(_ key: String, for module: String) -> String? { key == "apiKey" ? "scripted" : host.secret(key, for: module) }
+    func secret(_ key: String, for module: String) -> String? {
+        ["apiKey", "token"].contains(key) ? "scripted" : host.secret(key, for: module)
+    }
     func setSecret(_ value: String?, _ key: String, for module: String) -> String? { host.setSecret(value, key, for: module) }
 }
 

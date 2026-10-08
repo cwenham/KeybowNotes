@@ -149,6 +149,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
     func show() {
         showWindow(nil)
         window?.bringToFront()
+        if let window { WindowSnapshots.keep(window, as: "editor") }
         installKeyMonitor()
         runDebugScript()
     }

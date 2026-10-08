@@ -7,10 +7,13 @@ import XCTest
 private final class FakeHome: HomeTransport, @unchecked Sendable {
     var answers: [String: (Int, String)] = [:]
     var failure: URLError?
-    private(set) var requests: [URLRequest] = []
+    private let lock = NSLock()
+    private var sent: [URLRequest] = []
+    /// Several are sent at once: kept behind a lock.
+    var requests: [URLRequest] { lock.withLock { sent } }
 
     func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
-        requests.append(request)
+        lock.withLock { sent.append(request) }
         if let failure { throw failure }
         let path = request.url!.path
         let (status, body) = answers["\(request.httpMethod ?? "GET") \(path)"] ?? (404, #"{"message": "Entity not found."}"#)
@@ -203,6 +206,75 @@ final class HomeAssistantTests: XCTestCase {
         home.answers["POST /api/services/light/turn_on"] = (400, #"{"message": "extra keys not allowed @ data['sparkle']"}"#)
         let refused = await module.run(request(["entity": "light.desk_lamp", "service": "turn_on", "data": "sparkle: 1"]), now: now)
         XCTAssertEqual(refused, .failure("Home Assistant didn't accept light.turn_on", "extra keys not allowed @ data['sparkle']"))
+    }
+
+    // MARK: Choices, for the editor
+
+    private let everything = """
+        [{"entity_id": "switch.kettle", "state": "off", "attributes": {"friendly_name": "Kettle"}},
+         {"entity_id": "light.floor_lamp", "state": "off", "attributes": {"friendly_name": "Floor lamp"}},
+         {"entity_id": "light.desk_lamp", "state": "on", "attributes": {"friendly_name": "Desk lamp",
+          "min_color_temp_kelvin": 2500, "max_color_temp_kelvin": 5000}},
+         {"entity_id": "climate.hallway", "state": "heat_cool", "attributes": {"friendly_name": "Hallway",
+          "hvac_modes": ["off", "heat", "heat_cool"]}},
+         {"entity_id": "input_select.mood", "state": "Calm", "attributes": {"options": ["Calm", "Movie night"]}},
+         {"entity_id": "input_number.volume", "state": "3", "attributes": {"min": 0, "max": 10, "step": 0.5}},
+         {"entity_id": "sensor.outdoor_temperature", "state": "14.2", "attributes": {}}]
+        """
+
+    func testTheEditorIsOfferedWhatHomeAssistantHas() async throws {
+        home.answers["GET /api/states"] = (200, everything)
+        home.answers["GET /api/services"] = (200, """
+            [{"domain": "light", "services": {"turn_on": {"name": "Turn on"}, "toggle": {"name": "Toggle"}}},
+             {"domain": "homeassistant", "services": {"toggle": {"name": "Generic toggle"},
+              "turn_off": {"name": "Generic turn off"}, "restart": {"name": "Restart"}}}]
+            """)
+        let entities = try await module.choices(for: "entity", type: "home", fields: [:])
+        XCTAssertEqual(entities.map(\.value), ["climate.hallway", "input_number.volume", "input_select.mood",
+                                               "light.desk_lamp", "light.floor_lamp", "switch.kettle"],
+                       "by domain, then name; no sensors")
+        XCTAssertEqual(entities.first?.title, "Hallway — heat cool")
+
+        let services = try await module.choices(for: "service", type: "home", fields: ["entity": "light.desk_lamp"])
+        XCTAssertEqual(services, [FieldChoice("toggle", title: "Toggle"), FieldChoice("turn_on", title: "Turn on"),
+                                  FieldChoice("homeassistant.turn_off", title: "Generic turn off")],
+                       "its own, then the general ones it doesn't have")
+        let none = try await module.choices(for: "service", type: "home", fields: [:])
+        XCTAssertEqual(none, [], "no entity, nothing to follow")
+
+        let modes = try await module.choices(for: "mode", type: "home", fields: ["entity": "climate.hallway"])
+        XCTAssertEqual(modes.map(\.value), ["off", "heat", "heat_cool"])
+        XCTAssertEqual(modes.last?.title, "Heat Cool")
+        let options = try await module.choices(for: "value", type: "home", fields: ["entity": "input_select.mood"])
+        XCTAssertEqual(options.map(\.value), ["Calm", "Movie night"])
+        let numbers = try await module.choices(for: "value", type: "home", fields: ["entity": "input_number.volume"])
+        XCTAssertEqual(numbers.map(\.value), ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"], "a few along the way")
+        let warmth = try await module.choices(for: "kelvin", type: "home", fields: ["entity": "light.desk_lamp"])
+        XCTAssertEqual(warmth.map(\.value), ["2700", "3000", "4000", "5000"], "within what the lamp can do")
+
+        let asked = home.requests.filter { $0.url?.path == "/api/states" }.count
+        XCTAssertEqual(asked, 1, "kept, not asked again for each field")
+    }
+
+    func testWithoutATokenTheListSaysWhy() async {
+        host.set(nil, for: "token", of: "home", secret: true)
+        do {
+            _ = try await module.choices(for: "entity", type: "home", fields: [:])
+            XCTFail()
+        } catch {
+            XCTAssertEqual((error as? ModuleError)?.message, "Home Assistant needs an access token")
+        }
+    }
+
+    func testOnlyTheFieldsAnEntityTakesAreShown() {
+        XCTAssertEqual(module.shownFields(type: "home", fields: ["entity": "light.desk_lamp"]),
+                       ["entity", "service", "data", "brightness", "color", "kelvin"])
+        XCTAssertEqual(module.shownFields(type: "home", fields: ["entity": "climate.hallway"]),
+                       ["entity", "service", "data", "temperature", "mode"])
+        XCTAssertEqual(module.shownFields(type: "home", fields: ["entity": "input_select.mood"]),
+                       ["entity", "service", "data", "value"])
+        XCTAssertEqual(module.shownFields(type: "home", fields: ["entity": "scene.evening"]), ["entity", "service", "data"])
+        XCTAssertEqual(module.shownFields(type: "home", fields: [:]), ["entity", "service", "data"])
     }
 
     func testWhatAKeyWillDoIsSaid() {

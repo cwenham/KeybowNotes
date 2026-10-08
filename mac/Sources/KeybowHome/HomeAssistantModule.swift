@@ -35,29 +35,29 @@ public final class HomeAssistantModule: KeybowModule, @unchecked Sendable {
                 type: type, title: "Home Assistant", keywords: ["Home", "Home Assistant"], symbol: "house",
                 fields: [
                     ModuleField(key: "entity", title: "Entity", hint: "light.desk_lamp", help: """
-                        What to control, by its entity ID — or several, separated by commas. Copy Home Assistant \
-                        Entities, in the menu bar's menu, lists them.
+                        What to control, by its entity ID — or several, separated by commas. The list is what \
+                        Home Assistant has.
                         Example: light.desk_lamp
-                        """),
+                        """, offersChoices: true),
                     ModuleField(key: "service", title: "Service", hint: "toggle — or turn_on, climate.set_temperature…",
                                 help: """
                         What to do, as Home Assistant names it: turn_on, turn_off, toggle, or a whole name like \
                         climate.set_hvac_mode. Left out: a toggle; on, for a light given a brightness or colour; \
                         the temperature, for a thermostat given one; on, for a scene or script.
                         Example: turn_off
-                        """),
+                        """, offersChoices: true),
                     ModuleField(key: "brightness", title: "Brightness", kind: .number, hint: "percent", help: """
                         A light's brightness, 0 to 100.
                         Example: 40
                         """),
-                    ModuleField(key: "color", title: "Colour", hint: "warm white, red, #ff8800", help: """
-                        A light's colour: a name Home Assistant knows, or #rrggbb.
+                    ModuleField(key: "color", title: "Colour", kind: .colour, hint: "#ff8800, or a name: orange", help: """
+                        A light's colour: #rrggbb, or a name Home Assistant knows.
                         Example: orange
                         """),
                     ModuleField(key: "kelvin", title: "Colour temperature", kind: .number, hint: "2700", help: """
                         A white light's warmth, in kelvin: 2700 is warm, 6500 daylight.
                         Example: 2700
-                        """),
+                        """, offersChoices: true),
                     ModuleField(key: "temperature", title: "Temperature", kind: .number, help: """
                         What a thermostat is set to, in Home Assistant's units.
                         Example: 21
@@ -65,11 +65,11 @@ public final class HomeAssistantModule: KeybowModule, @unchecked Sendable {
                     ModuleField(key: "mode", title: "Mode", hint: "heat, cool, auto, off", help: """
                         A thermostat's mode, as Home Assistant names it.
                         Example: heat
-                        """),
+                        """, offersChoices: true),
                     ModuleField(key: "value", title: "Value", help: """
                         For a number, a select or a text entity: the value to set — or the option to choose.
                         Example: 3
-                        """),
+                        """, offersChoices: true),
                     ModuleField(key: "data", title: "More", hint: "transition: 2, effect: colorloop", help: """
                         Anything else the service takes, as name: value pairs separated by commas — or as JSON.
                         Example: transition: 2
@@ -90,6 +90,12 @@ public final class HomeAssistantModule: KeybowModule, @unchecked Sendable {
 
     private let transport: HomeTransport
     private var host: ModuleHost?
+    /// What Home Assistant has, kept a little while for the editor: it asks
+    /// each time a field is drawn.
+    private let lock = NSLock()
+    private var listed: (at: Date, states: [EntityState])?
+    private var listedServices: (at: Date, services: [String: [(service: String, title: String)]])?
+    static let listKept: TimeInterval = 30
 
     public init(transport: HomeTransport = HomeSessionTransport()) {
         self.transport = transport
@@ -360,6 +366,99 @@ public final class HomeAssistantModule: KeybowModule, @unchecked Sendable {
                 return "\(state.name): \(words.joined(separator: ", "))"
             }
             return .success(lines[0], lines.count > 1 ? lines.dropFirst().joined(separator: " · ") : nil)
+        }
+    }
+
+    // MARK: - Choices, for the editor
+
+    /// What a lamp, a thermostat or a number takes: the rest is left out.
+    public func shownFields(type: String, fields: [String: String]) -> Set<String>? {
+        var shown: Set<String> = ["entity", "service", "data"]
+        let first = Self.entities(ModuleRequest(type: type, fields: fields, labels: [])).first
+        switch first.map({ String($0.split(separator: ".").first ?? "") }) {
+        case "light": shown.formUnion(["brightness", "color", "kelvin"])
+        case "climate": shown.formUnion(["temperature", "mode"])
+        case "number", "input_number", "select", "input_select", "text", "input_text": shown.insert("value")
+        default: break
+        }
+        return shown
+    }
+
+    /// Domains with nothing to control: sensors and the like.
+    static let readOnly: Set<String> = [
+        "sensor", "binary_sensor", "weather", "sun", "zone", "person", "device_tracker", "update", "event", "image",
+        "calendar", "conversation", "tts", "stt", "persistent_notification", "geo_location", "air_quality", "wake_word",
+    ]
+
+    /// Every entity's state — kept for half a minute.
+    func listedStates(now: Date = Date()) async throws -> [EntityState] {
+        if let kept = lock.withLock({ listed }), now.timeIntervalSince(kept.at) < Self.listKept { return kept.states }
+        let states = try await client().states()
+        lock.withLock { listed = (now, states) }
+        return states
+    }
+
+    func listedServices(now: Date = Date()) async throws -> [String: [(service: String, title: String)]] {
+        if let kept = lock.withLock({ listedServices }), now.timeIntervalSince(kept.at) < Self.listKept { return kept.services }
+        let services = try await client().services()
+        lock.withLock { listedServices = (now, services) }
+        return services
+    }
+
+    public func choices(for field: String, type: String, fields: [String: String]) async throws -> [FieldChoice] {
+        let first = Self.entities(ModuleRequest(type: type, fields: fields, labels: [])).first
+        let domain = first.map { String($0.split(separator: ".").first ?? "") }
+        switch field {
+        case "entity":
+            return try await listedStates()
+                .filter { !Self.readOnly.contains($0.domain) }
+                .sorted { ($0.domain, $0.name.lowercased()) < ($1.domain, $1.name.lowercased()) }
+                .map { FieldChoice($0.entityID, title: "\($0.name) — \($0.state.replacingOccurrences(of: "_", with: " "))") }
+        case "service":
+            guard let domain else { return [] }
+            let services = try await listedServices()
+            let own = (services[domain] ?? []).map { FieldChoice($0.service, title: $0.title) }
+            let general = (services["homeassistant"] ?? []).filter { ["turn_on", "turn_off", "toggle"].contains($0.service) }
+                .filter { general in !own.contains { $0.value == general.service } }
+                .map { FieldChoice("homeassistant.\($0.service)", title: $0.title) }
+            return own + general
+        case "mode", "value", "kelvin":
+            guard let first, let state = try await listedStates().first(where: { $0.entityID == first }) else { return [] }
+            return Self.choices(for: field, of: state)
+        default:
+            return []
+        }
+    }
+
+    /// What one entity's attributes say its mode, value or warmth can be.
+    static func choices(for field: String, of state: EntityState) -> [FieldChoice] {
+        func words(_ key: String) -> [String] {
+            guard case .array(let items)? = state.attributes[key] else { return [] }
+            return items.compactMap(\.stringValue)
+        }
+        switch field {
+        case "mode":
+            return words("hvac_modes").map { FieldChoice($0, title: $0.replacingOccurrences(of: "_", with: " ").capitalized) }
+        case "value":
+            if !words("options").isEmpty { return words("options").map { FieldChoice($0) } }
+            guard let low = state.attributes["min"]?.stringValue.flatMap(Double.init),
+                  let high = state.attributes["max"]?.stringValue.flatMap(Double.init), high > low else { return [] }
+            let step = state.attributes["step"]?.stringValue.flatMap(Double.init) ?? 1
+            // A few along the way, when there are many.
+            let count = Int(((high - low) / step).rounded()) + 1
+            let stride = count <= 11 ? step : (high - low) / 10
+            return (0...min(count - 1, 10)).map { index in
+                let value = min(low + Double(index) * stride, high)
+                return FieldChoice(JSONValue.number((value * 100).rounded() / 100).stringValue!)
+            }
+        case "kelvin":
+            let warmest = state.attributes["min_color_temp_kelvin"]?.stringValue.flatMap(Double.init) ?? 2000
+            let coolest = state.attributes["max_color_temp_kelvin"]?.stringValue.flatMap(Double.init) ?? 6500
+            let named: [(Double, String)] = [(2200, "Candlelight"), (2700, "Warm white"), (3000, "Soft white"),
+                                             (4000, "Neutral"), (5000, "Cool white"), (6500, "Daylight")]
+            return named.filter { $0.0 >= warmest && $0.0 <= coolest }.map { FieldChoice(String(Int($0.0)), title: $0.1) }
+        default:
+            return []
         }
     }
 

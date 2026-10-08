@@ -85,6 +85,30 @@ public protocol KeybowModule: AnyObject, Sendable {
     /// What's being fetched, for the overlay's "Fetching …": "weather",
     /// "your location".
     func fetchSubject(for names: [String]) -> String
+
+    /// What a field can be set to, for the editor to offer while it's edited
+    /// — Home Assistant's lamps, a thermostat's modes — given the action's
+    /// other fields as they stand, so one choice can follow another. Asked
+    /// only for fields whose `offersChoices` is set. Throw a `ModuleError`
+    /// to say why there are none: no token, nothing answering.
+    func choices(for field: String, type: String, fields: [String: String]) async throws -> [FieldChoice]
+
+    /// The fields worth showing in the editor for the action as it's set up
+    /// — a thermostat's temperature, not a lamp's brightness — or nil for
+    /// all of them. A field that's been set is shown whatever this says.
+    func shownFields(type: String, fields: [String: String]) -> Set<String>?
+}
+
+/// Something a field can be set to: what's written, and what it's called.
+public struct FieldChoice: Equatable, Sendable {
+    public let value: String
+    /// "Desk lamp" for light.desk_lamp; nil when the value says it all.
+    public let title: String?
+
+    public init(_ value: String, title: String? = nil) {
+        self.value = value
+        self.title = title
+    }
 }
 
 /// A module's reason, fit to show on the overlay.
@@ -117,6 +141,8 @@ extension KeybowModule {
     public func valuesNeeded(toFetch names: [String]) -> Set<String> { [] }
     public func standIn(forValue name: String) -> String { "‹\(name)›" }
     public func fetchSubject(for names: [String]) -> String { manifest.name }
+    public func choices(for field: String, type: String, fields: [String: String]) async throws -> [FieldChoice] { [] }
+    public func shownFields(type: String, fields: [String: String]) -> Set<String>? { nil }
 }
 
 /// A command a module offers in the menu bar's menu — or a submenu of them,
@@ -259,6 +285,9 @@ public struct ModuleField: Sendable {
         /// in the editor like any action. The module never sees it; it names
         /// it in its outcome's `followUp`, and the host runs it.
         case action
+        /// A colour, written `#rrggbb` — or a name the module knows — and
+        /// chosen in the editor with a colour picker.
+        case colour
     }
 
     public let key: String
@@ -269,13 +298,18 @@ public struct ModuleField: Sendable {
     /// The editor's tooltip: what the field does, what can go in it, and an
     /// example.
     public let help: String
+    /// The module offers what it can be set to, through `choices(for:…)`:
+    /// the editor lists them, and still takes whatever's typed.
+    public let offersChoices: Bool
 
-    public init(key: String, title: String, kind: Kind = .text, hint: String = "", help: String = "") {
+    public init(key: String, title: String, kind: Kind = .text, hint: String = "", help: String = "",
+                offersChoices: Bool = false) {
         self.key = key
         self.title = title
         self.kind = kind
         self.hint = hint
         self.help = help
+        self.offersChoices = offersChoices
     }
 }
 

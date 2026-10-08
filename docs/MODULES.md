@@ -29,6 +29,9 @@ bar or the outline directly.
 | Add **settings** to the Settings window, secrets kept in the Keychain | `manifest.settings`, `ModuleHost.setting` / `secret` |
 | **Show something on screen** until it's dismissed, with OK and Cancel — and a field to type in | `ModuleHost.display(_:)`, `ModuleDisplay.Field` |
 | Take a **template or text** whole, like Copy | `ModuleActionType.takesText` |
+| Offer **choices for a field** in the tree editor — what's there to control, following the other fields | `ModuleField.offersChoices`, `choices(for:type:fields:)` |
+| Show only the **fields that apply** to the action as it's set up | `shownFields(type:fields:)` |
+| Take a **colour**, chosen in the editor with a colour picker | a field of kind `.colour` |
 | Have the host **run a follow-up action** of the node's own — a display's OK | a field of kind `.action`; `ActionOutcome.then(_:values:)` |
 | Keep secrets of its own making in the Keychain | `ModuleHost.setSecret` |
 | Say its status changed on its own | `ModuleHost.statusChanged()` |
@@ -46,6 +49,7 @@ KeybowLocation       a module: where the Mac is, from Location Services
 KeybowQuotes         a module: {{quote}}, portions of a file
 KeybowDisplay        modules: the display and ask actions
 KeybowWindows        modules: the window action, and Exposé
+KeybowHome           a module: Home Assistant
 KeybowModules        the list of built-in modules
 KeybowNotesApp       registers them at launch; shows their status
 keybow               registers them too, so their keywords compile
@@ -358,6 +362,14 @@ it did is on the screen, and the overlay steps aside.
   since a bare IP address isn't local networking to App Transport Security.
 - Menu: *Check the Connection* and *Copy the Entity List*, answered in a
   display. Settings: *Address*, and *Access token*, kept in the Keychain.
+- In the tree editor, *Entity* lists what Home Assistant has to control —
+  sensors and the like left out — and *Service*, *Mode*, *Value* and *Colour
+  temperature* follow the entity chosen: its domain's services, a
+  thermostat's modes, a select's options or a number's range, the warmth a
+  lamp can do. States and services are kept for 30 seconds, since the editor
+  asks each time a field is drawn. Only the fields the entity's domain takes
+  are shown — a lamp's brightness, a thermostat's temperature — and *Colour*
+  has a colour picker.
 
 ## Not yet
 

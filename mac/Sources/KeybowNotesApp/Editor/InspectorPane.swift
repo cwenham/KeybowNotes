@@ -49,7 +49,7 @@ private struct SeveralSelected: View {
 /// The fields each action type uses, in the order they're shown.
 private struct FieldSpec {
     /// `action`: an action of its own, run on an outcome — a display's OK.
-    enum Kind { case text, number, flag, choice([String]), action }
+    enum Kind { case text, number, flag, choice([String]), action, colour }
 
     let key: String
     let title: String
@@ -57,6 +57,8 @@ private struct FieldSpec {
     var hint = ""
     /// For the tooltip, when FieldHelp has nothing: a module's own words.
     var help = ""
+    /// Its module lists what it can be set to.
+    var offersChoices = false
 }
 
 private let fieldsByType: [String: [FieldSpec]] = [
@@ -132,8 +134,10 @@ private func fields(for type: String) -> [FieldSpec]? {
         case .flag: kind = .flag
         case .choice(let words): kind = .choice(words)
         case .action: kind = .action
+        case .colour: kind = .colour
         }
-        return FieldSpec(key: field.key, title: field.title, kind: kind, hint: field.hint, help: field.help)
+        return FieldSpec(key: field.key, title: field.title, kind: kind, hint: field.hint, help: field.help,
+                         offersChoices: field.offersChoices)
     }
 }
 
@@ -318,7 +322,11 @@ private struct NodeInspector: View {
                 .labelsHidden()
             }
             if let type = action?.type, let fields = fields(for: type) {
-                ForEach(fields.filter { if case .action = $0.kind { return false }; return true }, id: \.key) { spec in
+                let shown = ModuleRegistry.shared.module(handling: type)?.shownFields(type: type, fields: effectiveFields(of: type))
+                ForEach(fields.filter { spec in
+                    if case .action = spec.kind { return false }
+                    return shown.map { $0.contains(spec.key) || ownValue(spec.key) != nil } ?? true
+                }, id: \.key) { spec in
                     fieldRow(spec)
                 }
                 ForEach(fields.filter { if case .action = $0.kind { return outcomeShown($0.key) }; return false },
@@ -398,6 +406,17 @@ private struct NodeInspector: View {
         interval == interval.rounded() ? "\(Int(interval)) s" : String(format: "%.1f s", interval)
     }
 
+    /// Every field of the type as it stands here, set or inherited: what a
+    /// module's choices for one field can follow.
+    private func effectiveFields(of type: String) -> [String: String] {
+        var values: [String: String] = [:]
+        for spec in fields(for: type) ?? [] {
+            let value = effectiveValue(spec.key)
+            if !value.isEmpty { values[spec.key] = value }
+        }
+        return values
+    }
+
     private func effectiveValue(_ key: String) -> String {
         guard let action else { return "" }
         let parts = key.split(separator: ".", maxSplits: 1).map(String.init)
@@ -467,8 +486,19 @@ private struct NodeInspector: View {
                     }
                 }
             }
+        case .colour:
+            ColourField(title: spec.title, own: own, placeholder: effectiveValue(spec.key), note: source(of: spec.key),
+                        hint: spec.hint, help: help) { value in
+                setField(spec.key, value)
+            }
         default:
-            if spec.key == "app" {
+            if spec.offersChoices, let type = action?.type {
+                ModuleChoiceField(title: spec.title, key: spec.key, type: type, fields: effectiveFields(of: type),
+                                  own: own, placeholder: effectiveValue(spec.key), hint: spec.hint,
+                                  note: source(of: spec.key), help: help) { value in
+                    setField(spec.key, value)
+                }
+            } else if spec.key == "app" {
                 AppField(own: own, placeholder: effectiveValue("app"), note: source(of: "app"), help: help) { name, bundle in
                     setApp(name, bundle)
                 }
@@ -1248,6 +1278,138 @@ private struct NameComboBox: NSViewRepresentable {
             guard let box = notification.object as? NSComboBox else { return }
             commit(box.stringValue)
         }
+    }
+}
+
+/// A field whose module lists what it can be set to — Home Assistant's
+/// lamps, a thermostat's modes — asked again when the other fields change,
+/// since one choice follows another. Anything can still be typed.
+private struct ModuleChoiceField: View {
+    let title: String
+    let key: String
+    let type: String
+    let fields: [String: String]
+    let own: String?
+    let placeholder: String
+    let hint: String
+    let note: String
+    let help: String?
+    let set: (String?) -> Void
+
+    @State private var choices: [FieldChoice] = []
+    @State private var problem: String?
+
+    /// "light.desk_lamp — Desk lamp — on": the value first, so typing it completes.
+    private static let separator = " — "
+
+    var body: some View {
+        InspectorRow(title, help: help) {
+            VStack(alignment: .trailing, spacing: 2) {
+                NameComboBox(items: choices.map { choice in choice.title.map { choice.value + Self.separator + $0 } ?? choice.value },
+                             value: own ?? "", placeholder: placeholder.isEmpty ? hint : placeholder, toolTip: help) { text in
+                    let value = text.components(separatedBy: Self.separator)[0].trimmingCharacters(in: .whitespaces)
+                    set(value.isEmpty ? nil : value)
+                }
+                HStack(alignment: .firstTextBaseline) {
+                    if let problem {
+                        Text(problem).font(.caption2).foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                    if !note.isEmpty {
+                        Text(note).font(.caption2).foregroundStyle(note == "set here" ? Color.accentColor : .secondary)
+                    }
+                }
+            }
+        }
+        .task(id: following) { await load() }
+    }
+
+    /// The other fields, which its choices may follow.
+    private var following: String {
+        type + "|" + fields.filter { $0.key != key }.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+            .joined(separator: ";")
+    }
+
+    private func load() async {
+        guard let module = ModuleRegistry.shared.module(handling: type) else { return }
+        do {
+            choices = try await module.choices(for: key, type: type, fields: fields)
+            problem = nil
+        } catch let error as ModuleError {
+            choices = []
+            problem = "Nothing to list: " + error.message.prefix(1).lowercased() + error.message.dropFirst()
+        } catch {
+            choices = []
+        }
+    }
+}
+
+/// A colour: a swatch to pick it with, and the field it's written in —
+/// `#ff8800`, or a name.
+private struct ColourField: View {
+    let title: String
+    let own: String?
+    let placeholder: String
+    let note: String
+    let hint: String
+    let help: String?
+    let set: (String?) -> Void
+
+    @State private var picked = Color.white
+    @State private var pending: Task<Void, Never>?
+
+    /// Names a light takes, with how they look.
+    static let named: [(name: String, hex: String)] = [
+        ("red", "#ff0000"), ("orange", "#ffa500"), ("gold", "#ffd700"), ("yellow", "#ffff00"), ("green", "#008000"),
+        ("lime", "#00ff00"), ("turquoise", "#40e0d0"), ("cyan", "#00ffff"), ("blue", "#0000ff"), ("navy", "#000080"),
+        ("purple", "#800080"), ("magenta", "#ff00ff"), ("pink", "#ffc0cb"), ("hotpink", "#ff69b4"), ("white", "#ffffff"),
+    ]
+
+    var body: some View {
+        InspectorRow(title, help: help) {
+            VStack(alignment: .trailing, spacing: 2) {
+                HStack(alignment: .center, spacing: 6) {
+                    ColorPicker(title, selection: $picked, supportsOpacity: false)
+                        .labelsHidden()
+                        .help("Choose a colour")
+                    NameComboBox(items: Self.named.map(\.name), value: own ?? "",
+                                 placeholder: placeholder.isEmpty ? hint : placeholder, toolTip: help) { text in
+                        let trimmed = text.trimmingCharacters(in: .whitespaces)
+                        set(trimmed.isEmpty ? nil : trimmed)
+                    }
+                }
+                if !note.isEmpty {
+                    Text(note).font(.caption2).foregroundStyle(note == "set here" ? Color.accentColor : .secondary)
+                }
+            }
+        }
+        .onAppear { picked = Self.colour(own ?? placeholder) ?? picked }
+        .onChange(of: own) { _, value in picked = Self.colour(value ?? placeholder) ?? picked }
+        .onChange(of: picked) { _, colour in
+            // The panel sends every step of a drag: write down where it stops.
+            guard let hex = Self.hex(colour), hex != own?.lowercased() else { return }
+            pending?.cancel()
+            pending = Task {
+                try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled else { return }
+                set(hex)
+            }
+        }
+    }
+
+    static func hex(_ colour: Color) -> String? {
+        guard let rgb = NSColor(colour).usingColorSpace(.sRGB) else { return nil }
+        func byte(_ component: CGFloat) -> Int { Int((min(max(component, 0), 1) * 255).rounded()) }
+        return String(format: "#%02x%02x%02x", byte(rgb.redComponent), byte(rgb.greenComponent), byte(rgb.blueComponent))
+    }
+
+    static func colour(_ text: String) -> Color? {
+        var hex = text.trimmingCharacters(in: .whitespaces).lowercased()
+        if let known = named.first(where: { $0.name == hex.replacingOccurrences(of: " ", with: "") }) { hex = known.hex }
+        guard hex.hasPrefix("#"), hex.count == 7, let value = Int(hex.dropFirst(), radix: 16) else { return nil }
+        return Color(.sRGB, red: Double((value >> 16) & 0xFF) / 255, green: Double((value >> 8) & 0xFF) / 255,
+                     blue: Double(value & 0xFF) / 255)
     }
 }
 

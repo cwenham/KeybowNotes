@@ -137,6 +137,26 @@ public struct HomeAssistant: Sendable {
         return items.compactMap(Self.state)
     }
 
+    /// Every service, by domain: each one's name, and what it's called —
+    /// turn_on, "Turn on".
+    public func services() async throws -> [String: [(service: String, title: String)]] {
+        let (data, status) = try await send("GET", "api/services")
+        try check(status, data)
+        guard case .array(let domains)? = try? JSONDecoder().decode(JSONValue.self, from: data) else {
+            throw ModuleError("Home Assistant's answer couldn't be read")
+        }
+        var found: [String: [(service: String, title: String)]] = [:]
+        for case .object(let entry) in domains {
+            guard let domain = entry["domain"]?.stringValue, case .object(let services)? = entry["services"] else { continue }
+            found[domain] = services.map { name, about in
+                var title = name.replacingOccurrences(of: "_", with: " ")
+                if case .object(let details) = about, let named = details["name"]?.stringValue, !named.isEmpty { title = named }
+                return (name, title)
+            }.sorted { $0.service < $1.service }
+        }
+        return found
+    }
+
     /// Whether it answers, and to the token: its version, and how many
     /// entities it has.
     public func describe() async throws -> String {

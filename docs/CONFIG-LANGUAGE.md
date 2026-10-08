@@ -1058,6 +1058,9 @@ Settings → Home Assistant.
   *Desk lamp: on, 40%*, *Hallway: heat, 21°*, *Ran Evening*.
 - **What goes wrong is said:** a refused token, an entity it doesn't have, a
   service it didn't accept — in its own words — or nothing answering.
+- **In the tree editor,** *Entity* lists what Home Assistant has, and
+  *Service*, *Mode* and *Value* list what that entity takes; *Colour* has a
+  colour picker. Only the fields the entity uses are shown.
 
 ---
 

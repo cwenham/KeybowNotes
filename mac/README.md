@@ -115,9 +115,10 @@ A development build sets keypads up from the repository's `firmware` folder;
 `KEYBOW_FIRMWARE` names another. For trying the setup window out,
 `KEYBOW_SETUP_SELECT` chooses a board by its ID (or `new`), and
 `KEYBOW_SETUP_START=1` presses Set Up once it can be — development builds only.
+`KEYBOW_HOME_DEMO=1` puts a made-up Home Assistant behind the editor's lists.
 `KEYBOW_TROUBLESHOOT_DEMO=hub` (or `nodata`, `dataport`, `setup`) gives the
 troubleshooter made-up keypads in made-up trouble, and `KEYBOW_WINDOW_SNAPSHOTS=<dir>`
-has the setup, troubleshooter and settings windows write a PNG of themselves
+has the setup, troubleshooter, settings and editor windows write a PNG of themselves
 there every two seconds — for checking layouts without anyone's own devices or
 screen recording.
 

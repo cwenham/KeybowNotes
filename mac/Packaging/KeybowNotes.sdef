@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
+<!-- What AppleScript — and Shortcuts, through Run AppleScript — can ask of
+     KeybowNotes. Each command is handled by the class its cocoa element names,
+     in Sources/KeybowNotesApp/ScriptCommands.swift. -->
+<dictionary title="KeybowNotes Terminology" xmlns:xi="http://www.w3.org/2003/XInclude">
+	<xi:include href="file:///System/Library/ScriptingDefinitions/CocoaStandard.sdef" xpointer="xpointer(/dictionary/suite)"/>
+
+	<suite name="KeybowNotes Suite" code="KBnt" description="The keypads' trees: run an entry, change the tree, work the stopwatch. An entry is named by its labels from the top of its tree, separated by slashes — “Window Management/Left Screen”. A tree is main, row 2, row 3 or bottom; a keypad is Default, or a keypad section's name. Left out, they're the main tree of the keypad that's plugged in.">
+
+		<command name="trigger" code="KBntTrig" description="Runs an entry's action, as though its keys were pressed, and says how it went.">
+			<cocoa class="KBTriggerCommand"/>
+			<direct-parameter type="text" description="The entry: its labels, separated by slashes."/>
+			<parameter name="tree" code="KBtr" type="text" optional="yes" description="main, row 2, row 3 or bottom.">
+				<cocoa key="tree"/>
+			</parameter>
+			<parameter name="keypad" code="KBkp" type="text" optional="yes" description="Default, or a keypad section's name.">
+				<cocoa key="keypad"/>
+			</parameter>
+			<result type="text" description="What happened, as the overlay says it."/>
+		</command>
+
+		<command name="add entry" code="KBntAddE" description="Adds entries on the first free keys: a line like “Desk lamp [Home, entity: light.desk_lamp]”, or outline lines, indented for keys under keys.">
+			<cocoa class="KBAddEntryCommand"/>
+			<direct-parameter type="text" description="The entry, or entries, as the outline writes them."/>
+			<parameter name="under" code="KBun" type="text" optional="yes" description="The entry to put them under; left out, the tree's top row.">
+				<cocoa key="under"/>
+			</parameter>
+			<parameter name="tree" code="KBtr" type="text" optional="yes" description="main, row 2, row 3 or bottom.">
+				<cocoa key="tree"/>
+			</parameter>
+			<parameter name="keypad" code="KBkp" type="text" optional="yes" description="Default, or a keypad section's name.">
+				<cocoa key="keypad"/>
+			</parameter>
+			<result type="text"/>
+		</command>
+
+		<command name="remove entry" code="KBntRemE" description="Removes an entry, and everything under it.">
+			<cocoa class="KBRemoveEntryCommand"/>
+			<direct-parameter type="text" description="The entry: its labels, separated by slashes."/>
+			<parameter name="tree" code="KBtr" type="text" optional="yes">
+				<cocoa key="tree"/>
+			</parameter>
+			<parameter name="keypad" code="KBkp" type="text" optional="yes">
+				<cocoa key="keypad"/>
+			</parameter>
+			<result type="text"/>
+		</command>
+
+		<command name="change entry" code="KBntChgE" description="Rewrites an entry's line — its label and what's in its brackets — keeping what's under it.">
+			<cocoa class="KBChangeEntryCommand"/>
+			<direct-parameter type="text" description="The entry: its labels, separated by slashes."/>
+			<parameter name="to" code="KBto" type="text" description="The new line: “Label [annotations]”.">
+				<cocoa key="to"/>
+			</parameter>
+			<parameter name="tree" code="KBtr" type="text" optional="yes">
+				<cocoa key="tree"/>
+			</parameter>
+			<parameter name="keypad" code="KBkp" type="text" optional="yes">
+				<cocoa key="keypad"/>
+			</parameter>
+			<result type="text"/>
+		</command>
+
+		<command name="tree outline" code="KBntTreO" description="A tree, as outline text.">
+			<cocoa class="KBTreeOutlineCommand"/>
+			<parameter name="tree" code="KBtr" type="text" optional="yes">
+				<cocoa key="tree"/>
+			</parameter>
+			<parameter name="keypad" code="KBkp" type="text" optional="yes">
+				<cocoa key="keypad"/>
+			</parameter>
+			<result type="text"/>
+		</command>
+
+		<command name="tree entries" code="KBntTreE" description="Every entry in a tree that runs an action, by its labels: what trigger takes.">
+			<cocoa class="KBTreeEntriesCommand"/>
+			<parameter name="tree" code="KBtr" type="text" optional="yes">
+				<cocoa key="tree"/>
+			</parameter>
+			<parameter name="keypad" code="KBkp" type="text" optional="yes">
+				<cocoa key="keypad"/>
+			</parameter>
+			<result>
+				<type type="text" list="yes"/>
+			</result>
+		</command>
+
+		<command name="replace tree" code="KBntRplT" description="Replaces a whole tree with outline text.">
+			<cocoa class="KBReplaceTreeCommand"/>
+			<parameter name="with outline" code="KBwi" type="text" description="The tree, as outline text.">
+				<cocoa key="outline"/>
+			</parameter>
+			<parameter name="tree" code="KBtr" type="text" optional="yes">
+				<cocoa key="tree"/>
+			</parameter>
+			<parameter name="keypad" code="KBkp" type="text" optional="yes">
+				<cocoa key="keypad"/>
+			</parameter>
+			<result type="text"/>
+		</command>
+
+		<command name="whole outline" code="KBntWhol" description="The whole tree file: every keypad's trees, and the lists, contacts and projects.">
+			<cocoa class="KBWholeOutlineCommand"/>
+			<result type="text"/>
+		</command>
+
+		<command name="check outline" code="KBntChkO" description="What KeybowNotes would make of outline text: its mistakes by line, and what's still to fill in. Changes nothing.">
+			<cocoa class="KBCheckOutlineCommand"/>
+			<direct-parameter type="text"/>
+			<result type="text"/>
+		</command>
+
+		<command name="keypad names" code="KBntKpNm" description="The keypads' trees by name, and which keypads plugged in use them.">
+			<cocoa class="KBKeypadNamesCommand"/>
+			<result type="text"/>
+		</command>
+
+		<command name="add keypad" code="KBntAddK" description="Adds a keypad section, with trees of its own — for every keypad of a model, or one board.">
+			<cocoa class="KBAddKeypadCommand"/>
+			<direct-parameter type="text" description="Its name."/>
+			<parameter name="model" code="KBmo" type="text" optional="yes" description="Keybow 2040 or RGB Keypad.">
+				<cocoa key="model"/>
+			</parameter>
+			<parameter name="board id" code="KBid" type="text" optional="yes" description="One board's unique ID.">
+				<cocoa key="id"/>
+			</parameter>
+			<result type="text"/>
+		</command>
+
+		<command name="start stopwatch" code="KBntSwSt" description="Starts KeybowNotes' stopwatch.">
+			<cocoa class="KBStopwatchCommand"/>
+			<result type="text"/>
+		</command>
+		<command name="stop stopwatch" code="KBntSwSp" description="Stops the stopwatch.">
+			<cocoa class="KBStopwatchCommand"/>
+			<result type="text"/>
+		</command>
+		<command name="lap stopwatch" code="KBntSwLp" description="Records a lap.">
+			<cocoa class="KBStopwatchCommand"/>
+			<result type="text"/>
+		</command>
+		<command name="reset stopwatch" code="KBntSwRs" description="Stops it, and sets it back to zero.">
+			<cocoa class="KBStopwatchCommand"/>
+			<result type="text"/>
+		</command>
+		<command name="toggle stopwatch" code="KBntSwTg" description="Starts it if it's stopped, stops it if it's running.">
+			<cocoa class="KBStopwatchCommand"/>
+			<result type="text"/>
+		</command>
+		<command name="stopwatch reading" code="KBntSwRd" description="What the stopwatch reads, and whether it's running.">
+			<cocoa class="KBStopwatchReadingCommand"/>
+			<result type="text"/>
+		</command>
+	</suite>
+</dictionary>

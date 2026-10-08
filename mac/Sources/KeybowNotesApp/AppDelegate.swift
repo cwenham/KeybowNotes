@@ -112,6 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if options.showSettings { showSettings() }
         if options.showDataSources { _ = ModuleRegistry.shared.module(id: "api")?.performMenuItem("open", now: Date()) }
         if options.editTree { showEditor() }
+        Automation.shared = Automation(hooks: automationHooks())
         if options.setUpKeypad { showKeypadSetup() }
         if options.troubleshoot { showTroubleshooter() }
     }
@@ -300,12 +301,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// stopwatch starts on the press, not when the overlay has caught up.
     /// `values` join what the action can use: a display's `{{displayed}}`,
     /// for the action its OK runs.
-    private func fire(_ selection: ResolvedSelection, chosenAt: Date = Date(), values: [String: String] = [:]) {
+    /// Runs a leaf's action. `report` hears how it went — for a script or an
+    /// agent that asked for it — whichever way it ends.
+    private func fire(_ selection: ResolvedSelection, chosenAt: Date = Date(), values: [String: String] = [:],
+                      report: ((ActionOutcome) -> Void)? = nil) {
         guard let overlay else { return }
         let path = selection.pathDescription
+        func refuse(_ message: String) {
+            overlay.showRefused(message, summary: ActionSummary(selection: selection, config: config))
+            report?(.failure(message))
+        }
 
         if dryRun {
-            overlay.showPreview(ActionSummary(selection: selection, config: config), path: path)
+            let summary = ActionSummary(selection: selection, config: config)
+            overlay.showPreview(summary, path: path)
+            report?(.success("Dry run: nothing done", "It would: \(summary.verb) \(summary.subject)"))
             return
         }
 
@@ -323,7 +333,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             blockTexts = try ActionPlanner.blockTexts(for: selection, context: context)
         } catch {
             Log.info("  can't run: \(error)")
-            overlay.showRefused("\(error)", summary: ActionSummary(selection: selection, config: config))
+            refuse("\(error)")
             return
         }
         // Values modules fetch — {{api.weather}} — and what they need first.
@@ -340,14 +350,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         let waits = !blockTexts.isEmpty || !fetchedNames.isEmpty
         if waits, pendingWork != nil {
-            overlay.showRefused("Still waiting on the last fetch or replies. Cancel it, or let it finish, then press again.",
-                                summary: ActionSummary(selection: selection, config: config))
+            refuse("Still waiting on the last fetch or replies. Cancel it, or let it finish, then press again.")
             return
         }
 
         let needsSelection = needed.contains("selection")
         guard needsSelection || waits else {
-            run(selection, context: context)
+            run(selection, context: context, report: report)
             return
         }
         // The app to type into, if it comes to that: waiting leaves time to
@@ -364,20 +373,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     break
                 case .notAllowed:
                     Log.info("  can't run: no Accessibility access for {{selection}}")
-                    overlay.showRefused("KeybowNotes needs Accessibility access to read the selected text. "
-                                        + "Allow it in System Settings, then press again.",
-                                        summary: ActionSummary(selection: selection, config: config))
+                    refuse("KeybowNotes needs Accessibility access to read the selected text. "
+                           + "Allow it in System Settings, then press again.")
                     SelectedText.requestAccess()
                     return
                 }
             }
             if waits {
                 guard let prepared = await prepare(fetchedNames, blockTexts, selection: selection, context: context) else {
+                    report?(.failure("It didn't run: cancelled, or what it needed couldn't be had — the overlay said which."))
                     return
                 }
                 context = prepared
             }
-            run(selection, context: context, typingInto: waits ? frontApp : nil)
+            run(selection, context: context, typingInto: waits ? frontApp : nil, report: report)
         }
         if waits { pendingWork = work }
     }
@@ -460,10 +469,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pendingWork?.cancel()
     }
 
-    private func run(_ selection: ResolvedSelection, context: ActionContext, typingInto frontApp: pid_t? = nil) {
+    private func run(_ selection: ResolvedSelection, context: ActionContext, typingInto frontApp: pid_t? = nil,
+                     report: ((ActionOutcome) -> Void)? = nil) {
         guard let overlay else { return }
         let summary = ActionSummary(selection: selection, config: config, environment: context.environment)
         let path = selection.pathDescription
+        func refuse(_ message: String) {
+            overlay.showRefused(message, summary: summary)
+            report?(.failure(message))
+        }
 
         // The system log is kept on disk and readable by any admin, so the
         // selected text, the clipboard and anything copied stay out of it.
@@ -475,7 +489,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             planned = try ActionPlanner.plan(selection, config: config, context: context)
         } catch {
             Log.info("  can't run: \(isPrivate ? "(details not logged)" : "\(error)")")
-            overlay.showRefused("\(error)", summary: summary)
+            refuse("\(error)")
             return
         }
         switch planned.plan {
@@ -490,8 +504,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if inserts, !SelectedText.isAllowed {
             Log.info("  can't run: no Accessibility access for inserting text")
-            overlay.showRefused("KeybowNotes needs Accessibility access to type into other apps. "
-                                + "Allow it in System Settings, then press again.", summary: summary)
+            refuse("KeybowNotes needs Accessibility access to type into other apps. "
+                   + "Allow it in System Settings, then press again.")
             SelectedText.requestAccess()
             return
         }
@@ -505,8 +519,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 break
             }
             Log.info("  not inserted: the app in front changed while waiting")
-            overlay.showRefused("You switched apps while waiting, so the text wasn't typed in. It's on the clipboard instead.",
-                                summary: summary)
+            refuse("You switched apps while waiting, so the text wasn't typed in. It's on the clipboard instead.")
             return
         }
 
@@ -520,6 +533,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 + (isPrivate ? " (details not logged)" : ": \(outcome.message)" + (outcome.detail.map { " — \($0)" } ?? ""))
             outcome.succeeded ? Log.info(line) : Log.error(line)
             for warning in planned.warnings where !isPrivate { Log.info("  warning: \(warning)") }
+            report?(outcome)
             if let next = outcome.followUp {
                 self.follow(next, of: selection, values: outcome.values, text: outcome.followUpText)
             } else if !outcome.isQuiet {
@@ -822,6 +836,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 openEditor: { [weak self] in self?.showEditor() })
         }
         setupWindow?.show()
+    }
+
+    /// What scripts, Shortcuts and agents act through.
+    private func automationHooks() -> Automation.Hooks {
+        Automation.Hooks(
+            outlineURL: { [unowned self] in store.url },
+            config: { [unowned self] in config },
+            connected: { [unowned self] in
+                keypadOrder.compactMap { keypads[$0] }.filter { $0.status == "connected" }.compactMap { link in
+                    link.device.map { (name: $0.model.title, keypad: config.keypadIndex(for: $0)) }
+                }
+            },
+            reload: { [unowned self] in store.reload() },
+            editorState: { [unowned self] in
+                guard let editor = editorWindow, editor.window?.isVisible == true else { return .closed }
+                return editor.model.isDirty ? .unsaved : .clean
+            },
+            reloadEditor: { [unowned self] in editorWindow?.model.reloadFromFile() },
+            fire: { [unowned self] selection, report in fire(selection, report: report) },
+            notice: { [unowned self] message, symbol in overlay?.flashNotice(message, symbol: symbol) },
+            modulesChanged: { [unowned self] in refreshModules() })
     }
 
     @objc private func openTroubleshooter() { showTroubleshooter() }

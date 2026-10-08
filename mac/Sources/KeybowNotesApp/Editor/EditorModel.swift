@@ -159,6 +159,23 @@ final class EditorModel {
     /// Called after a save, so the app loads the tree at once.
     @ObservationIgnored var onSaved: (() -> Void)?
 
+    /// Reads the file again, after it was changed from outside — by a script
+    /// or an agent — while nothing here was unsaved. Undo starts afresh: what
+    /// it would undo is gone from the file.
+    func reloadFromFile() {
+        let text = (try? String(contentsOf: outlineURL, encoding: .utf8)) ?? ""
+        let (document, problems) = OutlineParser.parse(text)
+        self.document = document
+        readProblems = problems
+        savedText = text.isEmpty ? "" : OutlineWriter.text(document)
+        compilation = OutlineCompiler.compile(document, locateApp: locateApp)
+        isDirty = false
+        selection = nil
+        selectedIDs = []
+        revision += 1
+        undoManager?.removeAllActions()
+    }
+
     /// Writes the outline, which is the config: the app compiles it as it
     /// loads it. It's saved even with mistakes; what they touch is left out.
     @discardableResult

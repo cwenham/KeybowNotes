@@ -49,6 +49,10 @@
 	<string>KeybowNotes puts where you are into the keys that ask for it — {{location}} in a note, or a weather source's address — and only when you press one.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>KeybowNotes adds the reminders and timers you choose on the Keybow.</string>
+	<key>NSAppleScriptEnabled</key>
+	<true/>
+	<key>OSAScriptingDefinition</key>
+	<string>KeybowNotes.sdef</string>
 	<key>NSRemovableVolumesUsageDescription</key>
 	<string>KeybowNotes sets keypads up: it puts CircuitPython and its firmware on the keypad's drive.</string>
 	<key>NSLocalNetworkUsageDescription</key>

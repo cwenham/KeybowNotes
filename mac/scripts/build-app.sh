@@ -42,6 +42,9 @@ if [[ ! -f $OUT/AppIcon.icns || Packaging/make-icon.swift -nt $OUT/AppIcon.icns 
 fi
 cp "$OUT/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
+# What AppleScript can ask of it.
+cp Packaging/KeybowNotes.sdef "$APP/Contents/Resources/KeybowNotes.sdef"
+
 # Installed into ~/Library/Application Support/KeybowNotes on first run, when
 # there is no tree yet.
 cp tree.demo.md "$APP/Contents/Resources/tree.demo.md"

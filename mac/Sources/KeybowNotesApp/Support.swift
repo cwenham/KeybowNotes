@@ -152,8 +152,13 @@ enum WindowSnapshots {
                 let cg = context.cgContext
                 cg.setFillColor(NSColor.windowBackgroundColor.cgColor)
                 cg.fill(CGRect(x: 0, y: 0, width: picture.pixelsWide, height: picture.pixelsHigh))
-                cg.translateBy(x: 0, y: CGFloat(picture.pixelsHigh))
-                cg.scaleBy(x: 2, y: -2)
+                // A flipped view's layers draw top-down: turned the right way up.
+                if view.isFlipped {
+                    cg.translateBy(x: 0, y: CGFloat(picture.pixelsHigh))
+                    cg.scaleBy(x: 2, y: -2)
+                } else {
+                    cg.scaleBy(x: 2, y: 2)
+                }
                 layer.render(in: cg)
                 try? picture.representation(using: .png, properties: [:])?.write(to: url)
             }

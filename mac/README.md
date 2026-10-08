@@ -130,6 +130,16 @@ has the setup, troubleshooter, settings and editor windows write a PNG of themse
 there every two seconds — for checking layouts without anyone's own devices or
 screen recording.
 
+**The tree editor is one component,** `TreeEditorViewController`, around an
+`EditorModel`: keypad tabs, outline, inspector and keypad drawing. Put in a
+window, it connects the window's undo, catches the keys the outline's text
+field would otherwise take (⌃⌘↑/↓, ⌘Return), and takes the menu's Save, Move
+and Add Child commands along the responder chain. The tree editor window is
+that component on the tree file; *Design with Claude* puts it in a split view
+beside the conversation, on a draft — a model made with `draft: true`, which is
+never saved. The model's `connectedKeypads` says which keypads are plugged in:
+USB, unless something else is given.
+
 Two details that are easy to get wrong, both learned the hard way:
 
 - **The port must stay open.** The firmware writes only while the host asserts

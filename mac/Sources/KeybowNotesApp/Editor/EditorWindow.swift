@@ -2,15 +2,16 @@ import AppKit
 import KeybowKit
 import SwiftUI
 
+/// The tree's own editor window: the editor component, on the tree file,
+/// saved with ⌘S and asked about on closing with changes unsaved.
 @MainActor
 final class EditorWindowController: NSWindowController, NSWindowDelegate {
     let model: EditorModel
-    private let coordinator: OutlineCoordinator
-    private var keyMonitor: Any?
+    private let editor: TreeEditorViewController
 
     init(outlineURL: URL) {
         model = EditorModel(outlineURL: outlineURL)
-        coordinator = OutlineCoordinator(model: model)
+        editor = TreeEditorViewController(model: model, save: { [model] in _ = model.save() }, debugHooks: true)
 
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1020, height: 700),
                               styleMask: [.titled, .closable, .resizable, .miniaturizable],
@@ -21,132 +22,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         super.init(window: window)
 
         window.delegate = self
-        window.contentViewController = NSHostingController(rootView: EditorRootView(
-            model: model, coordinator: coordinator, save: { [weak self] in self?.saveTree() }))
+        window.contentViewController = editor
         window.setContentSize(NSSize(width: 1020, height: 700))
         window.center()
         window.setFrameAutosaveName("KeybowNotesTreeEditor")
-        model.undoManager = window.undoManager
-        // On the trees a keypad that's plugged in uses: not Default, when
-        // every one has a section of its own.
-        if let used = KeypadBar.users(of: model).keys.min(), model.keypad == 0, KeypadBar.users(of: model)[0] == nil {
-            model.keypad = used
-        }
         updateTitle()
-        preselectForDebugging()
-    }
-
-    /// KEYBOW_EDITOR_SCRIPT="wait:1;type:Bob;key:return;key:ctrl+cmd+up;dump:/tmp/out.md"
-    /// replays keystrokes through the normal event path, then writes the outline
-    /// and selection to a file — for reproducing keyboard behaviour without a
-    /// person at the keyboard. Nothing is saved.
-    func runDebugScript() {
-        guard let script = ProcessInfo.processInfo.environment["KEYBOW_EDITOR_SCRIPT"], let window else { return }
-        let codes: [String: UInt16] = ["return": 36, "tab": 48, "esc": 53, "delete": 51,
-                                       "up": 126, "down": 125, "left": 123, "right": 124]
-        func post(_ characters: String, code: UInt16, flags: NSEvent.ModifierFlags) {
-            for type in [NSEvent.EventType.keyDown, .keyUp] {
-                if let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: flags,
-                                                timestamp: ProcessInfo.processInfo.systemUptime,
-                                                windowNumber: window.windowNumber, context: nil,
-                                                characters: characters, charactersIgnoringModifiers: characters,
-                                                isARepeat: false, keyCode: code) {
-                    NSApp.postEvent(event, atStart: false)
-                }
-            }
-        }
-        Task { @MainActor in
-            for step in script.split(separator: ";").map(String.init) {
-                let parts = step.split(separator: ":", maxSplits: 1).map(String.init)
-                let argument = parts.count > 1 ? parts[1] : ""
-                switch parts[0] {
-                case "wait":
-                    try? await Task.sleep(for: .seconds(Double(argument) ?? 0.5))
-                case "type":
-                    for character in argument {
-                        post(String(character), code: 0, flags: [])
-                        try? await Task.sleep(for: .milliseconds(60))
-                    }
-                case "key":
-                    var flags: NSEvent.ModifierFlags = []
-                    var name = argument
-                    for (prefix, flag) in [("ctrl+", NSEvent.ModifierFlags.control), ("cmd+", .command),
-                                           ("shift+", .shift), ("alt+", .option)] {
-                        while name.hasPrefix(prefix) { flags.insert(flag); name.removeFirst(prefix.count) }
-                    }
-                    if ["up", "down", "left", "right"].contains(name) { flags.formUnion([.function, .numericPad]) }
-                    let code = codes[name] ?? 0
-                    let characters: String
-                    switch name {
-                    case "return": characters = "\r"
-                    case "tab": characters = flags.contains(.shift) ? "\u{19}" : "\t"
-                    case "esc": characters = "\u{1b}"
-                    case "delete": characters = "\u{7f}"
-                    case "up": characters = String(UnicodeScalar(NSUpArrowFunctionKey)!)
-                    case "down": characters = String(UnicodeScalar(NSDownArrowFunctionKey)!)
-                    case "left": characters = String(UnicodeScalar(NSLeftArrowFunctionKey)!)
-                    case "right": characters = String(UnicodeScalar(NSRightArrowFunctionKey)!)
-                    default: characters = name
-                    }
-                    post(characters, code: code, flags: flags)
-                    try? await Task.sleep(for: .milliseconds(300))
-                case "save":
-                    // As the Save button does; a menu shortcut needs the app in front.
-                    saveTree()
-                case "menu":
-                    // The right-click menu for a row, as "row:file".
-                    let bits = argument.split(separator: ":", maxSplits: 1).map(String.init)
-                    let items = coordinator.menuItems(clickedRow: Int(bits[0]) ?? -1)
-                    let text = items.map { $0.isSeparatorItem ? "—" : $0.title + ($0.isEnabled ? "" : " (off)") }
-                    try? text.joined(separator: "\n").write(toFile: bits.count > 1 ? bits[1] : "/dev/null",
-                                                             atomically: true, encoding: .utf8)
-                case "send":
-                    // An Edit menu command — copy, cut, paste — the way the
-                    // menu sends it: along the responder chain.
-                    if window.firstResponder?.tryToPerform(Selector(argument + ":"), with: nil) != true {
-                        model.flash("Nothing took \(argument).")
-                    }
-                case "dump":
-                    var text = OutlineWriter.text(model.document)
-                    if case .node(let id)? = model.selection, let node = model.node(id) {
-                        text += "\nSELECTED: \(node.label)"
-                    }
-                    if model.selectedIDs.count > 1 {
-                        text += "\nALL SELECTED: " + model.selectedIDs.compactMap { model.node($0)?.label }.joined(separator: ", ")
-                    }
-                    if let message = model.message { text += "\nMESSAGE: \(message)" }
-                    try? text.write(toFile: argument, atomically: true, encoding: .utf8)
-                default:
-                    break
-                }
-            }
-        }
-    }
-
-    /// KEYBOW_EDITOR_SELECT="bottom:0.1.0" opens with that node selected —
-    /// "1/main:0" in the first keypad section's trees — for checking the
-    /// inspector and keypad without clicking.
-    private func preselectForDebugging() {
-        guard var spec = ProcessInfo.processInfo.environment["KEYBOW_EDITOR_SELECT"] else { return }
-        var keypad = 0
-        if let slash = spec.firstIndex(of: "/"), let number = Int(spec[..<slash]) {
-            keypad = number
-            spec = String(spec[spec.index(after: slash)...])
-        }
-        let parts = spec.split(separator: ":", maxSplits: 1).map(String.init)
-        let tree = parts.count == 2 ? TreeKind(name: parts[0]) ?? .main : .main
-        let path = (parts.last ?? "").split(separator: ".").compactMap { Int($0) }
-        model.keypad = keypad
-        model.tab = tree
-        let container = OutlineContainer.tree(tree, keypad: keypad)
-        // After the tab's change has cleared the selection, not before.
-        DispatchQueue.main.async { [model] in
-            if let node = model.document.node(at: OutlineLocation(container, path)) {
-                model.selection = .node(node.id)
-            } else {
-                model.selection = .empty(OutlineLocation(container, path))
-            }
-        }
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -155,46 +35,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         showWindow(nil)
         window?.bringToFront()
         if let window { WindowSnapshots.keep(window, as: "editor") }
-        installKeyMonitor()
-        runDebugScript()
     }
 
-    /// ⌃⌘↑ and ⌃⌘↓ (or ⇧⌘) move a node, whether or not its row is being
-    /// edited — the field editor would otherwise take them.
-    private func installKeyMonitor() {
-        guard keyMonitor == nil else { return }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.window === self.window else { return event }
-            if let offset = MoveKeys.offset(for: event) {
-                self.coordinator.move(by: offset)
-                return nil
-            }
-            // ⌘Return: a child of this node, editing or not.
-            let flags = event.modifierFlags.intersection([.control, .option, .shift, .command])
-            if [36, 76].contains(event.keyCode), flags == .command {
-                self.coordinator.addChild()
-                return nil
-            }
-            return event
-        }
-    }
-
-    // MARK: - Saving
-
-    @objc func saveTree() {
-        window?.makeFirstResponder(nil)       // commit a row being edited
-        model.save()
-        updateTitle()
-    }
-
-    /// ⌘S from the menu.
-    @objc func saveDocument(_ sender: Any?) { saveTree() }
-
-    /// ⌃⌘↑ / ⌃⌘↓ from the menu — a second route for the same keys.
-    @objc func moveNodeUp(_ sender: Any?) { coordinator.move(by: -1) }
-    @objc func moveNodeDown(_ sender: Any?) { coordinator.move(by: 1) }
-    /// ⌘Return from the menu.
-    @objc func addChildNode(_ sender: Any?) { coordinator.addChild() }
+    /// ⌘S with nothing in the window holding the keyboard: the editor's Save.
+    @objc func saveDocument(_ sender: Any?) { editor.saveDocument(sender) }
 
     private func updateTitle() {
         window?.isDocumentEdited = model.isDirty
@@ -218,11 +62,6 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         case .alertThirdButtonReturn: return true
         default: return false
         }
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
-        keyMonitor = nil
     }
 }
 
@@ -341,21 +180,14 @@ struct EditorRootView: View {
 /// before any `# keypad` heading — then each keypad with trees of its own,
 /// and + for another. A keypad of its own shows its name, model and ID beside
 /// them, to change.
-struct KeypadBar: View {
+private struct KeypadBar: View {
     let model: EditorModel
     @State private var confirmingRemove = false
 
     private var document: OutlineDocument { model.document }
 
-    /// The keypads connected, by the trees each uses: 0 for Default.
-    static func users(of model: EditorModel) -> [Int: [String]] {
-        Dictionary(grouping: USBSerialPorts.keypads()) { device in
-            model.compilation.config?.keypadIndex(for: device) ?? 0
-        }.mapValues { $0.map(\.model.title) }
-    }
-
     var body: some View {
-        let users = Self.users(of: model)
+        let users = model.keypadsInUse()
         VStack(alignment: .leading, spacing: 6) {
             bar(users)
             if !users.isEmpty, users[min(model.keypad, document.keypads.count)] == nil { unused(users) }
@@ -421,7 +253,7 @@ struct KeypadBar: View {
 
     /// Which keypads use these trees, of those connected.
     private func help(_ index: Int) -> String {
-        let users = USBSerialPorts.keypads().filter { device in
+        let users = model.connectedKeypads().filter { device in
             (model.compilation.config?.keypadIndex(for: device) ?? 0) == index
         }.map(\.model.title)
         let using = users.isEmpty ? "" : " Connected and using these: \(users.joined(separator: ", "))."
@@ -457,7 +289,7 @@ struct KeypadBar: View {
         .help("Which keypads these trees are for: every one of this model, unless it's given an ID.")
         Menu(keypad.id.map { "ID \($0.prefix(6))…" } ?? "Any one") {
             Button("Any of the model") { set(index, model: keypad.model, id: nil) }
-            let connected = USBSerialPorts.keypads()
+            let connected = model.connectedKeypads()
             if !connected.isEmpty { Divider() }
             ForEach(connected, id: \.serial) { device in
                 Button("\(device.model.title) — \(device.serial)") { set(index, model: device.model, id: device.serial) }
@@ -501,7 +333,7 @@ struct KeypadBar: View {
     /// A keypad connected without trees of its own, else "Keypad n".
     private func add() {
         let config = model.compilation.config
-        let unclaimed = USBSerialPorts.keypads().first { device in
+        let unclaimed = model.connectedKeypads().first { device in
             !document.keypads.contains { $0.model == device.model || $0.id == device.serial }
                 && (config?.keypadIndex(for: device) ?? 0) == 0
         }

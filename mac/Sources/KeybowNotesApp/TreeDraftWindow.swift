@@ -42,9 +42,9 @@ final class DesignModel {
     /// The working copy's revision when last added: changes since are unadded.
     private(set) var addedRevision: Int?
 
-    /// The working copy: the tree as it was, with the draft in it.
+    /// The working copy: the tree as it was, with the draft in it — shown by
+    /// the editor component beside the conversation.
     let editor: EditorModel
-    let coordinator: OutlineCoordinator
     private(set) var keypadNames: [String]
     @ObservationIgnored private var original: OutlineDocument
     @ObservationIgnored private var turns: [(role: String, text: String)] = []
@@ -54,15 +54,12 @@ final class DesignModel {
     init(outlineURL: URL) {
         let text = (try? String(contentsOf: outlineURL, encoding: .utf8)) ?? ""
         editor = EditorModel(outlineURL: outlineURL, text: text, draft: true)
-        coordinator = OutlineCoordinator(model: editor)
         original = editor.document
         keypadNames = TreeControl.keypadNames(original)
         // A section for no model is used by no keypad: start from one that's here.
-        newModel = USBSerialPorts.keypads().first?.model
-        if let used = KeypadBar.users(of: editor).keys.min(), KeypadBar.users(of: editor)[0] == nil {
-            editor.keypad = used
-            keypad = used
-        }
+        newModel = editor.connectedKeypads().first?.model
+        editor.showTreesInUse()
+        keypad = editor.keypad
     }
 
     var claudeIsReady: Bool {
@@ -250,7 +247,7 @@ final class DesignModel {
             let name = TreeControl.keypadNames(editor.document)[draftedKeypad]
             let users = automation.connectedKeypads(in: document).filter { $0.hasSuffix("“\(name)”") }
             var note = " KeybowNotes is using it."
-            if users.isEmpty, !USBSerialPorts.keypads().isEmpty {
+            if users.isEmpty, !editor.connectedKeypads().isEmpty {
                 note = " No keypad that's plugged in uses it yet: in the tree editor, give its section the ID of the "
                     + "keypad it's for, or a model no other section claims."
             }
@@ -282,18 +279,14 @@ final class DesignModel {
     }
 }
 
-struct DesignView: View {
+/// The conversation side of Design with Claude; the editor component is
+/// beside it, in the window's split view.
+struct DesignConversationView: View {
     @Bindable var model: DesignModel
     let openSettings: () -> Void
 
     var body: some View {
-        HSplitView {
-            conversation
-                .frame(minWidth: 340, idealWidth: 400, maxWidth: 560)
-            EditorRootView(model: model.editor, coordinator: model.coordinator, save: {})
-                .frame(minWidth: 680)
-        }
-        .frame(minWidth: 1080, minHeight: 640)
+        conversation.frame(minWidth: 340, idealWidth: 400, maxWidth: 560, minHeight: 600)
     }
 
     // MARK: The conversation
@@ -463,24 +456,39 @@ struct DesignView: View {
     }
 }
 
+/// Design with Claude's window: the conversation, and the tree editor
+/// component on the draft, side by side.
 @MainActor
 final class DesignWindowController: NSWindowController, NSWindowDelegate {
     private let model: DesignModel
-    private var keyMonitor: Any?
+    private let editor: TreeEditorViewController
 
     init(outlineURL: URL, openSettings: @escaping () -> Void) {
         model = DesignModel(outlineURL: outlineURL)
+        // A draft has nothing to save: no save.
+        editor = TreeEditorViewController(model: model.editor, save: nil)
+
+        let split = NSSplitViewController()
+        let conversation = NSSplitViewItem(viewController: NSHostingController(
+            rootView: DesignConversationView(model: model, openSettings: openSettings)))
+        conversation.minimumThickness = 340
+        conversation.maximumThickness = 560
+        conversation.holdingPriority = .defaultHigh
+        let tree = NSSplitViewItem(viewController: editor)
+        tree.minimumThickness = 680
+        split.addSplitViewItem(conversation)
+        split.addSplitViewItem(tree)
+
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1320, height: 800),
                               styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "Design with Claude"
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self
-        window.contentViewController = NSHostingController(rootView: DesignView(model: model, openSettings: openSettings))
+        window.contentViewController = split
         window.setContentSize(NSSize(width: 1320, height: 800))
         window.center()
         window.setFrameAutosaveName("KeybowNotesDesign")
-        model.editor.undoManager = window.undoManager
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -489,7 +497,6 @@ final class DesignWindowController: NSWindowController, NSWindowDelegate {
         showWindow(nil)
         window?.bringToFront()
         if let window { WindowSnapshots.keep(window, as: "design") }
-        installKeyMonitor()
         // Development builds only: KEYBOW_DRAFT_WANTED says it and sends it,
         // then KEYBOW_DRAFT_THEN once that's answered; KEYBOW_DRAFT_USE=1 adds
         // the draft.
@@ -513,27 +520,6 @@ final class DesignWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    /// The tree editor's ⌃⌘↑/↓, for the draft's outline; the conversation's
-    /// own text field keeps its keys.
-    private func installKeyMonitor() {
-        guard keyMonitor == nil else { return }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.window === self.window else { return event }
-            if let text = self.window?.firstResponder as? NSTextView, !text.isFieldEditor { return event }
-            if let offset = MoveKeys.offset(for: event) {
-                self.model.coordinator.move(by: offset)
-                return nil
-            }
-            return event
-        }
-    }
-
-    @objc func moveNodeUp(_ sender: Any?) { model.coordinator.move(by: -1) }
-    @objc func moveNodeDown(_ sender: Any?) { model.coordinator.move(by: 1) }
-    @objc func addChildNode(_ sender: Any?) { model.coordinator.addChild() }
-    /// ⌘S: there's nothing to save — the draft goes in with Add.
-    @objc func saveDocument(_ sender: Any?) { NSSound.beep() }
-
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard model.hasUnaddedChanges else { return true }
         let alert = NSAlert()
@@ -546,7 +532,5 @@ final class DesignWindowController: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         model.stop()
-        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
-        keyMonitor = nil
     }
 }

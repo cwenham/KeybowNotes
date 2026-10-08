@@ -68,6 +68,23 @@ final class EditorModel {
         self.compilation = OutlineCompiler.compile(document, locateApp: locateApp)
     }
 
+    /// The keypads plugged in: USB, in the app — or whatever a test, or a
+    /// draft, says instead.
+    @ObservationIgnored var connectedKeypads: () -> [KeypadDevice] = { USBSerialPorts.keypads() }
+
+    /// The keypads plugged in, by the trees each uses: 0 for Default.
+    func keypadsInUse() -> [Int: [String]] {
+        Dictionary(grouping: connectedKeypads()) { device in compilation.config?.keypadIndex(for: device) ?? 0 }
+            .mapValues { $0.map(\.model.title) }
+    }
+
+    /// Shows trees a keypad that's plugged in uses, rather than Default when
+    /// every keypad has a section of its own.
+    func showTreesInUse() {
+        let users = keypadsInUse()
+        if keypad == 0, users[0] == nil, let used = users.keys.min() { keypad = used }
+    }
+
     /// The whole document replaced — by a new draft — as one step to undo.
     func replace(with document: OutlineDocument, name: String) {
         edit(name) { $0 = document }

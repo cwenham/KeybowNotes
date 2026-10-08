@@ -63,7 +63,7 @@ final class AppSettings {
     }
 
     var configURL: URL {
-        configPath.isEmpty ? ConfigStore.defaultURL
+        configPath.isEmpty ? AppLocations.defaultTree
             : URL(fileURLWithPath: (configPath as NSString).expandingTildeInPath)
     }
 
@@ -84,7 +84,7 @@ final class AppSettings {
 
     private enum Keys {
         static let placement = "overlayPlacement"
-        static let configPath = "configPath"
+        static let configPath = AppLocations.treePathKey
         static let commitDelay = "commitDelay"
         static let idleTimeout = "idleTimeout"
         static let longPressCancel = "longPressCancel"

@@ -258,7 +258,7 @@ private struct NodeInspector: View {
                     .foregroundStyle(.secondary)
             } else if let tree {
                 let depth = location.path.count - 1
-                Text("\(treeName(tree)) · row \(tree.rows[depth] + 1) · key \(location.slot + 1)")
+                Text("\(tree.title) tree · row \(tree.rows[depth] + 1) · key \(location.slot + 1)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if case .list(let name) = location.container {
@@ -965,15 +965,6 @@ private struct NodeInspector: View {
     }
 }
 
-func treeName(_ tree: TreeKind) -> String {
-    switch tree {
-    case .main: return "Main tree"
-    case .row2: return "Row 2 tree"
-    case .row3: return "Row 3 tree"
-    case .bottom: return "Bottom tree"
-    }
-}
-
 /// One labelled row of the inspector. Labels sit in a right-aligned column
 /// so the controls line up, and each label is level with the first line of
 /// text in its control — not centred on the control and whatever note or
@@ -1155,7 +1146,7 @@ private struct TimerSetup: View {
     }
 
     private func check() async {
-        exists = await ShortcutCatalog.names().contains(shortcut)
+        exists = await ShortcutsApp.names().contains(shortcut)
     }
 }
 
@@ -1211,7 +1202,7 @@ private struct ShortcutField: View {
     }
 
     private func reload() async {
-        names = await ShortcutCatalog.names()
+        names = await ShortcutsApp.names()
         loaded = true
     }
 

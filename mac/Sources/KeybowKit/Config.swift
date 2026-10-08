@@ -100,6 +100,20 @@ public enum TreeKind: String, CaseIterable, Sendable {
         }
     }
 
+    /// "main", "row 2", "row 3", "bottom": as people name it, and as
+    /// scripts and agents are told it.
+    public var name: String {
+        switch self {
+        case .main: return "main"
+        case .row2: return "row 2"
+        case .row3: return "row 3"
+        case .bottom: return "bottom"
+        }
+    }
+
+    /// "Main", "Row 2"…: the name as a title.
+    public var title: String { name.prefix(1).uppercased() + name.dropFirst() }
+
     public var startRow: Int { rows[0] }
     public var levels: Int { rows.count }
 

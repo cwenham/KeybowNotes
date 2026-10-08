@@ -3,7 +3,7 @@ import KeybowKit
 import XCTest
 
 /// Answers with a canned response and keeps the request: nothing leaves the Mac.
-private final class StubTransport: ClaudeTransport, @unchecked Sendable {
+private final class StubTransport: HTTPTransport, @unchecked Sendable {
     var status = 200
     var headers: [String: String] = [:]
     var body: Any = ["content": [["type": "text", "text": "Hello"]], "stop_reason": "end_turn"]

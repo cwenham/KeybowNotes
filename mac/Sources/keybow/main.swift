@@ -55,8 +55,9 @@ usage: keybow <command>
 Device commands talk to the first keypad found; KEYBOW_DEVICE=rgbkeypad (or a
 model, or a unique ID from `keybow keypads`) picks another.
 
-The tree defaults to ~/Library/Application Support/KeybowNotes/tree.md,
-falling back to ./tree.demo.md. A compiled .json file works too.
+The tree defaults to the one the app uses — the file chosen in its Settings,
+else ~/Library/Application Support/KeybowNotes/tree.md — falling back to
+./tree.demo.md. A compiled .json file works too.
 """
 
 func fail(_ message: String) -> Never {
@@ -126,8 +127,8 @@ func configURL(_ arguments: [String]) -> URL {
     if let given = arguments.first {
         return URL(fileURLWithPath: (given as NSString).expandingTildeInPath)
     }
-    let installed = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/KeybowNotes/tree.md")
+    // The tree the app uses, if it's chosen another in Settings.
+    let installed = AppLocations.tree(chosenIn: AppLocations.appSettings)
     if FileManager.default.fileExists(atPath: installed.path) { return installed }
     return URL(fileURLWithPath: "tree.demo.md")
 }
@@ -242,9 +243,7 @@ func heardHello(_ serial: String) async -> Bool {
 /// Whether the app is running: it holds this lock while it is.
 enum SingleInstanceCheck {
     static var isFree: Bool {
-        let path = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/KeybowNotes/.lock").path
-        let descriptor = open(path, O_RDWR)
+        let descriptor = open(AppLocations.lockFile.path, O_RDWR)
         guard descriptor >= 0 else { return true }
         defer { close(descriptor) }
         guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else { return false }
@@ -466,10 +465,8 @@ case "setup":
                 if appRunning { return USBSerialPorts.keypads().contains { $0.serial == serial } }
                 return await heardHello(serial)
             }
-            let backups = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/Application Support/KeybowNotes/Keypad Backups", isDirectory: true)
             let outcome = try await setup.run(KeypadSetup.Plan(model: model, serial: target?.serial, circuitPython: version,
-                                                               backups: backups)) { event in
+                                                               backups: AppLocations.keypadBackups)) { event in
                 switch event {
                 case .started(let step, let text): print("… \(step.title): \(text)")
                 case .waiting(let step, let text): print("‼ \(step.title): \(text)")
@@ -515,7 +512,7 @@ case "troubleshoot":
     }
     let readConsoles = rest.contains("--console")
     let watchPlugIn = rest.contains("--watch")
-    let known = KnownKeypads.load(UserDefaults(suiteName: KnownKeypads.appDomain) ?? .standard)
+    let known = KnownKeypads.load(AppLocations.appSettings ?? .standard)
     let config = try? ConfigFile.load(configURL([])).config
     var sought = SoughtKeypad.all(known: known, config: config)
     if let wanted {

@@ -121,12 +121,8 @@ private struct TreeBadge: View {
 
     private var title: String {
         if pages { return "Row \(tree.startRow + 1) pages" }
-        switch tree {
-        case .main: return "Main tree"
-        case .row2: return "Row 2 tree  ↓"
-        case .row3: return "Row 3 tree  ↓"
-        case .bottom: return "Bottom tree  ↑"
-        }
+        let arrow = tree == .main ? "" : tree == .bottom ? "  ↑" : "  ↓"
+        return "\(tree.title) tree\(arrow)"
     }
 }
 

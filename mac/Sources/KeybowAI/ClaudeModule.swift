@@ -1,20 +1,6 @@
 import Foundation
 import KeybowKit
 
-/// Sends a request and hands back what came back — URLSession in the app, a
-/// stand-in in tests.
-public protocol ClaudeTransport: Sendable {
-    func send(_ request: URLRequest) async throws -> (Data, URLResponse)
-}
-
-public struct URLSessionTransport: ClaudeTransport {
-    public init() {}
-
-    public func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
-        try await URLSession.shared.data(for: request)
-    }
-}
-
 /// `{{#ai}}…{{/ai}}` blocks, answered by Claude through the Messages API.
 ///
 ///   {{#ai}}Summarise in one line: {{selection}}{{/ai}}
@@ -85,10 +71,10 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
                 """),
         ])
 
-    private let transport: ClaudeTransport
+    private let transport: HTTPTransport
     private var host: ModuleHost?
 
-    public init(transport: ClaudeTransport = URLSessionTransport()) {
+    public init(transport: HTTPTransport = SameHostTransport()) {
         self.transport = transport
     }
 

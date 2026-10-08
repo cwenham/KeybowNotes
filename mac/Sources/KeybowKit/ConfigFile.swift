@@ -45,7 +45,7 @@ public enum ConfigFile {
         guard isOutline(url) else { return Loaded(config: try KeybowConfig.load(from: url), errors: []) }
         let text: String
         do {
-            text = try String(contentsOf: url, encoding: .utf8)
+            text = try OutlineFile(url).contents()
         } catch {
             throw ConfigError.unreadable(url, error)
         }

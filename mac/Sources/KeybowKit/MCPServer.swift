@@ -239,7 +239,7 @@ public struct AppBridge: AppAsking {
             set c to item 4 of argv
             set d to item 5 of argv
             with timeout of 600 seconds
-                tell application id "io.github.cwenham.keybownotes"
+                tell application id "\(AppLocations.bundleID)"
                     if command is "keypads" then return keypad names
                     if command is "tree" then return tree outline tree a keypad b
                     if command is "whole" then return whole outline
@@ -269,35 +269,18 @@ public struct AppBridge: AppAsking {
         """
 
     public func ask(_ command: String, _ values: [String]) throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         let padded = (values + Array(repeating: "", count: 4)).prefix(4)
-        process.arguments = ["-e", Self.script, command] + padded
-        let output = Pipe()
-        let errors = Pipe()
-        process.standardOutput = output
-        process.standardError = errors
-        try process.run()
-        let said = output.fileHandleForReading.readDataToEndOfFile()
-        let complaint = errors.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        let text = String(decoding: said, as: UTF8.self).trimmingCharacters(in: .newlines)
-        guard process.terminationStatus == 0 else { throw TreeControl.Problem(Self.reason(String(decoding: complaint, as: UTF8.self))) }
-        return text
+        let result = try Osascript.runAndWait(Self.script, [command] + padded)
+        guard result.status == 0 else { throw TreeControl.Problem(Self.reason(result.errorText)) }
+        return result.text.trimmingCharacters(in: .newlines)
     }
 
     /// "…: execution error: KeybowNotes got an error: There's no … (1)" → the part a person reads.
     static func reason(_ text: String) -> String {
-        var reason = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let range = reason.range(of: "got an error: ") { reason = String(reason[range.upperBound...]) }
-        else if let range = reason.range(of: "execution error: ") { reason = String(reason[range.upperBound...]) }
-        if let open = reason.range(of: " (", options: .backwards), reason.hasSuffix(")") {
-            reason = String(reason[..<open.lowerBound])
+        if Osascript.isNotAllowed(text) {
+            return "macOS hasn't allowed this app to control KeybowNotes: " + Osascript.allowIt
         }
-        if reason.contains("-1743") || reason.lowercased().contains("not authorized") {
-            return "macOS hasn't allowed this app to control KeybowNotes: allow it in System Settings → Privacy & "
-                + "Security → Automation."
-        }
+        let reason = Osascript.reason(text)
         if reason.contains("-1728") || reason.contains("Can’t get application") {
             return "KeybowNotes isn't installed, or couldn't be opened."
         }

@@ -1,28 +1,6 @@
 import Foundation
 import KeybowKit
 
-/// Sends a request — URLSession in the app, a stand-in in tests.
-public protocol HomeTransport: Sendable {
-    func send(_ request: URLRequest) async throws -> (Data, URLResponse)
-}
-
-/// URLSession, refusing to follow a redirect to another server: the token
-/// travels with every request, and mustn't reach a host it wasn't for.
-public final class HomeSessionTransport: NSObject, HomeTransport, URLSessionTaskDelegate, @unchecked Sendable {
-    private lazy var session = URLSession(configuration: .ephemeral, delegate: self, delegateQueue: nil)
-
-    public override init() {}
-
-    public func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
-        try await session.data(for: request)
-    }
-
-    public func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                           newRequest request: URLRequest) async -> URLRequest? {
-        request.url?.host == task.originalRequest?.url?.host ? request : nil
-    }
-}
-
 /// An entity as Home Assistant has it: `light.desk_lamp`, `on`, and its
 /// attributes — brightness, friendly_name, unit_of_measurement…
 public struct EntityState: Equatable, Sendable {
@@ -55,10 +33,10 @@ public struct EntityState: Equatable, Sendable {
 public struct HomeAssistant: Sendable {
     public let base: URL
     let token: String
-    let transport: HomeTransport
+    let transport: HTTPTransport
     static let timeout: TimeInterval = 10
 
-    public init(base: URL, token: String, transport: HomeTransport) {
+    public init(base: URL, token: String, transport: HTTPTransport) {
         self.base = base
         self.token = token
         self.transport = transport

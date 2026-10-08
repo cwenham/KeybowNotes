@@ -41,7 +41,7 @@ struct KeypadPane: View {
                 + "and run at once. Click a key to select it."
         }
         let direction = tree == .bottom ? "climbs from row 4" : "runs down from row \(tree.startRow + 1)"
-        return "\(treeName(tree)): \(direction), \(tree.levels) levels. Click a key to select it."
+        return "\(tree.title) tree: \(direction), \(tree.levels) levels. Click a key to select it."
     }
 
     private func keyView(_ key: Key) -> some View {

@@ -36,7 +36,7 @@ enum Modules {
 }
 
 /// Answers as Home Assistant would, about a home that doesn't exist.
-private struct DemoHome: HomeTransport {
+private struct DemoHome: HTTPTransport {
     static let states = """
         [{"entity_id": "light.desk_lamp", "state": "on", "attributes": {"friendly_name": "Desk lamp", "brightness": 180,
           "min_color_temp_kelvin": 2200, "max_color_temp_kelvin": 6500}},
@@ -68,7 +68,7 @@ private struct DemoHome: HomeTransport {
 }
 
 /// Replies as the Messages API would, with the same text every time.
-private struct ScriptedClaude: ClaudeTransport {
+private struct ScriptedClaude: HTTPTransport {
     let reply: String
 
     func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
@@ -134,7 +134,7 @@ final class AppModuleHost: ModuleHost, @unchecked Sendable {
 
     /// Modules' state. A development build keeps its own, so trying things
     /// never touches the app's.
-    let state = StateFile(url: ConfigStore.supportDirectory
+    let state = StateFile(url: AppLocations.supportDirectory
         .appendingPathComponent(Bundle.main.bundleIdentifier == nil ? "state-dev.json" : "state.json"))
 
     /// Where state used to be kept: moved into `state.json` as it's read.
@@ -241,7 +241,7 @@ enum ModuleClock {
 enum Keychain {
     /// A development build keeps its own: reading the app's items would ask
     /// for permission, and it mustn't change them.
-    static let service = Bundle.main.bundleIdentifier == nil ? "io.github.cwenham.keybownotes.dev" : "io.github.cwenham.keybownotes"
+    static let service = Bundle.main.bundleIdentifier == nil ? AppLocations.bundleID + ".dev" : AppLocations.bundleID
 
     private static func query(_ account: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,

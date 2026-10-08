@@ -58,6 +58,42 @@ final class TreeControlTests: XCTestCase {
         }
     }
 
+    func testKeysAreFoundAsTheKeypadHasThem() throws {
+        let document = OutlineParser.parse("""
+            1. Work [Copy]
+               1. Standup
+               2. Notes/Ideas
+            2. Errands [@when]
+
+            # row 2
+            1. Window Management
+               1. Left Screen [Copy, text: left]
+               3. Right Screen [Copy, text: right]
+
+            # list when
+            1. Today
+            """).0
+        let config = try XCTUnwrap(OutlineCompiler.compile(document, locateApp: { _ in nil }).config)
+        XCTAssertEqual(try TreeControl.keys(TreeControl.path("window management/right screen"), in: config, tree: .row2), [0, 2])
+        XCTAssertEqual(try TreeControl.keys(["1", "#3"], in: config, tree: .row2), [0, 2], "by key numbers")
+        XCTAssertEqual(try TreeControl.keys(TreeControl.path("Work/Notes/Ideas"), in: config, tree: .main), [0, 1])
+        XCTAssertEqual(try TreeControl.keys(["Errands", "Today"], in: config, tree: .main), [1, 0], "a list, filled in")
+        XCTAssertThrowsError(try TreeControl.keys(["Lamp"], in: config, tree: .row2)) { error in
+            XCTAssertEqual("\(error)", "There's no “Lamp” at the top of the row 2 tree. There's “Window Management”.")
+        }
+        XCTAssertThrowsError(try TreeControl.keys(["Window Management", "2"], in: config, tree: .row2),
+                             "no key there") { error in
+            XCTAssertEqual("\(error)", "There's no “2” under “Window Management”. There's “Left Screen” and “Right Screen”.")
+        }
+        XCTAssertThrowsError(try TreeControl.keys(["9"], in: config, tree: .row2), "no key 9")
+        XCTAssertThrowsError(try TreeControl.keys([], in: config, tree: .main))
+
+        // The outline, though, has the list's name there, not its entries.
+        XCTAssertThrowsError(try TreeControl.locate(["Errands", "Today"], in: document, container: .tree(.main))) { error in
+            XCTAssertEqual("\(error)", "What's under “Errands” comes from the list @when: change it there.")
+        }
+    }
+
     func testReadingATree() {
         XCTAssertEqual(TreeControl.outline(document, keypad: 0, tree: .row2), """
             1. Window Management

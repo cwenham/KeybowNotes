@@ -218,6 +218,9 @@ Config commands:
 ./.build/debug/keybow run tree.md                      # drive the keypad with its trees; prints, runs nothing
 ```
 
+Without a file named, they use the tree the app does: the one chosen in its
+Settings, else the one in Application Support.
+
 The config language — the outline syntax and its keywords, the JSON form, how a
 leaf's action is worked out, and every action's fields — is described in
 [docs/CONFIG-LANGUAGE.md](../docs/CONFIG-LANGUAGE.md).

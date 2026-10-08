@@ -207,7 +207,7 @@ final class TreeEditorViewController: NSViewController {
                         text += "\nALL SELECTED: " + model.selectedIDs.compactMap { model.node($0)?.label }.joined(separator: ", ")
                     }
                     if let message = model.message { text += "\nMESSAGE: \(message)" }
-                    text += "\nSHOWING: keypad \(model.keypad), \(TreeControl.treeName(model.tab))"
+                    text += "\nSHOWING: keypad \(model.keypad), \(model.tab.name)"
                     try? text.write(toFile: argument, atomically: true, encoding: .utf8)
                 default:
                     break

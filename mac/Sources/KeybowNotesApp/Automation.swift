@@ -47,13 +47,19 @@ final class Automation {
 
     // MARK: Reading
 
-    func document() throws -> OutlineDocument {
+    /// The tree file — an outline, not compiled JSON.
+    private func file() throws -> OutlineFile {
         let url = hooks.outlineURL()
         guard ConfigFile.isOutline(url) else {
             throw Problem("The config is a compiled JSON file, \(url.lastPathComponent): only an outline can be changed from here.")
         }
-        let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        return OutlineParser.parse(text).0
+        return OutlineFile(url)
+    }
+
+    /// The tree, to read: lines that can't be read are skipped, as the app
+    /// skips them when it loads the tree.
+    func document() throws -> OutlineDocument {
+        try file().read().document
     }
 
     /// Nothing named: the trees the first keypad that's plugged in uses.
@@ -107,23 +113,16 @@ final class Automation {
             throw Problem("The tree editor has changes that aren't saved. Save them, or undo them, first: otherwise one "
                           + "or the other would be lost.")
         }
-        let url = hooks.outlineURL()
-        guard ConfigFile.isOutline(url) else {
-            throw Problem("The config is a compiled JSON file, \(url.lastPathComponent): only an outline can be changed from here.")
-        }
-        let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        let (document, problems) = OutlineParser.parse(text)
+        let file = try self.file()
+        let (document, problems) = file.read()
         guard problems.isEmpty else {
             let lines = problems.prefix(5).map { String($0.line) }.joined(separator: ", ")
             throw Problem("Some lines of the tree can't be read — \(lines) — and would be lost. Fix them in the tree editor first.")
         }
         var changed = document
         let result = try change(&changed)
-        let previous = url.appendingPathExtension("previous")
-        try? FileManager.default.removeItem(at: previous)
-        try? FileManager.default.copyItem(at: url, to: previous)
         do {
-            try OutlineWriter.text(changed).write(to: url, atomically: true, encoding: .utf8)
+            try file.write(changed)
         } catch {
             throw Problem("The tree couldn't be saved: \(error.localizedDescription)")
         }
@@ -138,7 +137,7 @@ final class Automation {
             let keypad = try self.keypad(keypad, in: document)
             let added = try TreeControl.add(text, under: TreeControl.path(parent ?? ""), keypad: keypad, tree: tree, to: &document)
             let place = parent.map { "under “\($0)”" } ?? "at the top"
-            return "Added " + added.map { "“\($0)”" }.joinedList + " \(place) of the \(TreeControl.treeName(tree)) tree"
+            return "Added " + added.map { "“\($0)”" }.joinedList + " \(place) of the \(tree.name) tree"
                 + " of \(TreeControl.keypadNames(document)[keypad])."
         }
     }
@@ -165,7 +164,7 @@ final class Automation {
             let kind = try TreeControl.tree(tree)
             let index = try self.keypad(keypad, in: document)
             try TreeControl.replace(kind, keypad: index, with: text, in: &document)
-            return "Replaced the \(TreeControl.treeName(kind)) tree of \(TreeControl.keypadNames(document)[index])."
+            return "Replaced the \(kind.name) tree of \(TreeControl.keypadNames(document)[index])."
         }
     }
 

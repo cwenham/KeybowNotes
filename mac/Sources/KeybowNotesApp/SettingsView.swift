@@ -250,7 +250,7 @@ struct SettingsView: View {
         panel.directoryURL = settings.configURL.deletingLastPathComponent()
         panel.message = "Choose a KeybowNotes tree — an outline, like tree.md. Its templates folder should sit beside it."
         if panel.runModal() == .OK, let url = panel.url {
-            settings.configPath = url.path == ConfigStore.defaultURL.path ? "" : url.path
+            settings.configPath = url.path == AppLocations.defaultTree.path ? "" : url.path
         }
     }
 

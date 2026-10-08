@@ -46,29 +46,6 @@ enum AppCatalog {
     }
 }
 
-/// The shortcuts in the Shortcuts app, for the shortcut picker. Read afresh
-/// whenever it's shown: `shortcuts list` takes a few milliseconds.
-enum ShortcutCatalog {
-    static func names() async -> [String] {
-        await Task.detached {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/shortcuts")
-            process.arguments = ["list"]
-            let output = Pipe()
-            process.standardOutput = output
-            process.standardError = FileHandle.nullDevice
-            do { try process.run() } catch { return [] }
-            let data = output.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            let names = String(decoding: data, as: UTF8.self)
-                .split(separator: "\n")
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty }
-            return Set(names).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-        }.value
-    }
-}
-
 /// People in the Contacts app, for filling in a contact's number and address.
 /// Needs a usage description in the Info.plist, so only the packaged app can ask.
 actor ContactsService {

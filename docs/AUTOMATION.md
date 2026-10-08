@@ -19,10 +19,10 @@ All of them work the same way underneath:
   entity: light.desk_lamp]`, or several outline lines, indented for keys under
   keys. New entries go on the first free keys, by the tree editor's rules.
 - **Changes go to the tree file,** which KeybowNotes loads at once, as it does a
-  save from the tree editor. The file as it was before the last change is kept
-  beside it as `tree.md.previous`. While the tree editor has unsaved changes,
-  nothing is changed from outside — one or the other would be lost — and an
-  open editor with nothing unsaved reloads.
+  save from the tree editor. The file as it was before the last change — from
+  here or the editor — is kept beside it as `tree.md.previous`. While the tree
+  editor has unsaved changes, nothing is changed from outside — one or the
+  other would be lost — and an open editor with nothing unsaved reloads.
 - **Running an entry** does what its key does, through the same path: what it
   fetches, asks or refuses, and what the overlay shows. The answer is what
   happened: *Event: Standup · tomorrow 09:00*, or why it didn't.

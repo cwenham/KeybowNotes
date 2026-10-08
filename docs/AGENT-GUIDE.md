@@ -97,8 +97,8 @@ result is **outline text**, the same text the tree file holds.
 - `run_entry` runs an entry's action for real — it can create events, draft
   messages, switch lamps. Run one only when the person asks, or to show them
   something they've agreed to.
-- KeybowNotes keeps the tree as it was before your last change as
-  `tree.md.previous`, beside `tree.md`.
+- KeybowNotes keeps the tree as it was before the last change — yours, or a
+  save from the tree editor — as `tree.md.previous`, beside `tree.md`.
 
 ## Designing in the app
 

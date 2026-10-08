@@ -291,8 +291,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let parts = TreeKind.allCases.compactMap { tree -> String? in
             let roots = config.roots(tree).compactMap { $0 }
             guard !roots.isEmpty else { return nil }
-            let name = tree == .main ? "Main" : tree == .bottom ? "Bottom" : tree == .row2 ? "Row 2" : "Row 3"
-            return "\(name) tree: \(roots.count) branches, \(leaves(config.roots(tree))) choices"
+            return "\(tree.title) tree: \(roots.count) branches, \(leaves(config.roots(tree))) choices"
         }
         return parts.isEmpty ? "No trees yet." : parts.joined(separator: " · ")
     }
@@ -832,7 +831,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func showKeypadSetup() {
         if setupWindow == nil {
             setupWindow = KeypadSetupWindowController(
-                backups: ConfigStore.supportDirectory.appendingPathComponent("Keypad Backups", isDirectory: true),
+                backups: AppLocations.keypadBackups,
                 stopProgram: { [weak self] serial in await self?.stopKeypadProgram(serial) ?? false },
                 isConnected: { [weak self] serial in await self?.isKeypadConnected(serial) ?? false },
                 connectedKeypads: { [weak self] in self?.connectedKeypads() ?? [] },
@@ -870,8 +869,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// the editor. Opened afresh, on the tree as it is, once it's been closed.
     private func showDraft() {
         if designWindow?.window?.isVisible != true {
-            let outline = ConfigFile.isOutline(store.url)
-                ? store.url : store.url.deletingLastPathComponent().appendingPathComponent("tree.md")
+            let outline = AppLocations.outline(for: store.url)
             designWindow = DesignWindowController(outlineURL: outline, openSettings: { [weak self] in self?.showSettings() })
         }
         designWindow?.show()
@@ -956,8 +954,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// The tree editor, on the tree in use — or on `tree.md` beside a
     /// compiled JSON config given for testing.
     private func showEditor() {
-        let outline = ConfigFile.isOutline(store.url)
-            ? store.url : store.url.deletingLastPathComponent().appendingPathComponent("tree.md")
+        let outline = AppLocations.outline(for: store.url)
         if editorWindow == nil || editorWindow?.model.outlineURL != outline {
             editorWindow = EditorWindowController(outlineURL: outline)
         }

@@ -4,7 +4,7 @@ import XCTest
 
 /// Home Assistant made up for the tests: answers by path, and remembers what
 /// it was sent.
-private final class FakeHome: HomeTransport, @unchecked Sendable {
+private final class FakeHome: HTTPTransport, @unchecked Sendable {
     var answers: [String: (Int, String)] = [:]
     var failure: URLError?
     private let lock = NSLock()

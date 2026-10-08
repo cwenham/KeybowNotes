@@ -52,8 +52,7 @@ final class DesignModel {
     @ObservationIgnored private var task: Task<Void, Never>?
 
     init(outlineURL: URL) {
-        let text = (try? String(contentsOf: outlineURL, encoding: .utf8)) ?? ""
-        editor = EditorModel(outlineURL: outlineURL, text: text, draft: true)
+        editor = EditorModel(outlineURL: outlineURL, text: OutlineFile(outlineURL).text(), draft: true)
         original = editor.document
         keypadNames = TreeControl.keypadNames(original)
         // A section for no model is used by no keypad: start from one that's here.
@@ -90,7 +89,7 @@ final class DesignModel {
             let name = TreeControl.keypadNames(editor.document)[min(index, editor.document.keypads.count)]
             return asNewSection ? "a new keypad section, “\(name)”" : "all the trees of “\(name)”"
         case .tree(let tree, let index):
-            return "the \(TreeControl.treeName(tree)) tree of “\(keypadNames[min(index, keypadNames.count - 1)])”"
+            return "the \(tree.name) tree of “\(keypadNames[min(index, keypadNames.count - 1)])”"
         }
     }
 
@@ -218,7 +217,7 @@ final class DesignModel {
         context.keypads = Automation.shared?.connectedKeypads(in: original) ?? []
         guard sendWhatsHere else { return context }
         context.apps = AppCatalog.all.map(\.name)
-        context.shortcuts = await ShortcutCatalog.names()
+        context.shortcuts = await ShortcutsApp.names()
         if let home = ModuleRegistry.shared.module(id: "home"),
            let entities = try? await home.choices(for: "entity", type: "home", fields: [:]) {
             context.homeEntities = entities.prefix(400).map { entity in
@@ -344,7 +343,7 @@ struct DesignConversationView: View {
             case .tree:
                 HStack {
                     Picker("The", selection: $model.tree) {
-                        ForEach(TreeKind.allCases, id: \.self) { Text(TreeControl.treeName($0)).tag($0) }
+                        ForEach(TreeKind.allCases, id: \.self) { Text($0.name).tag($0) }
                     }
                     .fixedSize()
                     keypadPicker

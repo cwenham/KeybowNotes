@@ -5,7 +5,7 @@ import os
 /// Messages go to the unified log, so Console.app shows what a Finder-launched
 /// app is doing, and to stdout when run from a terminal.
 enum Log {
-    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "io.github.cwenham.keybownotes",
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? AppLocations.bundleID,
                                        category: "app")
 
     static func info(_ message: String) {
@@ -27,8 +27,8 @@ enum SingleInstance {
 
     /// Takes the lock, or returns false when another copy holds it.
     static func acquire() -> Bool {
-        try? FileManager.default.createDirectory(at: ConfigStore.supportDirectory, withIntermediateDirectories: true)
-        let path = ConfigStore.supportDirectory.appendingPathComponent(".lock").path
+        try? FileManager.default.createDirectory(at: AppLocations.supportDirectory, withIntermediateDirectories: true)
+        let path = AppLocations.lockFile.path
         descriptor = open(path, O_CREAT | O_RDWR, 0o644)
         // If the lock file can't even be opened, don't stop the app over it.
         guard descriptor >= 0 else { return true }
@@ -40,13 +40,6 @@ enum SingleInstance {
 /// Finds, loads and watches the config: `tree.md`, compiled as it's read.
 @MainActor
 final class ConfigStore {
-    nonisolated static var supportDirectory: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/KeybowNotes")
-    }
-
-    nonisolated static var defaultURL: URL { supportDirectory.appendingPathComponent("tree.md") }
-
     /// Keeps the keys dark until a usable config exists.
     static let empty = try! KeybowConfig.parse(Data(#"{ "trees": {} }"#.utf8))
 
@@ -74,17 +67,17 @@ final class ConfigStore {
     /// templates where the app looks. Returns what was done, if anything.
     static func installDefaultsIfNeeded() -> String? {
         let manager = FileManager.default
-        guard !manager.fileExists(atPath: defaultURL.path),
+        guard !manager.fileExists(atPath: AppLocations.defaultTree.path),
               let bundled = Bundle.main.url(forResource: "tree.demo", withExtension: "md") else { return nil }
         do {
-            try manager.createDirectory(at: supportDirectory, withIntermediateDirectories: true)
-            try manager.copyItem(at: bundled, to: defaultURL)
-            let templates = supportDirectory.appendingPathComponent("templates")
+            try manager.createDirectory(at: AppLocations.supportDirectory, withIntermediateDirectories: true)
+            try manager.copyItem(at: bundled, to: AppLocations.defaultTree)
+            let templates = AppLocations.supportDirectory.appendingPathComponent("templates")
             if let bundledTemplates = Bundle.main.url(forResource: "templates", withExtension: nil),
                !manager.fileExists(atPath: templates.path) {
                 try manager.copyItem(at: bundledTemplates, to: templates)
             }
-            return "Installed the example tree at \(defaultURL.path)"
+            return "Installed the example tree at \(AppLocations.defaultTree.path)"
         } catch {
             return "Couldn't install the example config: \(error.localizedDescription)"
         }

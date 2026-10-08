@@ -51,16 +51,6 @@ public enum TreeControl {
         }
     }
 
-    /// "main", "row 2", "row 3", "bottom".
-    public static func treeName(_ tree: TreeKind) -> String {
-        switch tree {
-        case .main: return "main"
-        case .row2: return "row 2"
-        case .row3: return "row 3"
-        case .bottom: return "bottom"
-        }
-    }
-
     /// "Window Management/Left Screen" → its labels.
     public static func path(_ text: String) -> [String] {
         text.split(separator: "/", omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) }
@@ -71,69 +61,57 @@ public enum TreeControl {
     /// label with a / in it, too — or a key's number on its row, 1 to 4.
     public static func locate(_ path: [String], in document: OutlineDocument,
                               container: OutlineContainer) throws -> OutlineLocation {
-        guard !path.isEmpty else { throw Problem("Name an entry: its labels, like Projects/Fiction.") }
-        var slots: [Int] = []
-        var rest = path[...]
-        while !rest.isEmpty {
-            let row = document.level(container, parent: slots)
-            var found: (slot: Int, used: Int)?
-            // The longest run of parts that's a label: "Notes/Ideas" as one.
-            for used in stride(from: rest.count, through: 1, by: -1) {
-                let label = rest.prefix(used).joined(separator: "/")
-                if let slot = row.firstIndex(where: { $0?.label.caseInsensitiveCompare(label) == .orderedSame }) {
-                    found = (slot, used)
-                    break
-                }
+        let slots = try follow(path, top: "at the top", row: { slots in
+            document.level(container, parent: slots).map { $0?.label }
+        }, after: { slots, walked in
+            if let list = document.node(at: OutlineLocation(container, slots))?.listReference {
+                throw Problem("What's under “\(walked)” comes from the list @\(list): change it there.")
             }
-            if found == nil, let number = Int(rest.first!.trimmingCharacters(in: CharacterSet(charactersIn: "#"))),
-               (1...row.count).contains(number), row[number - 1] != nil {
-                found = (number - 1, 1)
-            }
-            guard let found else {
-                let here = slots.isEmpty ? "at the top" : "under “\(path.prefix(path.count - rest.count).joined(separator: "/"))”"
-                let labels = row.compactMap { $0?.label }.map { "“\($0)”" }
-                throw Problem("There's no “\(rest.first!)” \(here)."
-                              + (labels.isEmpty ? " Nothing's there." : " There's " + labels.joinedAsList + "."))
-            }
-            slots.append(found.slot)
-            rest = rest.dropFirst(found.used)
-            if !rest.isEmpty, let list = document.node(at: OutlineLocation(container, slots))?.listReference {
-                throw Problem("What's under “\(path.prefix(path.count - rest.count).joined(separator: "/"))” comes "
-                              + "from the list @\(list): change it there.")
-            }
-        }
+        })
         return OutlineLocation(container, slots)
     }
 
     /// The keys down to an entry as the keypad has it — lists filled in —
     /// by labels or key numbers.
     public static func keys(_ path: [String], in config: KeybowConfig, tree: TreeKind) throws -> [Int] {
+        try follow(path, top: "at the top of the \(tree.name) tree") { keys in
+            config.options(in: tree, after: keys).map { $0?.label }
+        }
+    }
+
+    /// Follows `path` down a tree whose rows `row` gives, by the keys so far:
+    /// at each, the longest run of parts that's a label — "Notes/Ideas" as
+    /// one — else a key's number. `after` hears each step with more to go,
+    /// and the path so far, to refuse going further.
+    private static func follow(_ path: [String], top: String, row: ([Int]) -> [String?],
+                               after: ([Int], String) throws -> Void = { _, _ in }) throws -> [Int] {
         guard !path.isEmpty else { throw Problem("Name an entry: its labels, like Projects/Fiction.") }
         var keys: [Int] = []
         var rest = path[...]
         while !rest.isEmpty {
-            let row = config.options(in: tree, after: keys)
+            let labels = row(keys)
+            let walked = path.prefix(path.count - rest.count).joined(separator: "/")
             var found: (slot: Int, used: Int)?
             for used in stride(from: rest.count, through: 1, by: -1) {
                 let label = rest.prefix(used).joined(separator: "/")
-                if let slot = row.firstIndex(where: { $0?.label.caseInsensitiveCompare(label) == .orderedSame }) {
+                if let slot = labels.firstIndex(where: { $0?.caseInsensitiveCompare(label) == .orderedSame }) {
                     found = (slot, used)
                     break
                 }
             }
             if found == nil, let number = Int(rest.first!.trimmingCharacters(in: CharacterSet(charactersIn: "#"))),
-               (1...max(row.count, 1)).contains(number), number <= row.count, row[number - 1] != nil {
+               number >= 1, number <= labels.count, labels[number - 1] != nil {
                 found = (number - 1, 1)
             }
             guard let found else {
-                let here = keys.isEmpty ? "at the top of the \(treeName(tree)) tree"
-                    : "under “\(path.prefix(path.count - rest.count).joined(separator: "/"))”"
-                let labels = row.compactMap { $0?.label }.map { "“\($0)”" }
+                let here = keys.isEmpty ? top : "under “\(walked)”"
+                let there = labels.compactMap { $0 }.map { "“\($0)”" }
                 throw Problem("There's no “\(rest.first!)” \(here)."
-                              + (labels.isEmpty ? " Nothing's there." : " There's " + labels.joinedAsList + "."))
+                              + (there.isEmpty ? " Nothing's there." : " There's " + there.joinedAsList + "."))
             }
             keys.append(found.slot)
             rest = rest.dropFirst(found.used)
+            if !rest.isEmpty { try after(keys, path.prefix(path.count - rest.count).joined(separator: "/")) }
         }
         return keys
     }

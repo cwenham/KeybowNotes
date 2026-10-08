@@ -3,7 +3,7 @@ import KeybowKit
 import XCTest
 
 /// Answers every request with a canned response, keeping the requests.
-final class StubDataTransport: DataTransport, @unchecked Sendable {
+final class StubDataTransport: HTTPTransport, @unchecked Sendable {
     var status = 200
     var contentType: String? = "application/json"
     var body = Data(#"{"current": {"temp_c": 14.2}}"#.utf8)
@@ -181,18 +181,12 @@ final class DataFetcherTests: XCTestCase {
         XCTAssertEqual(said(String(repeating: "x", count: 500))?.count, 301)
     }
 
-    func testRedirectsStayOnTheSameServer() async {
-        let transport = SameHostTransport()
-        let task = URLSession.shared.dataTask(with: URL(string: "https://api.example.com/data")!)
-        let original = HTTPURLResponse(url: URL(string: "https://api.example.com/data")!, statusCode: 301,
-                                       httpVersion: nil, headerFields: nil)!
-        let sameHost = await transport.urlSession(.shared, task: task, willPerformHTTPRedirection: original,
-                                                  newRequest: URLRequest(url: URL(string: "https://api.example.com/v2/data")!))
-        XCTAssertNotNil(sameHost)
-        let elsewhere = await transport.urlSession(.shared, task: task, willPerformHTTPRedirection: original,
-                                                   newRequest: URLRequest(url: URL(string: "https://evil.example.net/steal")!))
-        XCTAssertNil(elsewhere, "the key mustn't follow a redirect to another host")
-        task.cancel()
+    func testRedirectsStayOnTheSameServer() {
+        let original = URLRequest(url: URL(string: "https://api.example.com/data")!)
+        XCTAssertTrue(SameHostTransport.follows(URLRequest(url: URL(string: "https://api.example.com/v2/data")!),
+                                                from: original))
+        XCTAssertFalse(SameHostTransport.follows(URLRequest(url: URL(string: "https://evil.example.net/steal")!),
+                                                 from: original), "the key mustn't follow a redirect to another host")
     }
 
     func testNamesAndPlaceholders() {

@@ -91,22 +91,9 @@ public enum USBLog {
         format.locale = Locale(identifier: "en_US_POSIX")
         format.dateFormat = "yyyy-MM-dd HH:mm:ss"
         let arguments = ["show", "--style", "ndjson", "--start", format.string(from: start), "--predicate", predicate]
-        return await Task.detached {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
-            process.arguments = arguments
-            let output = Pipe()
-            process.standardOutput = output
-            process.standardError = FileHandle.nullDevice
-            do { try process.run() } catch { return [] }
-            let watchdog = DispatchWorkItem { if process.isRunning { process.terminate() } }
-            DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: watchdog)
-            let data = output.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            watchdog.cancel()
-            return String(decoding: data, as: UTF8.self).split(whereSeparator: \.isNewline)
-                .compactMap { event(json: String($0)) }
-        }.value
+        // Cut short, it's what was read in the time.
+        guard let result = try? await Subprocess.run("/usr/bin/log", arguments, timeout: timeout) else { return [] }
+        return result.text.split(whereSeparator: \.isNewline).compactMap { event(json: String($0)) }
     }
 
     static let timestamp: DateFormatter = {

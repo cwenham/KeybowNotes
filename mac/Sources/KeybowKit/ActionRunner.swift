@@ -162,7 +162,7 @@ public enum ActionRunner {
             return .success("Ran “\(name)”")
 
         case .startTimer(let seconds, let shortcut):
-            guard try await shortcutNames().contains(shortcut) else {
+            guard await ShortcutsApp.names().contains(shortcut) else {
                 throw RunError("Set up the “\(shortcut)” shortcut first",
                                "In Shortcuts, make a shortcut called “\(shortcut)” with one action: Start Timer, "
                                + "its duration set to Shortcut Input, in seconds.")
@@ -261,16 +261,18 @@ public enum ActionRunner {
             inputFile = file
         }
         defer { inputFile.map { try? FileManager.default.removeItem(at: $0) } }
-        let result = try await execute("/usr/bin/shortcuts", arguments)
-        guard result.status == 0 else {
-            let reason = result.error.isEmpty ? "exit status \(result.status)" : result.error
+        let result: Subprocess.Result
+        do {
+            result = try await Subprocess.run(ShortcutsApp.path, arguments, timeout: timeout)
+        } catch {
+            throw RunError("Couldn't start \(ShortcutsApp.path)", "\(error)")
+        }
+        guard result.succeeded else {
+            let said = result.errorText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let reason = result.timedOut ? "It took longer than \(Int(timeout)) seconds."
+                : said.isEmpty ? "exit status \(result.status)" : said
             throw RunError("Shortcut “\(name)” didn't run", reason)
         }
-    }
-
-    private static func shortcutNames() async throws -> Set<String> {
-        let result = try await execute("/usr/bin/shortcuts", ["list"])
-        return Set(result.output.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) })
     }
 
     private static func openApp(name: String, bundleID: String, open: String) async throws -> ActionOutcome {
@@ -341,23 +343,27 @@ public enum ActionRunner {
     /// Runs a script with `osascript`, passing each value as an argument to
     /// `on run argv`. Returns what the script returned.
     private static func appleScript(_ source: String, app: String, _ arguments: [String]) async throws -> String {
-        let result = try await execute("/usr/bin/osascript", ["-"] + arguments, input: source)
+        let result: Subprocess.Result
+        do {
+            result = try await Osascript.run(source, arguments, timeout: timeout)
+        } catch {
+            throw RunError("Couldn't start osascript", "\(error)")
+        }
         if result.timedOut {
             throw RunError("\(app) didn't respond",
                            "If macOS is asking whether to allow control of \(app), allow it and try again.")
         }
-        guard result.status == 0 else { throw explain(result.error, app: app) }
-        return result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard result.status == 0 else { throw explain(result.errorText, app: app) }
+        return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Turns osascript's error text into something a person can act on.
     private static func explain(_ error: String, app: String) -> RunError {
-        if error.contains("-1743") {
-            return RunError("Not allowed to control \(app)",
-                            "Allow it in System Settings → Privacy & Security → Automation.")
+        if Osascript.isNotAllowed(error) {
+            return RunError("Not allowed to control \(app)", Osascript.allowIt)
         }
         if error.contains("-1728"), app == "Notes" {
-            return RunError("Notes couldn't find that account or folder", error)
+            return RunError("Notes couldn't find that account or folder", Osascript.reason(error))
         }
         for (marker, message) in [("NONOTE:", "There's no note called"), ("NOFOLDER:", "There's no folder called"),
                                   ("NOPLAYLIST:", "There's no playlist called"),
@@ -371,63 +377,12 @@ public enum ActionRunner {
         if error.contains("LOCKED") {
             return RunError("That note is locked", "Unlock it in Notes first.")
         }
-        let text = error.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
-        return RunError("\(app) reported a problem", text)
-    }
-
-    private struct ProcessResult {
-        let status: Int32
-        let output: String
-        let error: String
-        let timedOut: Bool
-    }
-
-    /// Set from a timer thread, read in the termination handler.
-    private final class Flag: @unchecked Sendable {
-        private let lock = NSLock()
-        private var value = false
-        func set() { lock.lock(); value = true; lock.unlock() }
-        var isSet: Bool { lock.lock(); defer { lock.unlock() }; return value }
+        return RunError("\(app) reported a problem", Osascript.reason(error).replacingOccurrences(of: "\n", with: " "))
     }
 
     /// Long enough for a slow app to launch and act; a first-use permission
     /// prompt waiting for an answer is the usual reason to hit it.
     static let timeout: TimeInterval = 45
-
-    private static func execute(_ path: String, _ arguments: [String], input: String? = nil) async throws -> ProcessResult {
-        let timedOut = Flag()
-        return try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: path)
-            process.arguments = arguments
-            let output = Pipe()
-            let errors = Pipe()
-            let stdin = Pipe()
-            process.standardOutput = output
-            process.standardError = errors
-            process.standardInput = stdin
-
-            process.terminationHandler = { finished in
-                let out = String(data: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                let err = String(data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                continuation.resume(returning: ProcessResult(status: finished.terminationStatus, output: out,
-                                                             error: err, timedOut: timedOut.isSet))
-            }
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(throwing: RunError("Couldn't start \(path)", "\(error)"))
-                return
-            }
-            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
-                guard process.isRunning else { return }
-                timedOut.set()
-                process.terminate()
-            }
-            if let input { stdin.fileHandleForWriting.write(Data(input.utf8)) }
-            try? stdin.fileHandleForWriting.close()
-        }
-    }
 
     @MainActor
     private static func openURL(_ url: URL) async throws {

@@ -388,7 +388,7 @@ private struct TreeTabs: View {
         }
         .buttonStyle(.plain)
         .keyboardShortcut(shortcut, modifiers: .command)
-        .help("\(treeName(tree)): \(tree.shape). ⌘\(shortcut.character)")
+        .help("\(tree.title) tree: \(tree.shape). ⌘\(shortcut.character)")
         .accessibilityAddTraits(chosen ? .isSelected : [])
     }
 }

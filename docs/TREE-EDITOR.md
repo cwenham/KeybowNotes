@@ -331,6 +331,7 @@ tree then becomes something you can feel as well as see.
 - **Save** writes `tree.md` in the outline's standard form, and the app loads it
   at once. With mistakes, the app runs the rest of the tree, leaving out what
   each mistake touches, and the editor says so; the mistakes stay marked in place.
+  The version before is kept beside it as `tree.md.previous`.
 - An **edited** marker shows unsaved changes; closing the window with unsaved
   changes asks whether to save.
 - If `tree.md` changes on disk while it's open — edited by hand — the editor

@@ -27,8 +27,6 @@ public struct KnownKeypad: Codable, Equatable, Sendable, Identifiable {
 /// The keypads this Mac has known, kept with the app's settings.
 public enum KnownKeypads {
     public static let key = "knownKeypads"
-    /// Where the app keeps its settings, for the command line to read.
-    public static let appDomain = "io.github.cwenham.keybownotes"
 
     public static func load(_ defaults: UserDefaults = .standard) -> [KnownKeypad] {
         guard let data = defaults.data(forKey: key) else { return [] }
@@ -223,18 +221,10 @@ public struct PortUser: Equatable, Sendable {
     /// Who else has `path` open, by `lsof`; empty when no one has, or it
     /// can't say.
     public static func of(_ path: String) -> [PortUser] {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        process.arguments = ["-F", "pc", "--", path]
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        do { try process.run() } catch { return [] }
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
+        guard let result = try? Subprocess.runAndWait("/usr/sbin/lsof", ["-F", "pc", "--", path], timeout: 30) else { return [] }
         var users: [PortUser] = []
         var pid: Int32?
-        for line in String(decoding: data, as: UTF8.self).split(whereSeparator: \.isNewline) {
+        for line in result.text.split(whereSeparator: \.isNewline) {
             if line.hasPrefix("p") {
                 pid = Int32(line.dropFirst())
             } else if line.hasPrefix("c"), let current = pid, current != getpid() {

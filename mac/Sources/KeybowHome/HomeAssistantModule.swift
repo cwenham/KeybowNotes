@@ -88,7 +88,7 @@ public final class HomeAssistantModule: KeybowModule, @unchecked Sendable {
         ],
         fetches: [id])
 
-    private let transport: HomeTransport
+    private let transport: HTTPTransport
     private var host: ModuleHost?
     /// What Home Assistant has, kept a little while for the editor: it asks
     /// each time a field is drawn.
@@ -97,7 +97,7 @@ public final class HomeAssistantModule: KeybowModule, @unchecked Sendable {
     private var listedServices: (at: Date, services: [String: [(service: String, title: String)]])?
     static let listKept: TimeInterval = 30
 
-    public init(transport: HomeTransport = HomeSessionTransport()) {
+    public init(transport: HTTPTransport = SameHostTransport()) {
         self.transport = transport
     }
 

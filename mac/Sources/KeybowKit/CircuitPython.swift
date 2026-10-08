@@ -183,18 +183,7 @@ public enum KeypadDrives {
     /// waiting to be. False when it couldn't be — it's in use.
     @discardableResult
     public static func eject(_ volume: URL) -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
-        process.arguments = ["eject", volume.path]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-            process.waitUntilExit()
-            return process.terminationStatus == 0
-        } catch {
-            return false
-        }
+        (try? Subprocess.runAndWait("/usr/sbin/diskutil", ["eject", volume.path], timeout: 60))?.succeeded ?? false
     }
 }
 

@@ -57,8 +57,8 @@ public enum TreeDraft {
                 + "has. Write them as Default trees — the main tree's entries first, then `# row 2`, `# row 3`, "
                 + "`# bottom` as you use them — without a `# keypad` heading."
         case .tree(let tree, let index):
-            let heading = tree == .main ? "no heading" : "the heading `# \(TreeControl.treeName(tree))`"
-            task = "Draft the \(TreeControl.treeName(tree)) tree of the keypad “\(names[min(index, names.count - 1)])”, "
+            let heading = tree == .main ? "no heading" : "the heading `# \(tree.name)`"
+            task = "Draft the \(tree.name) tree of the keypad “\(names[min(index, names.count - 1)])”, "
                 + "replacing the one it has. Write just that tree, with \(heading); "
                 + "`[pages]` on its heading if it should be pages."
         }
@@ -189,7 +189,7 @@ public enum TreeDraft {
             document.setRoots(draft.roots(tree, keypad: index), tree, keypad: target)
             let paged = draft.isPaged(tree, keypad: index)
             if document.isPaged(tree, keypad: target) != paged { try? document.setPages(paged, for: tree, keypad: target) }
-            said = "Replaced the \(TreeControl.treeName(tree)) tree of “\(TreeControl.keypadNames(document)[target])”"
+            said = "Replaced the \(tree.name) tree of “\(TreeControl.keypadNames(document)[target])”"
         }
         // What the draft added, and the person's file hasn't.
         let lists = draft.lists.filter { list in
@@ -317,7 +317,7 @@ public enum TreeDraft {
 
         let names = TreeControl.keypadNames(document)
         var said = "Put the draft in “\(names[target])”"
-        if case .tree(let tree, _) = scope { said = "Put the draft in the \(TreeControl.treeName(tree)) tree of “\(names[target])”" }
+        if case .tree(let tree, _) = scope { said = "Put the draft in the \(tree.name) tree of “\(names[target])”" }
         let added = [lists.isEmpty ? nil : "\(lists.count) list\(lists.count == 1 ? "" : "s")",
                      contacts.isEmpty ? nil : "\(contacts.count) contact\(contacts.count == 1 ? "" : "s")",
                      projects.isEmpty ? nil : "\(projects.count) project\(projects.count == 1 ? "" : "s")"].compactMap { $0 }

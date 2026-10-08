@@ -69,39 +69,17 @@ public struct Fetched: Sendable, Equatable {
     public var text: String { String(data: body, encoding: .utf8) ?? String(decoding: body, as: UTF8.self) }
 }
 
-/// Sends a request — URLSession in the app, a stand-in in tests.
-public protocol DataTransport: Sendable {
-    func send(_ request: URLRequest) async throws -> (Data, URLResponse)
-}
-
-/// URLSession, refusing to follow a redirect to another server: the API key
-/// travels with the request, and mustn't be handed to a host it wasn't for.
-public final class SameHostTransport: NSObject, DataTransport, URLSessionTaskDelegate, @unchecked Sendable {
-    private lazy var session = URLSession(configuration: .ephemeral, delegate: self, delegateQueue: nil)
-
-    public override init() {}
-
-    public func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
-        try await session.data(for: request)
-    }
-
-    public func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                           newRequest request: URLRequest) async -> URLRequest? {
-        request.url?.host == task.originalRequest?.url?.host ? request : nil
-    }
-}
-
 /// Fetches sources, keeping responses for as long as each source says.
 public final class DataFetcher: @unchecked Sendable {
     /// The most of a response that's kept or read: 5 MB.
     static let maximumSize = 5_000_000
     static let timeout: TimeInterval = 20
 
-    private let transport: DataTransport
+    private let transport: HTTPTransport
     private let lock = NSLock()
     private var cache: [String: Fetched] = [:]
 
-    public init(transport: DataTransport = SameHostTransport()) {
+    public init(transport: HTTPTransport = SameHostTransport()) {
         self.transport = transport
     }
 

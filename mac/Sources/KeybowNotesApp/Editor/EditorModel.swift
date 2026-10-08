@@ -60,7 +60,7 @@ final class EditorModel {
             return found
         }
 
-        let text = given ?? (try? String(contentsOf: outlineURL, encoding: .utf8)) ?? ""
+        let text = given ?? OutlineFile(outlineURL).text()
         let (document, problems) = OutlineParser.parse(text)
         self.document = document
         self.readProblems = problems
@@ -192,7 +192,7 @@ final class EditorModel {
     /// or an agent — while nothing here was unsaved. Undo starts afresh: what
     /// it would undo is gone from the file.
     func reloadFromFile() {
-        let text = (try? String(contentsOf: outlineURL, encoding: .utf8)) ?? ""
+        let text = OutlineFile(outlineURL).text()
         let (document, problems) = OutlineParser.parse(text)
         self.document = document
         readProblems = problems
@@ -207,14 +207,13 @@ final class EditorModel {
 
     /// Writes the outline, which is the config: the app compiles it as it
     /// loads it. It's saved even with mistakes; what they touch is left out.
+    /// The version before is kept beside it, as a script's change keeps it.
     @discardableResult
     func save() -> Bool {
         guard !isDraft else { return false }
         let text = OutlineWriter.text(document)
         do {
-            try FileManager.default.createDirectory(at: outlineURL.deletingLastPathComponent(),
-                                                    withIntermediateDirectories: true)
-            try text.write(to: outlineURL, atomically: true, encoding: .utf8)
+            try OutlineFile(outlineURL).write(text)
         } catch {
             flash("Couldn't save: \(error.localizedDescription)")
             return false

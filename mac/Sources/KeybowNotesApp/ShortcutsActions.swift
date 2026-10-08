@@ -39,14 +39,7 @@ enum TreeChoice: String, AppEnum {
         .main: "Main", .row2: "Row 2", .row3: "Row 3", .bottom: "Bottom",
     ]
 
-    var name: String {
-        switch self {
-        case .main: return "main"
-        case .row2: return "row 2"
-        case .row3: return "row 3"
-        case .bottom: return "bottom"
-        }
-    }
+    var name: String { (TreeKind(rawValue: rawValue) ?? .main).name }
 }
 
 /// An entry in a keypad's tree: what the pick list shows.
@@ -82,7 +75,7 @@ struct KeypadEntryQuery: EntityQuery {
         for (index, keypad) in TreeControl.keypadNames(document).enumerated() {
             for tree in TreeKind.allCases {
                 for path in TreeControl.leaves(document, keypad: index, tree: tree) {
-                    entries.append(KeypadEntry(id: "\(keypad)|\(TreeControl.treeName(tree))|\(path.joined(separator: "/"))"))
+                    entries.append(KeypadEntry(id: "\(keypad)|\(tree.name)|\(path.joined(separator: "/"))"))
                 }
             }
         }

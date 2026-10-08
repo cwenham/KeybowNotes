@@ -64,6 +64,11 @@ it. Nothing the editor knows is kept anywhere but the outline.
 - **Outline** on the left; **inspector** at top right; **keypad** at bottom right.
 - The window opens from the menu bar: **Edit Tree…** (⌘E).
 
+The same editor is the right half of *Design with Claude…*, on a working copy
+with Claude's draft in it: everything works as here, but there's no Save — the
+draft goes into the tree with *Add to My Tree* — and each new draft from Claude
+is one step for ⌘Z. See [AUTOMATION.md](AUTOMATION.md#design-with-claude).
+
 ### Keypads
 
 With more than one keypad, each can have trees of its own: a `# keypad`

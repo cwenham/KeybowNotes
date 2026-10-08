@@ -34,7 +34,7 @@ swift test
 | `Troubleshooting.swift` | What a diagnosis is drawn from: keypads known and sought, drives, ports, console readings, key lights |
 | `TreeControl.swift` | The tree as scripts and agents change it: entries named by their labels, added, changed, removed, run, checked |
 | `AgentGuide.swift` | What an AI agent is told: the guides, and a catalogue of the action types here |
-| `TreeDraft.swift` | Trees drafted by Claude: the request, the outline found in the reply, and the draft put into the file |
+| `TreeDraft.swift` | Trees designed with Claude: each turn's request, the outline found in the reply, and the draft carried into the file |
 | `MCPServer.swift` | `keybow mcp`: the Model Context Protocol, asking the app through its AppleScript |
 | `Troubleshooter.swift` | The rules: what's wrong with a missing or silent keypad, and what to do — plus a plain-text report |
 
@@ -114,16 +114,16 @@ rather than KeybowNotes; each app you drive asks once.
 | `--debug-snapshots <dir>` | write each overlay state as a PNG and log its window frame |
 | `--set-up-keypad` | open *Set Up a Keypad…* on launch |
 | `--troubleshoot` | open *Find a Missing Keypad…* on launch |
-| `--draft` | open *Describe Your Keypads…* on launch |
+| `--draft` | open *Design with Claude…* on launch |
 
 A development build sets keypads up from the repository's `firmware` folder;
 `KEYBOW_FIRMWARE` names another. For trying the setup window out,
 `KEYBOW_SETUP_SELECT` chooses a board by its ID (or `new`), and
 `KEYBOW_SETUP_START=1` presses Set Up once it can be — development builds only.
 `KEYBOW_HOME_DEMO=1` puts a made-up Home Assistant behind the editor's lists.
-`KEYBOW_DRAFT_WANTED` types a description into *Describe Your Keypads…* and
-presses Draft — with `KEYBOW_DEBUG_CLAUDE_REPLY` as Claude's answer — and
-`KEYBOW_DRAFT_USE=1` uses the draft.
+`KEYBOW_DRAFT_WANTED` says something in *Design with Claude…* — with
+`KEYBOW_DEBUG_CLAUDE_REPLY` as Claude's answer — and `KEYBOW_DRAFT_THEN` says
+something more once that's answered; `KEYBOW_DRAFT_USE=1` then adds the draft.
 `KEYBOW_TROUBLESHOOT_DEMO=hub` (or `nodata`, `dataport`, `setup`) gives the
 troubleshooter made-up keypads in made-up trouble, and `KEYBOW_WINDOW_SNAPSHOTS=<dir>`
 has the setup, troubleshooter, settings and editor windows write a PNG of themselves

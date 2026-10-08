@@ -193,8 +193,9 @@ and **Shortcuts** can run an entry as though its keys were pressed, add,
 change and remove entries, read a tree, and start, stop and lap the
 stopwatch. An **MCP server** gives AI agents — Claude Desktop, Claude Code —
 the same, with a guide to designing trees and a checker for what they write.
-And **Describe Your Keypads…** has Claude draft trees from what you say you'd
-like the keypads for, shown to you before anything changes. See
+And **Design with Claude…** is a conversation about your keypads beside the
+tree editor, on a draft you can click through and change — your tree changes
+only when you add it. See
 [docs/AUTOMATION.md](docs/AUTOMATION.md).
 
 ## When a keypad isn't found
@@ -235,7 +236,7 @@ through AppleScript rules that out.
 - [docs/MODULES.md](docs/MODULES.md) — the module interface, the stopwatch and
   Claude
 - [docs/AUTOMATION.md](docs/AUTOMATION.md) — AppleScript, Shortcuts, the MCP
-  server for AI agents, and having Claude draft your trees
+  server for AI agents, and designing your trees with Claude
 - [docs/AGENT-GUIDE.md](docs/AGENT-GUIDE.md) — what AI agents are told about
   designing trees
 - [firmware/README.md](firmware/README.md) — the keypad's side and its protocol

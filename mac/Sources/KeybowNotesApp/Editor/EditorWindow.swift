@@ -275,11 +275,16 @@ struct EditorRootView: View {
                               + "colour. Its key again, or a key on a row above, goes back to the trees.")
                 }
                 Spacer()
-                if model.isDirty {
-                    Text("Edited").font(.caption).foregroundStyle(.secondary)
+                if model.isDraft {
+                    Label("Draft: your tree changes only when you add it", systemImage: "pencil.and.outline")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    if model.isDirty {
+                        Text("Edited").font(.caption).foregroundStyle(.secondary)
+                    }
+                    // ⌘S comes from the main menu, which routes it to the window.
+                    Button("Save", action: save)
                 }
-                // ⌘S comes from the main menu, which routes it to the window.
-                Button("Save", action: save)
             }
         }
         .padding(.horizontal, 12)
@@ -336,7 +341,7 @@ struct EditorRootView: View {
 /// before any `# keypad` heading — then each keypad with trees of its own,
 /// and + for another. A keypad of its own shows its name, model and ID beside
 /// them, to change.
-private struct KeypadBar: View {
+struct KeypadBar: View {
     let model: EditorModel
     @State private var confirmingRemove = false
 

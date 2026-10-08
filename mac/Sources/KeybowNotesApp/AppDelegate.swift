@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var editorWindow: EditorWindowController?
     private var setupWindow: KeypadSetupWindowController?
     private var troubleshooterWindow: TroubleshooterWindowController?
-    private var draftWindow: TreeDraftWindowController?
+    private var designWindow: DesignWindowController?
     /// Every keypad this Mac has had plugged in: where, and when last.
     private var knownKeypads = KnownKeypads.load()
     /// What was plugged in when they were last noted down, and when.
@@ -722,7 +722,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         addItem(to: menu, "Edit Tree…", #selector(openEditor), key: "e")
         addItem(to: menu, "Set Up a Keypad…", #selector(openKeypadSetup))
         addItem(to: menu, "Find a Missing Keypad…", #selector(openTroubleshooter))
-        addItem(to: menu, "Describe Your Keypads…", #selector(openDraft))
+        addItem(to: menu, "Design with Claude…", #selector(openDraft))
         addItem(to: menu, "Settings…", #selector(openSettings), key: ",")
         addItem(to: menu, "Reload Config", #selector(reloadConfig), key: "r")
         addItem(to: menu, "Open Config Folder", #selector(openConfigFolder))
@@ -866,17 +866,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openDraft() { showDraft() }
 
-    /// Claude drafts trees from what the person says they want.
+    /// A conversation with Claude about the trees, beside a draft of them in
+    /// the editor. Opened afresh, on the tree as it is, once it's been closed.
     private func showDraft() {
-        if draftWindow == nil {
-            draftWindow = TreeDraftWindowController(
-                openSettings: { [weak self] in self?.showSettings() },
-                openEditor: { [weak self] keypad in
-                    self?.showEditor()
-                    self?.editorWindow?.model.keypad = keypad
-                })
+        if designWindow?.window?.isVisible != true {
+            let outline = ConfigFile.isOutline(store.url)
+                ? store.url : store.url.deletingLastPathComponent().appendingPathComponent("tree.md")
+            designWindow = DesignWindowController(outlineURL: outline, openSettings: { [weak self] in self?.showSettings() })
         }
-        draftWindow?.show()
+        designWindow?.show()
     }
 
     /// Looks for a keypad that's gone missing, or isn't working: `wanted`

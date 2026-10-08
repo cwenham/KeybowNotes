@@ -63,7 +63,7 @@ public enum TreeDraft {
                 + "`[pages]` on its heading if it should be pages."
         }
         parts.append("# What to draft\n\n" + task + " Add `# list` sections it uses, and `# contacts` or `# projects` "
-                     + "entries only with details I've given. Answer as the guide's *Drafting in the app* says.")
+                     + "entries only with details I've given. Answer as the guide's *Designing in the app* says.")
         var have: [String] = []
         if !context.keypads.isEmpty { have.append("Keypads plugged in: " + context.keypads.joined(separator: "; ") + ".") }
         if !context.apps.isEmpty { have.append("Apps installed: " + context.apps.joined(separator: ", ") + ".") }
@@ -88,6 +88,126 @@ public enum TreeDraft {
         request(wanted, scope: scope, document: document, context: context)
             + "\n\n# Your last draft\n\n```outline\n\(draft)\n```\n\n# What KeybowNotes found in it\n\n\(mistakes)\n\n"
             + "Correct every mistake, and answer the same way: the whole outline, then a short note."
+    }
+
+    /// A turn of the conversation after the first: what the person says, with
+    /// the draft as it stands — their own changes in the editor included.
+    public static func followUp(_ said: String, current: String) -> String {
+        """
+        # The draft as it stands
+
+        With any changes I've made to it by hand:
+
+        ```outline
+        \(current)
+        ```
+
+        # What I'd like
+
+        \(said.trimmingCharacters(in: .whitespacesAndNewlines))
+
+        If this changes the draft, answer as before: the whole outline in one block, then a short note. If I'm only \
+        asking something, just answer — no outline.
+        """
+    }
+
+    /// The drafted part of a document — a keypad's trees, or one tree — as
+    /// outline text, with the lists the document has.
+    public static func outline(of document: OutlineDocument, scope: Scope) -> String {
+        var part = OutlineDocument()
+        switch scope {
+        case .newKeypad:
+            return ""
+        case .keypad(let index):
+            for tree in TreeKind.allCases {
+                part.setRoots(document.roots(tree, keypad: index), tree)
+                if document.isPaged(tree, keypad: index) { part.pages.insert(tree) }
+            }
+        case .tree(let tree, let index):
+            part.setRoots(document.roots(tree, keypad: index), tree)
+            if document.isPaged(tree, keypad: index) { part.pages.insert(tree) }
+        }
+        part.lists = document.lists
+        return OutlineWriter.text(part).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// A reply kept in the conversation, its outline left out: only the
+    /// newest draft goes with each turn, so a long conversation stays small.
+    public static func withoutOutline(_ reply: String) -> String {
+        var inside = false
+        var lines: [String] = []
+        for line in reply.components(separatedBy: .newlines) {
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                if !inside { lines.append("(an earlier draft, since changed)") }
+                inside.toggle()
+                continue
+            }
+            if !inside { lines.append(line) }
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Carries what was drafted in a working copy into the person's own file:
+    /// the drafted keypad's or tree's trees, and the lists, contacts and
+    /// projects the draft added. `asNewSection` adds the drafted keypad as a
+    /// section of its own, under the name and model it has in the copy.
+    @discardableResult
+    public static func carry(from draft: OutlineDocument, original: OutlineDocument, scope: Scope,
+                             asNewSection: Bool, into document: inout OutlineDocument) throws -> String {
+        let target: Int
+        let kinds: [TreeKind]
+        var said: String
+        switch scope {
+        case .newKeypad:
+            throw TreeControl.Problem("There's no draft yet.")
+        case .keypad(let index):
+            guard index <= draft.keypads.count else { throw TreeControl.Problem("The drafted keypad isn't there any more.") }
+            kinds = TreeKind.allCases
+            if asNewSection {
+                var section = draft.keypads[index - 1]
+                var name = section.name
+                var number = 2
+                while TreeControl.keypadNames(document).contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
+                    name = "\(section.name) \(number)"
+                    number += 1
+                }
+                section.name = name
+                target = document.addKeypad(OutlineKeypad(name: name, annotations: section.annotations))
+                said = "Added “\(name)” to your tree"
+            } else {
+                // The keypad of that name: indexes needn't match.
+                target = try TreeControl.keypad(TreeControl.keypadNames(draft)[index], in: document)
+                said = "Replaced the trees of “\(TreeControl.keypadNames(document)[target])”"
+            }
+            for kind in kinds {
+                document.setRoots(draft.roots(kind, keypad: index), kind, keypad: target)
+                let paged = draft.isPaged(kind, keypad: index)
+                if document.isPaged(kind, keypad: target) != paged { try? document.setPages(paged, for: kind, keypad: target) }
+            }
+        case .tree(let tree, let index):
+            target = try TreeControl.keypad(TreeControl.keypadNames(draft)[min(index, draft.keypads.count)], in: document)
+            document.setRoots(draft.roots(tree, keypad: index), tree, keypad: target)
+            let paged = draft.isPaged(tree, keypad: index)
+            if document.isPaged(tree, keypad: target) != paged { try? document.setPages(paged, for: tree, keypad: target) }
+            said = "Replaced the \(TreeControl.treeName(tree)) tree of “\(TreeControl.keypadNames(document)[target])”"
+        }
+        // What the draft added, and the person's file hasn't.
+        let lists = draft.lists.filter { list in
+            !original.lists.contains { $0.name == list.name } && !document.lists.contains { $0.name == list.name }
+        }
+        document.lists += lists
+        let contacts = draft.contacts.filter { entry in
+            !original.contacts.contains { $0.name == entry.name } && !document.contacts.contains { $0.name == entry.name }
+        }
+        document.contacts += contacts
+        let projects = draft.projects.filter { entry in
+            !original.projects.contains { $0.name == entry.name } && !document.projects.contains { $0.name == entry.name }
+        }
+        document.projects += projects
+        let added = [lists.isEmpty ? nil : "\(lists.count) list\(lists.count == 1 ? "" : "s")",
+                     contacts.isEmpty ? nil : "\(contacts.count) contact\(contacts.count == 1 ? "" : "s")",
+                     projects.isEmpty ? nil : "\(projects.count) project\(projects.count == 1 ? "" : "s")"].compactMap { $0 }
+        return said + (added.isEmpty ? "." : ", with " + added.joinedAsList + ".")
     }
 
     /// The outline in a reply: its block marked `outline` — else its first

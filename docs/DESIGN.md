@@ -603,7 +603,7 @@ should explain a refusal rather than failing silently.
 | Local Network | `home` and `{{home.…}}`: talking to Home Assistant on your network. Asked for when first used. Plain http is allowed only to local hosts — `.local` names, names without dots, private address ranges |
 | Files on removable volumes | *Set Up a Keypad…*: reading a keypad's drive, and writing CircuitPython and the firmware to it. Asked for when the setup window first looks |
 | Automation (being controlled) | AppleScript, Shortcuts' *Run AppleScript* and the MCP server: macOS asks, once per app, whether it may control KeybowNotes |
-| Network (Anthropic API), drafting | *Describe Your Keypads…*: the description, and — if ticked — the tree file and the names of apps, shortcuts and Home Assistant entities go to `api.anthropic.com` with the person's key |
+| Network (Anthropic API), drafting | *Design with Claude…*: the description, and — if ticked — the tree file and the names of apps, shortcuts and Home Assistant entities go to `api.anthropic.com` with the person's key |
 | Accessibility | `text.insert`: pressing ⌘V in the app in front. `text.insertDirect`: setting the selected text, or typing. `{{selection}}`: reading the selected text, and sending ⌘C to apps that won't share it. `window`: moving and sizing the window in front. Asked for when first needed, or from Settings → Selected Text |
 
 `url.open`, `clipboard.copy` and `maps.search` need nothing. `clock.timer` needs

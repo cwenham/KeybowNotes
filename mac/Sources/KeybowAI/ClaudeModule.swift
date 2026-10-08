@@ -133,6 +133,30 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
                                           maxTokens: maxTokens ?? Self.maxTokens, timeout: timeout ?? Self.timeout))
     }
 
+    /// A conversation: turns in order, the person's first, alternating —
+    /// ("user", text), ("assistant", text). The system prompt is cached, so a
+    /// long one is only paid for in full the first time in a few minutes.
+    public func converse(system: String, turns: [(role: String, text: String)], effort atLeast: String? = nil,
+                         maxTokens: Int? = nil, timeout: TimeInterval? = nil) async throws -> String {
+        let modelName = host?.setting("model", for: Self.id) ?? Self.defaultModel
+        let model = Self.model(named: modelName) ?? Self.model(named: Self.defaultModel)!
+        var effort = host?.setting("effort", for: Self.id) ?? Self.defaultEffort
+        if let atLeast, let wanted = Self.efforts.firstIndex(of: atLeast), let set = Self.efforts.firstIndex(of: effort),
+           wanted > set {
+            effort = atLeast
+        }
+        // The first turn is cached too: it carries the person's tree and
+        // what's here, and stays the same for the whole conversation.
+        let messages: [[String: Any]] = turns.enumerated().map { index, turn in
+            guard index == 0 else { return ["role": turn.role, "content": turn.text] }
+            return ["role": turn.role,
+                    "content": [["type": "text", "text": turn.text, "cache_control": ["type": "ephemeral"]]]]
+        }
+        let cached: [[String: Any]] = [["type": "text", "text": system, "cache_control": ["type": "ephemeral"]]]
+        return try await send(try request(model: model, effort: effort, system: cached, messages: messages, schema: nil,
+                                          maxTokens: maxTokens ?? Self.maxTokens, timeout: timeout ?? Self.timeout))
+    }
+
     /// Whether there's a key to ask with.
     public var isReady: Bool {
         !(host?.secret("apiKey", for: Self.id) ?? "").isEmpty
@@ -185,6 +209,14 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
 
     func request(model: Model, effort: String, system: String, prompt: String,
                  schema: [String: Any]?, maxTokens: Int = maxTokens, timeout: TimeInterval = timeout) throws -> URLRequest {
+        try request(model: model, effort: effort, system: system,
+                    messages: [["role": "user", "content": try Self.content(prompt)]], schema: schema,
+                    maxTokens: maxTokens, timeout: timeout)
+    }
+
+    /// `system` is text, or blocks of it — cached ones among them.
+    func request(model: Model, effort: String, system: Any, messages: [[String: Any]],
+                 schema: [String: Any]?, maxTokens: Int, timeout: TimeInterval) throws -> URLRequest {
         guard let key = host?.secret("apiKey", for: Self.id), !key.isEmpty else {
             throw ModuleError("Claude needs an API key", "Make one in the Claude Console, then add it in Settings → Claude.")
         }
@@ -193,7 +225,7 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
             "model": model.id,
             "max_tokens": maxTokens,
             "system": system,
-            "messages": [["role": "user", "content": try Self.content(prompt)]],
+            "messages": messages,
         ]
         // Thinking is left to the model — always on for Opus 5.5 — and effort
         // is the control for how much, and so for speed and cost.

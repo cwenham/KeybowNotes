@@ -42,8 +42,15 @@ final class EditorModel {
     @ObservationIgnored private var messageTask: Task<Void, Never>?
     @ObservationIgnored private let locateApp: (String) -> OutlineConverter.AppMatch?
 
-    init(outlineURL: URL) {
+    /// A working copy — Claude's draft — that's never saved: what it holds
+    /// goes into the tree only when the person adds it.
+    let isDraft: Bool
+
+    /// The tree at `outlineURL` — or, for a draft, `text` in its place, with
+    /// the templates beside the tree still found.
+    init(outlineURL: URL, text given: String? = nil, draft: Bool = false) {
         self.outlineURL = outlineURL
+        isDraft = draft
         // App lookups hit the disk; the editor asks the same few names often.
         var cache: [String: OutlineConverter.AppMatch?] = [:]
         locateApp = { name in
@@ -53,12 +60,17 @@ final class EditorModel {
             return found
         }
 
-        let text = (try? String(contentsOf: outlineURL, encoding: .utf8)) ?? ""
+        let text = given ?? (try? String(contentsOf: outlineURL, encoding: .utf8)) ?? ""
         let (document, problems) = OutlineParser.parse(text)
         self.document = document
         self.readProblems = problems
         self.savedText = text.isEmpty ? "" : OutlineWriter.text(document)
         self.compilation = OutlineCompiler.compile(document, locateApp: locateApp)
+    }
+
+    /// The whole document replaced — by a new draft — as one step to undo.
+    func replace(with document: OutlineDocument, name: String) {
+        edit(name) { $0 = document }
     }
 
     var container: OutlineContainer { .tree(tab, keypad: min(keypad, document.keypads.count)) }
@@ -180,6 +192,7 @@ final class EditorModel {
     /// loads it. It's saved even with mistakes; what they touch is left out.
     @discardableResult
     func save() -> Bool {
+        guard !isDraft else { return false }
         let text = OutlineWriter.text(document)
         do {
             try FileManager.default.createDirectory(at: outlineURL.deletingLastPathComponent(),

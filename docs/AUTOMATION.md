@@ -128,31 +128,43 @@ opened if it isn't running.
 The guide the agent reads is [AGENT-GUIDE.md](AGENT-GUIDE.md), followed by
 [CONFIG-LANGUAGE.md](CONFIG-LANGUAGE.md).
 
-## Describe your keypads
+## Design with Claude
 
-*Describe Your Keypads…*, in the menu bar, has Claude draft trees from what
-you say you'd like the keypads for. It needs your Anthropic API key, in
-Settings → Claude.
+*Design with Claude…*, in the menu bar, is a conversation about your keypads,
+beside a draft of them. It needs your Anthropic API key, in Settings → Claude.
 
-1. **Say what you'd like** them for, in your own words: the apps you use, what
-   you do again and again, the people you message, the lamps you switch.
-2. **Choose what to draft:** a new keypad section with all its trees; all of a
-   keypad's trees, replacing them; or one tree, replacing it.
-3. **Choose what to send** with it: your tree file, so the draft fits with it
-   and uses your contacts, projects and lists; and the names of your apps,
-   shortcuts and Home Assistant entities, so it uses the ones you have. What
-   you write and what's ticked goes to Anthropic with your key.
-4. **Draft.** Claude is told what KeybowNotes can do — the same guide an agent
-   reads, the language, and the action types here, modules' included. Its
-   outline is compiled; if it has mistakes, Claude is shown them and asked
-   once to correct it.
-5. **Look it over:** the outline, Claude's note on it, and what's still to fill
-   in — a contact's number, a shortcut to make. *Draft Again* asks afresh;
-   *Change What I Asked* goes back to your description.
-6. **Add it,** or **Replace with it.** Nothing changes until then. A new keypad
-   section is for the model of a keypad that's plugged in; if no keypad uses
-   it — another section already claims the model — it says so, and the tree
+On the left is the conversation; on the right, the whole tree editor — outline,
+inspector and keypad — on a working copy of your tree with Claude's draft in it.
+Click through the draft as you would your own tree, try the tabs, see which
+keys light in which colours, and change anything by hand. Your tree changes
+only when you add the draft.
+
+1. **Choose what to draft:** a new keypad section with all its trees; all of a
+   keypad's trees; or one tree. And what to send with it: your tree file, so
+   the draft fits with it and uses your contacts, projects and lists; and the
+   names of your apps, shortcuts and Home Assistant entities, so it uses the
+   ones you have. What you write and what's ticked goes to Anthropic with your
+   key.
+2. **Say what you'd like** the keypads for, in your own words: the apps you
+   use, what you do again and again, the people you message, the lamps you
+   switch. Claude is told what KeybowNotes can do — the same guide an agent
+   reads, the language, and the action types here, modules' included — and
+   its draft appears in the editor. If the outline has mistakes, Claude is
+   shown them and asked once to correct them.
+3. **Ask for changes,** as you would a person — "put the lamps on a page of
+   their own", "add a key to message Sam". Each turn sends the draft as it
+   stands, with anything you've changed by hand, and Claude's new draft
+   replaces it in one step: ⌘Z in the editor goes back to the one before.
+   Ask a question, and Claude just answers; the draft stays as it is.
+4. **Add to My Tree** puts the draft in your tree — a new section, or the
+   trees you chose to redraft — with any lists, contacts and projects it
+   added. Go on talking afterwards, and **Update My Tree** puts the changes in
+   the same place. A new section for the model of a keypad that already has a
+   section isn't used by that keypad; the conversation says so, and the tree
    editor sets which keypad it's for.
 
-The drafting uses the model in Settings → Claude, with at least medium
-effort, and can take a minute or two.
+The long, unchanging parts of each request — the guide, and what you sent
+about your tree — are cached by Anthropic for a few minutes, so a
+conversation costs much less than its first turn each time. Drafting uses the
+model in Settings → Claude, with at least medium effort; a turn can take a
+minute or two. Closing the window with a draft you haven't added asks first.

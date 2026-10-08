@@ -174,6 +174,14 @@ final class Automation {
         try edit { document in try TreeDraft.apply(outline, scope: scope, to: &document) }
     }
 
+    /// What was drafted in a working copy, carried into the tree file.
+    func carryDraft(from draft: OutlineDocument, original: OutlineDocument, scope: TreeDraft.Scope,
+                    asNewSection: Bool) throws -> String {
+        try edit { document in
+            try TreeDraft.carry(from: draft, original: original, scope: scope, asNewSection: asNewSection, into: &document)
+        }
+    }
+
     /// A new keypad section, for a keypad of `model`, optionally one board's.
     func addKeypad(named name: String, model: String?, id: String?) throws -> String {
         try edit { document in

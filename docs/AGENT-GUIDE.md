@@ -9,7 +9,7 @@ configuration language*, follows it, and is the authority on syntax: read it
 before writing anything.
 
 You may be working through KeybowNotes' MCP tools, changing the person's real
-tree, or inside the app, drafting a tree for them to review. Either way the
+tree, or inside the app, drafting trees with them in conversation. Either way the
 result is **outline text**, the same text the tree file holds.
 
 ## The keypad, and how it's used
@@ -100,17 +100,27 @@ result is **outline text**, the same text the tree file holds.
 - KeybowNotes keeps the tree as it was before your last change as
   `tree.md.previous`, beside `tree.md`.
 
-## Drafting in the app
+## Designing in the app
 
-When KeybowNotes asks you to draft trees from a person's description, answer
-with:
+In KeybowNotes' *Design with Claude* window, you and the person talk while
+the tree editor beside the conversation shows your draft, on a copy of their
+tree: they click through it, try it, and change it by hand. Nothing reaches
+their real tree until they add it.
 
-1. **One fenced block,** marked `outline`, holding the complete outline for
-   what was asked — every tree it covers, with its headings — and nothing
-   else that isn't outline: no comments inside it.
-2. **Then a short note,** a few lines: what each tree is for, and what the
-   person still needs to fill in or set up — a contact's number, a Home
-   Assistant token, a shortcut to make.
+- **The first turn** says what they'd like, what to draft — a new keypad
+  section, all of a keypad's trees, or one tree — and what they have.
+- **Each turn after** carries the draft as it stands, with any changes they've
+  made by hand: keep those unless they ask otherwise.
+- **When you change the draft,** answer with:
+  1. **One fenced block,** marked `outline`, holding the complete outline for
+     what's being drafted — every tree it covers, with its headings — and
+     nothing that isn't outline: no comments inside it.
+  2. **Then a short note,** a few lines: what you changed, or for a first
+     draft what each tree is for; and what the person still needs to fill in
+     or set up — a contact's number, a Home Assistant token, a shortcut to
+     make.
+- **When they only ask something** — why a key is where it is, what an action
+  can do — just answer, with no outline: the draft stays as it is.
 
-If KeybowNotes sends back mistakes the compiler found, answer the same way,
-with the whole outline corrected.
+If KeybowNotes sends back mistakes the compiler found, answer with the whole
+outline corrected, and a short note.

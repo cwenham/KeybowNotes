@@ -288,10 +288,11 @@ For the selected node:
   note. Each says why, with a button to remove it.
 - **Problems** — everything the compiler said about this node.
 - **Tooltips** — resting the pointer on any field, or its label, says what it
-  does, what can go in it, and gives an example. The wording is in
-  `Editor/FieldHelp.swift`, looked up by action type then field, since `title`
-  or `duration` mean different things in different actions; a module's fields
-  bring their own.
+  does, what can go in it, and gives an example. A built-in action's fields
+  carry their own wording, in `BuiltInActions` in KeybowKit, since `title` or
+  `duration` mean different things in different actions; a module's fields
+  bring theirs. `Editor/FieldHelp.swift` has the rest: the label, colour,
+  type and values.
 
 Edits in the inspector change the node's annotations in place: an existing pair
 is updated where it stands; a new one is added at the end; bare words are kept.

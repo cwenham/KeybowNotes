@@ -48,12 +48,10 @@ public enum AgentGuide {
         var lines = ["# Action types in this copy of KeybowNotes", "",
                      "Write the keyword in an entry's brackets — `[Notes]` — or `type: name`. The language reference "
                      + "documents each built-in type's fields.", "", "## Built in", ""]
-        var keywords: [String: [String]] = [:]
-        for (word, type) in OutlineCompiler.actionTypeWords { keywords[type, default: []].append(word) }
-        keywords["notes.append", default: []].append("append")
-        for type in OutlineCompiler.builtInTypes.sorted() {
-            let words = (keywords[type] ?? []).sorted().map { "`\($0.capitalized)`" }
-            lines.append("- `\(type)`" + (words.isEmpty ? "" : " — " + words.joined(separator: ", ")))
+        for action in BuiltInActions.types.sorted(by: { $0.type < $1.type }) {
+            let words = action.keywords.map { "`\($0)`" }
+            lines.append("- `\(action.type)`, \(action.title.lowercased())"
+                         + (words.isEmpty ? "" : " — " + words.joined(separator: ", ")))
         }
         lines += ["", "## From modules", ""]
         for module in ModuleRegistry.shared.all {

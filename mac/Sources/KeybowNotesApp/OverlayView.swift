@@ -342,25 +342,7 @@ private struct ActionHeadline: View {
     }
 
     private var symbol: String {
-        switch summary.type {
-        case "notes.create": return "note.text.badge.plus"
-        case "notes.append": return "text.append"
-        case "calendar.createEvent": return "calendar.badge.plus"
-        case "reminders.create": return "checklist"
-        case "messages.compose": return "message"
-        case "mail.compose": return "envelope"
-        case "phone.call": return "phone"
-        case "app.open": return "arrow.up.forward.app"
-        case "shortcut": return "bolt.fill"
-        case "url.open": return "link"
-        case "clipboard.copy": return "doc.on.clipboard"
-        case "text.insert": return "character.cursor.ibeam"
-        case "text.insertDirect": return "keyboard"
-        case "clock.timer": return "timer"
-        case "maps.search": return "map"
-        case "music.play": return "music.note"
-        default: return ModuleRegistry.shared.actionType(summary.type)?.symbol ?? "questionmark.circle"
-        }
+        ActionTypes.describe(summary.type)?.symbol ?? "questionmark.circle"
     }
 }
 

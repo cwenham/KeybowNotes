@@ -358,35 +358,16 @@ extension OutlineDocument {
         }
     }
 
-    /// The keyword for each type that has one; the rest are written `type: …`.
-    public static let typeKeywords: [String: String] = [
-        "notes.create": "Notes",
-        "notes.append": "append",
-        "calendar.createEvent": "Calendar",
-        "reminders.create": "Reminders",
-        "messages.compose": "Messages",
-        "mail.compose": "Mail",
-        "phone.call": "Call",
-        "url.open": "Link",
-        "clipboard.copy": "Copy",
-        "text.insert": "Insert",
-        "text.insertDirect": "Direct Insert",
-        "clock.timer": "Timer",
-        "maps.search": "Maps",
-        "music.play": "Music",
-    ]
-
-    /// The keyword a type is written with, built in or from a module.
+    /// The keyword a type is written with, built in or from a module; those
+    /// without one are written `type: …`.
     public static func keyword(for type: String) -> String? {
-        typeKeywords[type] ?? ModuleRegistry.shared.actionType(type)?.keywords.first
+        ActionTypes.describe(type)?.keywords.first
     }
 
     /// Sets this node's own action type, replacing any it named — or, with nil,
     /// removes it so the type is inherited.
     public mutating func setType(_ id: UUID, _ type: String?) throws {
-        let typeWords: Set<String> = Set(OutlineCompiler.actionTypeWords.keys)
-            .union(ModuleRegistry.shared.keywords.keys)
-            .union(["append", "new", "create"])
+        let typeWords = Set(BuiltInActions.keywords.keys).union(ModuleRegistry.shared.keywords.keys)
         try update(id) { node in
             node.annotations.removeAll { annotation in
                 switch annotation {

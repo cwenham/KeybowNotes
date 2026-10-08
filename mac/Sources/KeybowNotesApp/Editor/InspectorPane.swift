@@ -47,109 +47,15 @@ private struct SeveralSelected: View {
 }
 
 /// The fields each action type uses, in the order they're shown.
-private struct FieldSpec {
-    /// `action`: an action of its own, run on an outcome — a display's OK.
-    enum Kind { case text, number, flag, choice([String]), action, colour }
-
-    let key: String
-    let title: String
-    var kind: Kind = .text
-    var hint = ""
-    /// For the tooltip, when FieldHelp has nothing: a module's own words.
-    var help = ""
-    /// Its module lists what it can be set to.
-    var offersChoices = false
-}
-
-private let fieldsByType: [String: [FieldSpec]] = [
-    "notes.create": [
-        .init(key: "title", title: "Title"), .init(key: "folder", title: "Folder", hint: "Levels separated by /"),
-        .init(key: "template", title: "Template"), .init(key: "account", title: "Account"),
-    ],
-    "notes.append": [
-        .init(key: "find.byName", title: "Note"), .init(key: "folder", title: "Folder"),
-        .init(key: "template", title: "Template"), .init(key: "entry", title: "Entry"),
-        .init(key: "createIfMissing", title: "Create if missing", kind: .flag),
-        .init(key: "guards.maxBodyBytes", title: "Largest note", kind: .number, hint: "characters"),
-        .init(key: "guards.refuseInlineImages", title: "Refuse inline images", kind: .flag),
-    ],
-    "calendar.createEvent": [
-        .init(key: "title", title: "Title"), .init(key: "start", title: "Starts", hint: "tomorrow 14:00, friday…"),
-        .init(key: "duration", title: "Duration", hint: "30m, 1h"),
-        .init(key: "alertMinutes", title: "Alert", kind: .number, hint: "minutes before"),
-        .init(key: "calendar", title: "Calendar"), .init(key: "calendarId", title: "Calendar ID"),
-        .init(key: "notes", title: "Notes"), .init(key: "show", title: "Open for editing", kind: .flag),
-    ],
-    "reminders.create": [
-        .init(key: "title", title: "Title"), .init(key: "due", title: "Due", hint: "+25m, tomorrow…"),
-        .init(key: "list", title: "List"), .init(key: "notes", title: "Notes"),
-    ],
-    "messages.compose": [.init(key: "to", title: "To"), .init(key: "body", title: "Message"),
-                         .init(key: "template", title: "Template")],
-    "mail.compose": [.init(key: "to", title: "To"), .init(key: "subject", title: "Subject"), .init(key: "body", title: "Body"),
-                     .init(key: "template", title: "Template")],
-    "phone.call": [.init(key: "to", title: "Number"), .init(key: "via", title: "Via", hint: "empty for iPhone, or facetime")],
-    "app.open": [
-        .init(key: "app", title: "App"), .init(key: "bundleId", title: "Bundle ID"),
-        .init(key: "open", title: "Open", hint: "a path or a link"), .init(key: "target", title: "Target"),
-    ],
-    "shortcut": [.init(key: "name", title: "Shortcut"),
-                 .init(key: "input", title: "Input", hint: "text passed to it — {{selection}}, {{clipboard}}…")],
-    "url.open": [.init(key: "url", title: "Link", hint: "https://…?q={{selection}}, or a path")],
-    "clock.timer": [.init(key: "duration", title: "Length", hint: "5 min, 1h 30m, 16:30 — else the label"),
-                    .init(key: "shortcut", title: "Shortcut", hint: ActionPlanner.timerShortcut)],
-    "maps.search": [.init(key: "query", title: "Search for", hint: "the label, if empty — {{selection}} works")],
-    "music.play": [.init(key: "playlist", title: "Playlist", hint: "the label, if empty"),
-                   .init(key: "album", title: "Album", hint: "plays this instead of a playlist"),
-                   .init(key: "artist", title: "Artist", hint: "when two albums share a name"),
-                   .init(key: "shuffle", title: "Shuffle", kind: .flag)],
-    "clipboard.copy": [.init(key: "text", title: "Text", hint: "empty copies the label"),
-                       .init(key: "template", title: "Template"),
-                       .init(key: "format", title: "Format", kind: .choice(["auto", "rich", "plain"]),
-                             hint: "Inherit: formatted when it's Markdown")],
-    "text.insert": [.init(key: "text", title: "Text", hint: "empty inserts the label — {{date}}, {{selection}}…"),
-                    .init(key: "template", title: "Template"),
-                    .init(key: "format", title: "Format", kind: .choice(["auto", "rich", "plain"]),
-                          hint: "Inherit: formatted when it's Markdown")],
-    "text.insertDirect": [.init(key: "text", title: "Text", hint: "empty inserts the label — {{date}}, {{selection}}…"),
-                          .init(key: "template", title: "Template"),
-                          .init(key: "via", title: "Via", kind: .choice(["accessibility", "typing"]),
-                                hint: "Inherit: accessibility where the app takes it, else typing")],
-]
-
 /// Inherit, then every type — built in or from a module — by name.
 private var typeNames: [(String?, String)] {
-    let types = builtInTypeNames.filter { $0.0 != nil } + ModuleRegistry.shared.actionTypes.map { ($0.type, $0.title) }
-    return builtInTypeNames.filter { $0.0 == nil }
-        + types.sorted { $0.1.localizedStandardCompare($1.1) == .orderedAscending }
+    [(nil, "Inherit")] + ActionTypes.all.map { ($0.type, $0.title) }
+        .sorted { $0.1.localizedStandardCompare($1.1) == .orderedAscending }
 }
 
-private func fields(for type: String) -> [FieldSpec]? {
-    if let builtIn = fieldsByType[type] { return builtIn }
-    return ModuleRegistry.shared.actionType(type)?.fields.map { field in
-        let kind: FieldSpec.Kind
-        switch field.kind {
-        case .text: kind = .text
-        case .number: kind = .number
-        case .flag: kind = .flag
-        case .choice(let words): kind = .choice(words)
-        case .action: kind = .action
-        case .colour: kind = .colour
-        }
-        return FieldSpec(key: field.key, title: field.title, kind: kind, hint: field.hint, help: field.help,
-                         offersChoices: field.offersChoices)
-    }
+private func fields(for type: String) -> [ModuleField]? {
+    ActionTypes.describe(type)?.fields
 }
-
-private let builtInTypeNames: [(String?, String)] = [
-    (nil, "Inherit"), ("notes.create", "New note"), ("notes.append", "Add to a note"),
-    ("calendar.createEvent", "Calendar event"), ("reminders.create", "Reminder"),
-    ("messages.compose", "Message"), ("mail.compose", "Email"), ("phone.call", "Phone call"),
-    ("app.open", "Open an app"), ("url.open", "Open a link"), ("clipboard.copy", "Copy to clipboard"),
-    ("text.insert", "Insert text"), ("text.insertDirect", "Direct insert"),
-    ("clock.timer", "Clock timer"), ("maps.search", "Search Maps"), ("music.play", "Play music"),
-    ("shortcut", "Run a shortcut"),
-]
 
 private func typeName(_ type: String?) -> String {
     typeNames.first { $0.0 == type }?.1 ?? type ?? "—"
@@ -164,11 +70,7 @@ private func choiceTitle(_ word: String) -> String {
 
 /// How an outcome's action is written: its keyword, if it has one.
 private func outcomeWord(for type: String) -> String {
-    let words = OutlineCompiler.actionTypeWords.filter { $0.value == type }.keys.sorted()
-    if let word = words.first(where: { !["clipboard", "paste", "browser", "type", "facetime"].contains($0) }) ?? words.first {
-        return word.split(separator: " ").map { $0.capitalized }.joined(separator: " ")
-    }
-    return ModuleRegistry.shared.actionType(type)?.keywords.first ?? type
+    OutlineDocument.keyword(for: type) ?? type
 }
 
 private struct NodeInspector: View {
@@ -207,7 +109,7 @@ private struct NodeInspector: View {
     private var ownType: String? {
         for (annotation, role) in annotated {
             switch (annotation, role) {
-            case (_, .actionType(let type)), (_, .noteMode(let type)): return type
+            case (_, .actionType(let type)): return type
             case (_, .app): return "app.open"
             case (.pair("type", let value), _): return value
             // A link opens itself when nothing above says what to do with it.
@@ -335,7 +237,7 @@ private struct NodeInspector: View {
                 }
             }
             if action != nil {
-                fieldRow(FieldSpec(key: "instant", title: "Run at once", kind: .flag))
+                fieldRow(ModuleField(key: "instant", title: "Run at once", kind: .flag))
             }
             if action?.type == "clock.timer" {
                 let shortcut = effectiveValue("shortcut")
@@ -449,7 +351,7 @@ private struct NodeInspector: View {
     }
 
     @ViewBuilder
-    private func fieldRow(_ spec: FieldSpec) -> some View {
+    private func fieldRow(_ spec: ModuleField) -> some View {
         let own = ownValue(spec.key)
         let help = FieldHelp.field(spec.key, type: action?.type) ?? (spec.help.isEmpty ? nil : spec.help)
         switch spec.kind {
@@ -540,7 +442,7 @@ private struct NodeInspector: View {
     /// What runs on an outcome: a type, like any action's, and its fields,
     /// written as `ok: Copy` and `ok.text: …`.
     @ViewBuilder
-    private func outcomeSection(_ spec: FieldSpec) -> some View {
+    private func outcomeSection(_ spec: ModuleField) -> some View {
         let chosen = outcomeType(spec.key)
         VStack(alignment: .leading, spacing: 8) {
             InspectorRow(spec.title, help: spec.help.isEmpty ? nil : spec.help) {
@@ -574,7 +476,7 @@ private struct NodeInspector: View {
         }
     }
 
-    private func outcomeFieldRow(_ spec: FieldSpec, in holder: String, type: String) -> some View {
+    private func outcomeFieldRow(_ spec: ModuleField, in holder: String, type: String) -> some View {
         let key = holder + "." + spec.key
         let own = ownValue(key)
         let help = FieldHelp.field(spec.key, type: type) ?? (spec.help.isEmpty ? nil : spec.help)

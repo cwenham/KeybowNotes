@@ -58,6 +58,11 @@ keybow               registers them too, so their keywords compile
 `BuiltInModules.registerAll(host:)` in `KeybowModules` is the one list. Adding
 a module is a new target, a line there, and a dependency in `Package.swift`.
 
+The action types built in — Notes, Calendar, Copy and the rest — are described
+the same way, as `ModuleActionType`s with their fields, in `BuiltInActions` in
+KeybowKit, so the compiler, the tree editor, the overlay and the agents'
+catalog treat both alike. `ActionTypes.describe(_:)` finds either kind.
+
 ## How the host uses a module
 
 - **Outline.** A module's keywords work like the built-in ones: `[Stopwatch]`

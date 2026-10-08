@@ -4,8 +4,6 @@ import Foundation
 public enum AnnotationRole: Equatable, Sendable {
     /// `Calendar`, `Notes`… — the type it names.
     case actionType(String)
-    /// `append`, `new`.
-    case noteMode(String)
     case template
     case alert(minutes: Int)
     case app(name: String, installed: Bool)
@@ -60,48 +58,10 @@ public struct OutlineCompilation: Sendable {
 }
 
 public enum OutlineCompiler {
-    /// Keywords naming an action type.
-    public static let actionTypeWords: [String: String] = [
-        "notes": "notes.create",
-        "calendar": "calendar.createEvent",
-        "reminders": "reminders.create",
-        "messages": "messages.compose",
-        "mail": "mail.compose",
-        "call": "phone.call",
-        "facetime": "phone.call",
-        "link": "url.open",
-        "browser": "url.open",
-        "copy": "clipboard.copy",
-        "clipboard": "clipboard.copy",
-        "insert": "text.insert",
-        "paste": "text.insert",
-        "direct insert": "text.insertDirect",
-        "type": "text.insertDirect",
-        "timer": "clock.timer",
-        "maps": "maps.search",
-        "music": "music.play",
-    ]
-
-    /// `key: value` pairs that set an action field rather than a template value.
-    public static let actionFields: Set<String> = [
-        "type", "folder", "title", "template", "account", "entry", "createIfMissing",
-        "find.byName", "guards.maxBodyBytes", "guards.refuseInlineImages",
-        "start", "duration", "alertMinutes", "calendar", "calendarId", "notes", "show",
-        "due", "list", "to", "body", "subject",
-        "app", "bundleId", "open", "url", "target", "name", "input", "via", "text",
-        "shortcut", "query", "playlist", "album", "artist", "shuffle", "instant", "format",
-    ]
-    /// The types built in, for checking a type named in a pair.
-    public static let builtInTypes: Set<String> = [
-        "notes.create", "notes.append", "calendar.createEvent", "reminders.create", "messages.compose",
-        "mail.compose", "phone.call", "app.open", "url.open", "clipboard.copy", "text.insert",
-        "text.insertDirect", "clock.timer", "maps.search", "music.play", "shortcut",
-    ]
-
     /// A built-in action field, or one a module adds — or a field of an action
     /// held in one: `ok.text`.
     public static func isActionField(_ key: String) -> Bool {
-        actionFields.contains(key) || ModuleRegistry.shared.fields.contains { $0.key == key } || heldField(key) != nil
+        BuiltInActions.fields.contains(key) || ModuleRegistry.shared.fields.contains { $0.key == key } || heldField(key) != nil
     }
 
     /// True for a field that holds an action of its own: a display's `ok`.
@@ -121,51 +81,31 @@ public enum OutlineCompiler {
     public static func knownType(_ word: String) -> String? {
         let text = word.trimmingCharacters(in: .whitespaces)
         if let type = actionType(forKeyword: text) { return type }
-        switch text.lowercased() {
-        case "append": return "notes.append"
-        case "new", "create": return "notes.create"
-        default: break
-        }
-        if builtInTypes.contains(text) || ModuleRegistry.shared.actionType(text) != nil { return text }
-        return nil
+        return ActionTypes.describe(text) != nil ? text : nil
     }
 
     /// The type a keyword names, built in or from a module.
     public static func actionType(forKeyword word: String) -> String? {
         let lower = word.lowercased()
-        return actionTypeWords[lower] ?? ModuleRegistry.shared.keywords[lower]
+        return BuiltInActions.keywords[lower] ?? ModuleRegistry.shared.keywords[lower]
     }
 
     /// Whether a field takes a number, for an action of `type` — or, with no
     /// type known, for any action. A name means different things to different
     /// actions: an event's `show` is yes or no, Exposé's is what to show.
     static func isNumericField(_ key: String, type: String?) -> Bool {
-        isField(key, type: type, builtIn: numericFields, kind: .number)
+        isField(key, type: type, kind: .number)
     }
 
+    /// `instant` is every action's.
     static func isBooleanField(_ key: String, type: String?) -> Bool {
-        key == "instant" || isField(key, type: type, builtIn: booleanFields, kind: .flag)
+        key == "instant" || isField(key, type: type, kind: .flag)
     }
 
-    private static func isField(_ key: String, type: String?, builtIn: [String: Set<String>], kind: ModuleField.Kind) -> Bool {
-        guard let type else {
-            return builtIn.values.contains { $0.contains(key) }
-                || ModuleRegistry.shared.fields.contains { $0.key == key && $0.kind == kind }
-        }
-        return builtIn[type]?.contains(key) == true
-            || ModuleRegistry.shared.actionType(type)?.fields.contains { $0.key == key && $0.kind == kind } == true
+    private static func isField(_ key: String, type: String?, kind: ModuleField.Kind) -> Bool {
+        let fields = type.map { ActionTypes.describe($0)?.fields ?? [] } ?? ActionTypes.fields
+        return fields.contains { $0.key == key && $0.kind == kind }
     }
-
-    /// The built-in actions' numbers and flags, by type. `instant` is every action's.
-    static let numericFields: [String: Set<String>] = [
-        "calendar.createEvent": ["alertMinutes"],
-        "notes.append": ["guards.maxBodyBytes"],
-    ]
-    static let booleanFields: [String: Set<String>] = [
-        "calendar.createEvent": ["show"],
-        "notes.append": ["createIfMissing", "guards.refuseInlineImages"],
-        "music.play": ["shuffle"],
-    ]
     static let numericDefaults: Set<String> = [
         "commitDelayMs", "idleTimeoutMs", "longPressCancelMs", "dates.todayOffsetMinutes", "dates.roundToMinutes",
     ]
@@ -183,8 +123,6 @@ public enum OutlineCompiler {
             if let minutes = alertMinutes(lower) { return .alert(minutes: minutes) }
             if word.contains("://") { return .link }
             if lower.hasSuffix(".md") { return .template }
-            if lower == "append" { return .noteMode("notes.append") }
-            if lower == "new" || lower == "create" { return .noteMode("notes.create") }
             if let type = actionType(forKeyword: lower) { return .actionType(type) }
             if let app = locateApp(word) { return .app(name: app.name, installed: app.installed) }
             if inheritedType == "app.open" { return .target }
@@ -390,7 +328,7 @@ private struct Compiler {
                     declare("notes.create")
                     inferences.append("\(where_): “\(node.label)” creates a new note, from the template name \(word)")
                 }
-            case (_, .noteMode(let type)), (_, .actionType(let type)):
+            case (_, .actionType(let type)):
                 declare(type)
                 // FaceTime is a call type of its own; Call means the iPhone.
                 if case .word(let word) = annotation, word.lowercased() == "facetime" { set("via", .string("facetime")) }

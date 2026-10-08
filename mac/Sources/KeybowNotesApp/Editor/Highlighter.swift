@@ -53,7 +53,7 @@ struct Highlighter {
         let valueRange = NSRange(location: keyRange.upperBound, length: range.upperBound - keyRange.upperBound)
 
         switch role {
-        case .actionType, .noteMode:
+        case .actionType:
             colour(.systemBlue)
             storage.addAttribute(.font, value: NSFont.boldSystemFont(ofSize: font.pointSize), range: range)
         case .app(_, let installed):

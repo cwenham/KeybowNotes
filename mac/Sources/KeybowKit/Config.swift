@@ -577,49 +577,10 @@ extension KeybowConfig {
     public static let supportedVersion = 2
 
     /// The action for leaves that inherit none: a new note, filed in nested
-    /// folders that mirror the path through the tree.
-    public static let builtInDefaultAction = ActionSpec(
-        type: "notes.create",
-        fields: [
-            "folder": .string("{{folderPath}}"),
-            "title": .string("{{leaf}} — {{date:d MMM yyyy}}"),
-        ]
-    )
-
-    public static let builtInTypeDefaults: [String: [String: JSONValue]] = [
-        // The same as the default action, so a note is filed alike whether its
-        // leaf is bare or marked "(Notes)" or "new".
-        "notes.create": [
-            "folder": .string("{{folderPath}}"),
-            "title": .string("{{leaf}} — {{date:d MMM yyyy}}"),
-        ],
-        "notes.append": [
-            "folder": .string("{{parentPath}}"),
-            "find": .object(["byName": .string("{{leaf}}")]),
-            "createIfMissing": .bool(true),
-        ],
-        "calendar.createEvent": [
-            "title": .string("{{parent}}"),
-            "start": .string("{{when}}"),
-            "duration": .string("+30m"),
-            "show": .bool(true),
-        ],
-        "reminders.create": [
-            "title": .string("{{leaf}}"),
-        ],
-        "messages.compose": [
-            "to": .string("{{contact.phone}}"),
-        ],
-        "mail.compose": [
-            "to": .string("{{contact.email}}"),
-        ],
-        "phone.call": [
-            "to": .string("{{contact.phone}}"),
-        ],
-        "app.open": [
-            "open": .string("{{project.path|}}"),
-        ],
-    ]
+    /// folders that mirror the path through the tree. A new note's own
+    /// defaults, so a note is filed alike whether its leaf is bare or marked
+    /// [Notes] or [new].
+    public static let builtInDefaultAction = ActionSpec(type: "notes.create", fields: BuiltInActions.notesCreate.defaults)
 
     public static func load(from url: URL) throws -> KeybowConfig {
         let data: Data
@@ -686,7 +647,7 @@ extension KeybowConfig {
         }
 
         // Built-in per-type defaults, with the config's own laid over the top.
-        var typeDefaults = builtInTypeDefaults
+        var typeDefaults = BuiltInActions.defaults
         if case .object(let types)? = defaults["types"] {
             for (type, value) in types {
                 guard case .object(let fields) = value else { continue }

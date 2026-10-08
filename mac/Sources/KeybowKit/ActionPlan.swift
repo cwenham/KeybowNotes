@@ -155,10 +155,11 @@ public struct ActionContext: Sendable {
 }
 
 public enum ActionPlanner {
-    public static func plan(_ selection: ResolvedSelection, config: KeybowConfig,
-                            context: ActionContext) throws -> PlannedAction {
+    /// `registry` holds the modules that run what isn't built in.
+    public static func plan(_ selection: ResolvedSelection, config: KeybowConfig, context: ActionContext,
+                            registry: ModuleRegistry = .shared) throws -> PlannedAction {
         guard let action = selection.action else { throw ActionPlanError.unsupported("(no action)") }
-        var planner = Planner(action: action, selection: selection, config: config, context: context)
+        var planner = Planner(action: action, selection: selection, config: config, context: context, registry: registry)
         let plan = try planner.make()
         return PlannedAction(plan: plan, warnings: planner.warnings)
     }
@@ -178,10 +179,11 @@ public enum ActionPlanner {
     /// Every piece of text the action will fill in that has blocks in it —
     /// fields and its template — to be worked out before it runs. Throws for a
     /// block where one isn't allowed, or a template that can't be read.
-    public static func blockTexts(for selection: ResolvedSelection, context: ActionContext) throws -> [String] {
+    public static func blockTexts(for selection: ResolvedSelection, context: ActionContext,
+                                  vocabulary: ActionVocabulary = ModuleRegistry.shared.vocabulary) throws -> [String] {
         guard let action = selection.action else { return [] }
         var texts: [String] = []
-        for (key, text) in stringFields(ownFields(action)) where text.contains("{{#") {
+        for (key, text) in stringFields(ownFields(action, vocabulary)) where text.contains("{{#") {
             let names = TemplateBlocks.names(in: text)
             guard let first = names.first else { continue }
             if blockFreeFields.contains(key) { throw ActionPlanError.blockNotAllowed(field: key, block: first) }
@@ -202,8 +204,8 @@ public enum ActionPlanner {
     /// An action's fields, less those holding an action of their own — a
     /// display's `ok` — which are its follow-up's, worked out when it runs:
     /// its `{{#ai}}` asked, and its values fetched, once there's an `{{answer}}`.
-    static func ownFields(_ action: ActionSpec) -> [String: JSONValue] {
-        action.fields.filter { !OutlineCompiler.holdsAction($0.key) }
+    static func ownFields(_ action: ActionSpec, _ vocabulary: ActionVocabulary) -> [String: JSONValue] {
+        action.fields.filter { !vocabulary.holdsAction($0.key) }
     }
 
     /// Text fields by key, nested ones dotted: `find.byName`.
@@ -226,7 +228,8 @@ public enum ActionPlanner {
     /// Every placeholder the selection's action could use — in its fields and
     /// its template file — so values that are costly to fetch, like the
     /// selected text, are fetched only when something asks for them.
-    public static func placeholders(for selection: ResolvedSelection, context: ActionContext) -> Set<String> {
+    public static func placeholders(for selection: ResolvedSelection, context: ActionContext,
+                                    vocabulary: ActionVocabulary = ModuleRegistry.shared.vocabulary) -> Set<String> {
         guard let action = selection.action else { return [] }
         var names = Set<String>()
         func collect(_ value: JSONValue) {
@@ -237,7 +240,7 @@ public enum ActionPlanner {
             default: break
             }
         }
-        ownFields(action).values.forEach(collect)
+        ownFields(action, vocabulary).values.forEach(collect)
         if let name = action.string("template"), !name.isEmpty,
            let url = Planner.templateURL(name, in: context.templatesDirectory),
            let text = try? String(contentsOf: url, encoding: .utf8) {
@@ -252,18 +255,21 @@ private struct Planner {
     let selection: ResolvedSelection
     let config: KeybowConfig
     let context: ActionContext
+    let registry: ModuleRegistry
     var warnings: [String] = []
 
-    init(action: ActionSpec, selection: ResolvedSelection, config: KeybowConfig, context: ActionContext) {
+    init(action: ActionSpec, selection: ResolvedSelection, config: KeybowConfig, context: ActionContext,
+         registry: ModuleRegistry) {
         self.action = action
         self.selection = selection
         self.config = config
         self.context = context
+        self.registry = registry
     }
 
     mutating func make() throws -> ActionPlan {
         // Blocks: allowed where they are, readable, and all worked out.
-        let texts = try ActionPlanner.blockTexts(for: selection, context: context)
+        let texts = try ActionPlanner.blockTexts(for: selection, context: context, vocabulary: registry.vocabulary)
         for text in texts {
             if let call = expand(text).unresolved.first { throw ActionPlanError.blockNotWorkedOut(call.name) }
         }
@@ -394,7 +400,7 @@ private struct Planner {
             return .insertTextDirectly(try snippet(for: "text to insert"), via: method)
 
         default:
-            guard let module = ModuleRegistry.shared.module(handling: action.type) else {
+            guard let module = registry.module(handling: action.type) else {
                 throw ActionPlanError.unsupported(action.type)
             }
             let request = try moduleRequest()
@@ -414,7 +420,7 @@ private struct Planner {
                 fields[key] = text
             }
         }
-        if ModuleRegistry.shared.actionType(action.type)?.takesText == true {
+        if registry.actionType(action.type)?.takesText == true {
             fields["text"] = try wholeText()
         }
         return ModuleRequest(type: action.type, fields: fields, labels: selection.labels, time: context.now)

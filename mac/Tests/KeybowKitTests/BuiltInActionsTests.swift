@@ -4,6 +4,9 @@ import XCTest
 /// The built-in action types, described once — and read as they were when
 /// each part of the app kept its own table.
 final class BuiltInActionsTests: XCTestCase {
+    /// Those built in, without any module's.
+    private let vocabulary = ActionVocabulary()
+
     func testKeywordsReadAndWritten() {
         let read: [String: String] = [
             "notes": "notes.create", "new": "notes.create", "create": "notes.create", "append": "notes.append",
@@ -13,14 +16,14 @@ final class BuiltInActionsTests: XCTestCase {
             "paste": "text.insert", "direct insert": "text.insertDirect", "type": "text.insertDirect",
             "timer": "clock.timer", "maps": "maps.search", "music": "music.play",
         ]
-        XCTAssertEqual(BuiltInActions.keywords, read)
+        XCTAssertEqual(vocabulary.keywords, Set(read.keys))
         for (word, type) in read {
-            XCTAssertEqual(OutlineCompiler.knownType(word.uppercased()), type, word)
+            XCTAssertEqual(vocabulary.knownType(word.uppercased()), type, word)
             XCTAssertEqual(OutlineCompiler.role(of: .word(word), inheritedType: nil, inheritedApp: nil, listNames: [],
-                                                locateApp: { _ in nil }), .actionType(type), word)
+                                                locateApp: { _ in nil }, vocabulary: vocabulary), .actionType(type), word)
         }
-        XCTAssertEqual(OutlineCompiler.knownType("music.play"), "music.play", "by its full name")
-        XCTAssertNil(OutlineCompiler.knownType("teleport"))
+        XCTAssertEqual(vocabulary.knownType("music.play"), "music.play", "by its full name")
+        XCTAssertNil(vocabulary.knownType("teleport"))
 
         let written: [String: String] = [
             "notes.create": "Notes", "notes.append": "append", "calendar.createEvent": "Calendar",
@@ -29,12 +32,12 @@ final class BuiltInActionsTests: XCTestCase {
             "clock.timer": "Timer", "maps.search": "Maps", "music.play": "Music",
         ]
         for type in BuiltInActions.types.map(\.type) {
-            XCTAssertEqual(OutlineDocument.keyword(for: type), written[type], type)
+            XCTAssertEqual(vocabulary.keyword(for: type), written[type], type)
         }
     }
 
     func testFieldsAndTheirKinds() {
-        XCTAssertEqual(BuiltInActions.fields, [
+        XCTAssertEqual(Set(vocabulary.fields.map(\.key)).union(["type", "instant"]), [
             "type", "folder", "title", "template", "account", "entry", "createIfMissing",
             "find.byName", "guards.maxBodyBytes", "guards.refuseInlineImages",
             "start", "duration", "alertMinutes", "calendar", "calendarId", "notes", "show",
@@ -42,16 +45,16 @@ final class BuiltInActionsTests: XCTestCase {
             "app", "bundleId", "open", "url", "target", "name", "input", "via", "text",
             "shortcut", "query", "playlist", "album", "artist", "shuffle", "instant", "format",
         ])
-        XCTAssertTrue(OutlineCompiler.isNumericField("alertMinutes", type: "calendar.createEvent"))
-        XCTAssertTrue(OutlineCompiler.isNumericField("guards.maxBodyBytes", type: "notes.append"))
-        XCTAssertTrue(OutlineCompiler.isNumericField("alertMinutes", type: nil), "for any action")
-        XCTAssertFalse(OutlineCompiler.isNumericField("duration", type: "calendar.createEvent"), "30m is text")
-        XCTAssertTrue(OutlineCompiler.isBooleanField("show", type: "calendar.createEvent"))
-        XCTAssertTrue(OutlineCompiler.isBooleanField("createIfMissing", type: "notes.append"))
-        XCTAssertTrue(OutlineCompiler.isBooleanField("guards.refuseInlineImages", type: "notes.append"))
-        XCTAssertTrue(OutlineCompiler.isBooleanField("shuffle", type: "music.play"))
-        XCTAssertTrue(OutlineCompiler.isBooleanField("instant", type: "url.open"), "every action's")
-        XCTAssertFalse(OutlineCompiler.isBooleanField("shuffle", type: "notes.create"))
+        XCTAssertTrue(vocabulary.isNumericField("alertMinutes", type: "calendar.createEvent"))
+        XCTAssertTrue(vocabulary.isNumericField("guards.maxBodyBytes", type: "notes.append"))
+        XCTAssertTrue(vocabulary.isNumericField("alertMinutes", type: nil), "for any action")
+        XCTAssertFalse(vocabulary.isNumericField("duration", type: "calendar.createEvent"), "30m is text")
+        XCTAssertTrue(vocabulary.isBooleanField("show", type: "calendar.createEvent"))
+        XCTAssertTrue(vocabulary.isBooleanField("createIfMissing", type: "notes.append"))
+        XCTAssertTrue(vocabulary.isBooleanField("guards.refuseInlineImages", type: "notes.append"))
+        XCTAssertTrue(vocabulary.isBooleanField("shuffle", type: "music.play"))
+        XCTAssertTrue(vocabulary.isBooleanField("instant", type: "url.open"), "every action's")
+        XCTAssertFalse(vocabulary.isBooleanField("shuffle", type: "notes.create"))
 
         for type in BuiltInActions.types {
             XCTAssertFalse(type.title.isEmpty, type.type)
@@ -85,8 +88,23 @@ final class BuiltInActionsTests: XCTestCase {
 
     func testTheCatalogListsThem() {
         let catalog = AgentGuide.catalog()
-        XCTAssertTrue(catalog.contains("- `phone.call`, phone call — `Call`, `FaceTime`"), catalog)
-        XCTAssertTrue(catalog.contains("- `notes.create`, new note — `Notes`, `New`, `Create`"))
-        XCTAssertTrue(catalog.contains("- `shortcut`, run a shortcut\n"))
+        XCTAssertTrue(catalog.contains("- `phone.call`, Phone call — `Call`, `FaceTime`"), catalog)
+        XCTAssertTrue(catalog.contains("- `notes.create`, New note — `Notes`, `New`, `Create`"))
+        XCTAssertTrue(catalog.contains("- `maps.search`, Search Maps — `Maps`\n"))
+    }
+
+    func testModulesJoinThem() {
+        let vocabulary = ActionVocabulary(modules: [
+            ModuleActionType(type: "lamp", title: "Lamp", keywords: ["Lamp", "Copy"], symbol: "lightbulb", fields: [
+                ModuleField(key: "level", title: "Level", kind: .number),
+                ModuleField(key: "ok", title: "On OK", kind: .action),
+            ]),
+        ])
+        XCTAssertEqual(vocabulary.knownType("lamp"), "lamp")
+        XCTAssertEqual(vocabulary.type(forKeyword: "copy"), "clipboard.copy", "a module can't take a built-in keyword")
+        XCTAssertTrue(vocabulary.isNumericField("level", type: "lamp"))
+        XCTAssertTrue(vocabulary.isActionField("ok.text"), "a field of the action OK runs")
+        XCTAssertEqual(vocabulary.heldField("ok.text")?.field, "text")
+        XCTAssertFalse(ActionVocabulary().isActionField("level"), "only where the module is")
     }
 }

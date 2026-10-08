@@ -43,9 +43,10 @@ public struct ActionOutcome: Equatable, Sendable {
 /// `osascript`, with every value passed as an argument — never pasted into the
 /// script, where a quote in a title would break it or worse.
 public enum ActionRunner {
-    public static func run(_ plan: ActionPlan) async -> ActionOutcome {
+    /// `registry` holds the modules that run what isn't built in.
+    public static func run(_ plan: ActionPlan, registry: ModuleRegistry = .shared) async -> ActionOutcome {
         do {
-            return try await perform(plan)
+            return try await perform(plan, registry: registry)
         } catch let error as RunError {
             return .failure(error.message, error.detail)
         } catch {
@@ -55,7 +56,7 @@ public enum ActionRunner {
 
     // MARK: - Each action
 
-    private static func perform(_ plan: ActionPlan) async throws -> ActionOutcome {
+    private static func perform(_ plan: ActionPlan, registry: ModuleRegistry) async throws -> ActionOutcome {
         switch plan {
         case .createNote(let location, let title, let html):
             _ = try await appleScript(Scripts.createNote, app: "Notes",
@@ -152,7 +153,7 @@ public enum ActionRunner {
             return try await openApp(name: name, bundleID: bundleID, open: open)
 
         case .module(let request):
-            guard let module = ModuleRegistry.shared.module(handling: request.type) else {
+            guard let module = registry.module(handling: request.type) else {
                 throw RunError("Nothing here runs “\(request.type)” actions")
             }
             return await module.run(request, now: request.time)

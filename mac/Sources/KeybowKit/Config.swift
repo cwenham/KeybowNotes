@@ -355,12 +355,12 @@ public struct KeybowConfig: Sendable {
     /// on the path skips the wait and `instant: false` keeps it; otherwise a
     /// module may ask for its action to run at once — a stopwatch has to start
     /// on the press, not a second later.
-    public func commitDelay(for selection: ResolvedSelection) -> TimeInterval {
+    public func commitDelay(for selection: ResolvedSelection, registry: ModuleRegistry = .shared) -> TimeInterval {
         // A page's keys are the action, pressed: there's nothing to cancel.
         if isPaged(selection.tree), selection.path.count == 2 { return 0 }
         guard let action = selection.action else { return commitDelay }
         if case .bool(let instant)? = action.fields["instant"] { return instant ? 0 : commitDelay }
-        if let module = ModuleRegistry.shared.module(handling: action.type) {
+        if let module = registry.module(handling: action.type) {
             let request = ModuleRequest(type: action.type, fields: action.fields.compactMapValues(\.stringValue),
                                         labels: selection.labels)
             if module.firesAtOnce(request) { return 0 }

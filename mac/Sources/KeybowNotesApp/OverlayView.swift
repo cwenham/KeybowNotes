@@ -342,7 +342,7 @@ private struct ActionHeadline: View {
     }
 
     private var symbol: String {
-        ActionTypes.describe(summary.type)?.symbol ?? "questionmark.circle"
+        ModuleRegistry.shared.vocabulary.describe(summary.type)?.symbol ?? "questionmark.circle"
     }
 }
 

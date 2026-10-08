@@ -58,54 +58,6 @@ public struct OutlineCompilation: Sendable {
 }
 
 public enum OutlineCompiler {
-    /// A built-in action field, or one a module adds — or a field of an action
-    /// held in one: `ok.text`.
-    public static func isActionField(_ key: String) -> Bool {
-        BuiltInActions.fields.contains(key) || ModuleRegistry.shared.fields.contains { $0.key == key } || heldField(key) != nil
-    }
-
-    /// True for a field that holds an action of its own: a display's `ok`.
-    public static func holdsAction(_ key: String) -> Bool {
-        ModuleRegistry.shared.fields.contains { $0.key == key && $0.kind == .action }
-    }
-
-    /// `ok.text` → ("ok", "text"), when `ok` holds an action.
-    public static func heldField(_ key: String) -> (holder: String, field: String)? {
-        let parts = key.split(separator: ".", maxSplits: 1).map(String.init)
-        guard parts.count == 2, holdsAction(parts[0]) else { return nil }
-        return (parts[0], parts[1])
-    }
-
-    /// A type, from a keyword or its full name: `Copy` → clipboard.copy.
-    /// Nil for one that nothing here runs.
-    public static func knownType(_ word: String) -> String? {
-        let text = word.trimmingCharacters(in: .whitespaces)
-        if let type = actionType(forKeyword: text) { return type }
-        return ActionTypes.describe(text) != nil ? text : nil
-    }
-
-    /// The type a keyword names, built in or from a module.
-    public static func actionType(forKeyword word: String) -> String? {
-        let lower = word.lowercased()
-        return BuiltInActions.keywords[lower] ?? ModuleRegistry.shared.keywords[lower]
-    }
-
-    /// Whether a field takes a number, for an action of `type` — or, with no
-    /// type known, for any action. A name means different things to different
-    /// actions: an event's `show` is yes or no, Exposé's is what to show.
-    static func isNumericField(_ key: String, type: String?) -> Bool {
-        isField(key, type: type, kind: .number)
-    }
-
-    /// `instant` is every action's.
-    static func isBooleanField(_ key: String, type: String?) -> Bool {
-        key == "instant" || isField(key, type: type, kind: .flag)
-    }
-
-    private static func isField(_ key: String, type: String?, kind: ModuleField.Kind) -> Bool {
-        let fields = type.map { ActionTypes.describe($0)?.fields ?? [] } ?? ActionTypes.fields
-        return fields.contains { $0.key == key && $0.kind == kind }
-    }
     static let numericDefaults: Set<String> = [
         "commitDelayMs", "idleTimeoutMs", "longPressCancelMs", "dates.todayOffsetMinutes", "dates.roundToMinutes",
     ]
@@ -115,7 +67,8 @@ public enum OutlineCompiler {
     /// compiler and by the editor's highlighting as you type.
     public static func role(of annotation: Annotation, inheritedType: String?, inheritedApp: OutlineConverter.AppMatch?,
                             listNames: Set<String>,
-                            locateApp: (String) -> OutlineConverter.AppMatch? = AppLocator.locate) -> AnnotationRole {
+                            locateApp: (String) -> OutlineConverter.AppMatch? = AppLocator.locate,
+                            vocabulary: ActionVocabulary = ModuleRegistry.shared.vocabulary) -> AnnotationRole {
         switch annotation {
         case .word(let word):
             let lower = word.lowercased()
@@ -123,14 +76,14 @@ public enum OutlineCompiler {
             if let minutes = alertMinutes(lower) { return .alert(minutes: minutes) }
             if word.contains("://") { return .link }
             if lower.hasSuffix(".md") { return .template }
-            if let type = actionType(forKeyword: lower) { return .actionType(type) }
+            if let type = vocabulary.type(forKeyword: lower) { return .actionType(type) }
             if let app = locateApp(word) { return .app(name: app.name, installed: app.installed) }
             if inheritedType == "app.open" { return .target }
             if word.first?.isUppercase == true { return .app(name: word, installed: false) }
             return .unknown
         case .pair(let key, let value):
             if key == "colour" || key == "color" { return .colour(valid: KeyColour(hex: value) != nil) }
-            if isActionField(key) { return .field }
+            if vocabulary.isActionField(key) { return .field }
             return .parameter
         }
     }
@@ -147,10 +100,13 @@ public enum OutlineCompiler {
         }
     }
 
+    /// `vocabulary` is the action types it knows: those built in, and the
+    /// modules' that are registered, unless it's given others.
     public static func compile(_ document: OutlineDocument,
-                               locateApp: @escaping (String) -> OutlineConverter.AppMatch? = AppLocator.locate)
+                               locateApp: @escaping (String) -> OutlineConverter.AppMatch? = AppLocator.locate,
+                               vocabulary: ActionVocabulary = ModuleRegistry.shared.vocabulary)
     -> OutlineCompilation {
-        var compiler = Compiler(document: document, locateApp: locateApp)
+        var compiler = Compiler(document: document, locateApp: locateApp, vocabulary: vocabulary)
         let json = compiler.run()
         var config: KeybowConfig?
         var configError: String?
@@ -177,6 +133,7 @@ private struct Compiler {
 
     let document: OutlineDocument
     let locateApp: (String) -> OutlineConverter.AppMatch?
+    let vocabulary: ActionVocabulary
     let listNames: Set<String>
 
     var infos: [UUID: OutlineNodeInfo] = [:]
@@ -188,9 +145,11 @@ private struct Compiler {
     var neededProjects: [String] = []
     var reportedApps: Set<String> = []
 
-    init(document: OutlineDocument, locateApp: @escaping (String) -> OutlineConverter.AppMatch?) {
+    init(document: OutlineDocument, locateApp: @escaping (String) -> OutlineConverter.AppMatch?,
+         vocabulary: ActionVocabulary) {
         self.document = document
         self.locateApp = locateApp
+        self.vocabulary = vocabulary
         self.listNames = Set(document.lists.map(\.name))
     }
 
@@ -289,10 +248,11 @@ private struct Compiler {
         // The type this node's fields are for: its own, wherever it's written
         // in the brackets, else the one it inherits. A held action's fields —
         // `ok.text` — are its own type's, when the node says which.
+        let vocabulary = vocabulary
         let ownType = node.annotations.lazy.compactMap { annotation -> String? in
             switch annotation {
-            case .pair("type", let value): return OutlineCompiler.knownType(value) ?? value
-            case .word(let word): return OutlineCompiler.knownType(word)
+            case .pair("type", let value): return vocabulary.knownType(value) ?? value
+            case .word(let word): return vocabulary.knownType(word)
             default: return nil
             }
         }.first
@@ -300,7 +260,7 @@ private struct Compiler {
             guard let holder else { return ownType ?? context.type }
             return node.annotations.lazy.compactMap { annotation -> String? in
                 if case .pair(let key, let value) = annotation, key == holder || key == holder + ".type" {
-                    return OutlineCompiler.knownType(value)
+                    return vocabulary.knownType(value)
                 }
                 return nil
             }.first
@@ -308,7 +268,7 @@ private struct Compiler {
 
         for annotation in node.annotations {
             let role = OutlineCompiler.role(of: annotation, inheritedType: context.type, inheritedApp: context.app,
-                                            listNames: listNames, locateApp: locateApp)
+                                            listNames: listNames, locateApp: locateApp, vocabulary: vocabulary)
             roles.append(role)
             switch (annotation, role) {
             case (_, .listReference(let exists)):
@@ -360,7 +320,7 @@ private struct Compiler {
                 if valid { colour = value } else { note(.error, "“\(value)” isn't a colour; use rrggbb.") }
             case (.pair(let key, let value), .field):
                 // `ok.url`: a field of the action run on OK, typed and checked as `url`.
-                let held = OutlineCompiler.heldField(key)
+                let held = vocabulary.heldField(key)
                 let fieldKey = held?.field ?? key
                 // Blocks: allowed here, and readable?
                 if value.contains("{{#"), let block = TemplateBlocks.names(in: value).first {
@@ -371,18 +331,18 @@ private struct Compiler {
                 }
                 if key == "type" {
                     declare(value)
-                } else if OutlineCompiler.holdsAction(key) || (held != nil && fieldKey == "type") {
+                } else if vocabulary.holdsAction(key) || (held != nil && fieldKey == "type") {
                     // `ok: Copy` — the action run on OK, by keyword or full name.
                     let holder = held?.holder ?? key
-                    if let type = OutlineCompiler.knownType(value) {
+                    if let type = vocabulary.knownType(value) {
                         set(holder + ".type", .string(type))
                     } else {
                         note(.warning, "Nothing here runs “\(value)” actions; \(holder) does nothing.")
                     }
-                } else if OutlineCompiler.isNumericField(fieldKey, type: fieldsType(held: held?.holder)),
+                } else if vocabulary.isNumericField(fieldKey, type: fieldsType(held: held?.holder)),
                           let number = Double(value) {
                     set(key, .number(number))
-                } else if OutlineCompiler.isBooleanField(fieldKey, type: fieldsType(held: held?.holder)) {
+                } else if vocabulary.isBooleanField(fieldKey, type: fieldsType(held: held?.holder)) {
                     set(key, .bool(["true", "yes", "on", "1"].contains(value.lowercased())))
                 } else {
                     set(key, .string(value))

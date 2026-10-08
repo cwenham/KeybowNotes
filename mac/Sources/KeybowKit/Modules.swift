@@ -540,6 +540,7 @@ public final class ModuleRegistry: @unchecked Sendable {
 
     private let lock = NSLock()
     private var modules: [KeybowModule] = []
+    private var madeVocabulary: ActionVocabulary?
 
     public init() {}
 
@@ -548,8 +549,19 @@ public final class ModuleRegistry: @unchecked Sendable {
         lock.withLock {
             modules.removeAll { $0.manifest.id == module.manifest.id }
             modules.append(module)
+            madeVocabulary = nil
         }
         module.start(host: host)
+    }
+
+    /// The action types built in and these modules', as the outline knows them.
+    public var vocabulary: ActionVocabulary {
+        lock.withLock {
+            if let madeVocabulary { return madeVocabulary }
+            let made = ActionVocabulary(modules: modules.flatMap(\.manifest.actionTypes))
+            madeVocabulary = made
+            return made
+        }
     }
 
     public var all: [KeybowModule] { lock.withLock { modules } }

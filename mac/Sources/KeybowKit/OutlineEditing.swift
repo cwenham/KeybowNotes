@@ -358,16 +358,11 @@ extension OutlineDocument {
         }
     }
 
-    /// The keyword a type is written with, built in or from a module; those
-    /// without one are written `type: …`.
-    public static func keyword(for type: String) -> String? {
-        ActionTypes.describe(type)?.keywords.first
-    }
-
     /// Sets this node's own action type, replacing any it named — or, with nil,
     /// removes it so the type is inherited.
-    public mutating func setType(_ id: UUID, _ type: String?) throws {
-        let typeWords = Set(BuiltInActions.keywords.keys).union(ModuleRegistry.shared.keywords.keys)
+    public mutating func setType(_ id: UUID, _ type: String?,
+                                 vocabulary: ActionVocabulary = ModuleRegistry.shared.vocabulary) throws {
+        let typeWords = vocabulary.keywords
         try update(id) { node in
             node.annotations.removeAll { annotation in
                 switch annotation {
@@ -376,7 +371,7 @@ extension OutlineDocument {
                 }
             }
             guard let type else { return }
-            let annotation: Annotation = Self.keyword(for: type).map(Annotation.word) ?? .pair(key: "type", value: type)
+            let annotation: Annotation = vocabulary.keyword(for: type).map(Annotation.word) ?? .pair(key: "type", value: type)
             node.annotations.insert(annotation, at: 0)
         }
     }

@@ -49,12 +49,12 @@ private struct SeveralSelected: View {
 /// The fields each action type uses, in the order they're shown.
 /// Inherit, then every type — built in or from a module — by name.
 private var typeNames: [(String?, String)] {
-    [(nil, "Inherit")] + ActionTypes.all.map { ($0.type, $0.title) }
+    [(nil, "Inherit")] + ModuleRegistry.shared.vocabulary.types.map { ($0.type, $0.title) }
         .sorted { $0.1.localizedStandardCompare($1.1) == .orderedAscending }
 }
 
 private func fields(for type: String) -> [ModuleField]? {
-    ActionTypes.describe(type)?.fields
+    ModuleRegistry.shared.vocabulary.describe(type)?.fields
 }
 
 private func typeName(_ type: String?) -> String {
@@ -70,7 +70,7 @@ private func choiceTitle(_ word: String) -> String {
 
 /// How an outcome's action is written: its keyword, if it has one.
 private func outcomeWord(for type: String) -> String {
-    OutlineDocument.keyword(for: type) ?? type
+    ModuleRegistry.shared.vocabulary.keyword(for: type) ?? type
 }
 
 private struct NodeInspector: View {
@@ -436,7 +436,7 @@ private struct NodeInspector: View {
 
     /// The type of the action held in `key`: `ok: Copy`, or `ok.type: …`.
     private func outcomeType(_ key: String) -> String? {
-        (ownValue(key) ?? ownValue(key + ".type")).flatMap(OutlineCompiler.knownType)
+        (ownValue(key) ?? ownValue(key + ".type")).flatMap(ModuleRegistry.shared.vocabulary.knownType)
     }
 
     /// What runs on an outcome: a type, like any action's, and its fields,
@@ -590,7 +590,7 @@ private struct NodeInspector: View {
                 return (annotation, "An alert, but \(actionName) doesn't have alerts.")
             case (.pair(let key, _), .field) where type != nil:
                 // `ok.text`: used when the action run on OK uses text.
-                if let held = OutlineCompiler.heldField(key), used.contains(held.holder) {
+                if let held = ModuleRegistry.shared.vocabulary.heldField(key), used.contains(held.holder) {
                     let heldType = outcomeType(held.holder)
                     let heldUsed = Set((heldType.flatMap(fields(for:)) ?? []).map(\.key)).union(["type"])
                     guard !heldUsed.contains(held.field) else { return nil }
@@ -650,7 +650,7 @@ private struct NodeInspector: View {
     private var ownParameters: [(String, String)] {
         node.annotations.compactMap { annotation in
             guard case .pair(let key, let value) = annotation,
-                  !OutlineCompiler.isActionField(key), key != "colour", key != "color" else { return nil }
+                  !ModuleRegistry.shared.vocabulary.isActionField(key), key != "colour", key != "color" else { return nil }
             return (key, value)
         }
     }
@@ -660,7 +660,7 @@ private struct NodeInspector: View {
         var result: [(String, String, String)] = []
         for ancestor in chain.dropLast().reversed() {
             for case .pair(let key, let value) in ancestor.annotations
-            where !OutlineCompiler.isActionField(key) && key != "colour" && key != "color" && !seen.contains(key) {
+            where !ModuleRegistry.shared.vocabulary.isActionField(key) && key != "colour" && key != "color" && !seen.contains(key) {
                 seen.insert(key)
                 result.append((key, value, ancestor.label))
             }

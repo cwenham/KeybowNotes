@@ -44,17 +44,17 @@ public enum AgentGuide {
 
     /// The action types here, as an agent should write them: keywords, and
     /// for modules, every field with its help.
-    public static func catalog() -> String {
+    public static func catalog(registry: ModuleRegistry = .shared) -> String {
         var lines = ["# Action types in this copy of KeybowNotes", "",
                      "Write the keyword in an entry's brackets — `[Notes]` — or `type: name`. The language reference "
                      + "documents each built-in type's fields.", "", "## Built in", ""]
         for action in BuiltInActions.types.sorted(by: { $0.type < $1.type }) {
             let words = action.keywords.map { "`\($0)`" }
-            lines.append("- `\(action.type)`, \(action.title.lowercased())"
+            lines.append("- `\(action.type)`, \(action.title)"
                          + (words.isEmpty ? "" : " — " + words.joined(separator: ", ")))
         }
         lines += ["", "## From modules", ""]
-        for module in ModuleRegistry.shared.all {
+        for module in registry.all {
             for action in module.manifest.actionTypes {
                 let words = action.keywords.map { "`\($0)`" }.joined(separator: ", ")
                 lines.append("### `\(action.type)` — \(action.title)")
@@ -75,7 +75,7 @@ public enum AgentGuide {
                 lines.append("")
             }
         }
-        let values = ModuleRegistry.shared.all.flatMap(\.manifest.fetches)
+        let values = registry.all.flatMap(\.manifest.fetches)
         if !values.isEmpty {
             lines.append("Values modules fetch here: " + values.map { "`{{\($0)…}}`" }.joined(separator: ", ") + ".")
         }

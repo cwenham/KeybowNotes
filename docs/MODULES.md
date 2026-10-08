@@ -61,7 +61,14 @@ a module is a new target, a line there, and a dependency in `Package.swift`.
 The action types built in — Notes, Calendar, Copy and the rest — are described
 the same way, as `ModuleActionType`s with their fields, in `BuiltInActions` in
 KeybowKit, so the compiler, the tree editor, the overlay and the agents'
-catalog treat both alike. `ActionTypes.describe(_:)` finds either kind.
+catalog treat both alike.
+
+What reads the outline is handed an `ActionVocabulary`: every type, built in
+and the modules', by name and keyword, with its fields — a snapshot of a
+registry, `registry.vocabulary`. The planner, the summary, the runner and the
+pipeline are handed the registry itself. Each defaults to `ModuleRegistry.shared`,
+which the app and the command line fill; a test hands them a registry of its
+own, with only the modules it needs.
 
 ## How the host uses a module
 

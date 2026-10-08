@@ -18,11 +18,11 @@ public struct ActionSummary: Equatable, Sendable {
     /// `environment` holds values fetched when the key was pressed — the
     /// selected text, the clipboard. Without them, stand-ins show where they'll go.
     public init(selection: ResolvedSelection, config: KeybowConfig, now: Date = Date(),
-                calendar: Calendar = .current, environment: [String: String] = [:]) {
+                calendar: Calendar = .current, environment: [String: String] = [:], registry: ModuleRegistry = .shared) {
         let action = selection.action ?? ActionSpec(type: "none", fields: [:])
         var missing: [String] = []
         let params = Self.standIns
-            .merging(ModuleRegistry.shared.values(now: now)) { _, live in live }
+            .merging(registry.values(now: now)) { _, live in live }
             .merging(environment) { _, fetched in fetched }
             .merging(selection.params) { _, fromTree in fromTree }
 
@@ -30,12 +30,12 @@ public struct ActionSummary: Equatable, Sendable {
             guard let text else { return "" }
             // Fetched values show a stand-in: a preview mustn't fetch anything.
             var params = params
-            for name in ModuleRegistry.shared.fetchedNames(in: Template.names(in: text)) where params[name] == nil {
-                params[name] = ModuleRegistry.shared.standIn(forValue: name)
+            for name in registry.fetchedNames(in: Template.names(in: text)) where params[name] == nil {
+                params[name] = registry.standIn(forValue: name)
             }
             // Blocks show a stand-in: a preview mustn't spend anything.
             let result = Template.expand(text, params: params, now: now, calendar: calendar,
-                                         standIn: ModuleRegistry.shared.standIn(for:))
+                                         standIn: registry.standIn(for:))
             for name in result.missing where !missing.contains(name) { missing.append(name) }
             return result.text
         }
@@ -154,7 +154,7 @@ public struct ActionSummary: Equatable, Sendable {
                 details.append("\u{201C}\(text.count > 60 ? String(text.prefix(60)) + "…" : text)\u{201D}")
             }
         default:
-            guard let module = ModuleRegistry.shared.module(handling: action.type) else { break }
+            guard let module = registry.module(handling: action.type) else { break }
             var fields: [String: String] = [:]
             for (key, value) in action.fields {
                 if case .string(let text) = value { fields[key] = expand(text) } else { fields[key] = value.stringValue }

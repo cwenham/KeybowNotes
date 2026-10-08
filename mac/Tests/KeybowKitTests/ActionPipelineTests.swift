@@ -103,7 +103,8 @@ final class ActionPipelineTests: XCTestCase {
 
     /// The first key of a one-line tree, ready to fire.
     private func selection(_ line: String) throws -> ResolvedSelection {
-        let compiled = OutlineCompiler.compile(OutlineParser.parse("1. " + line).0, locateApp: { _ in nil })
+        let compiled = OutlineCompiler.compile(OutlineParser.parse("1. " + line).0, locateApp: { _ in nil },
+                                               vocabulary: registry.vocabulary)
         let config = try XCTUnwrap(compiled.config, compiled.configError ?? "")
         ConfigStoreStandIn.config = config
         return try XCTUnwrap(config.resolve(path: [0]))
@@ -216,7 +217,7 @@ final class ActionPipelineTests: XCTestCase {
     }
 
     func testAnOutcomeRunsTheNextAction() async throws {
-        ModuleRegistry.shared.register(Showcase(), host: MemoryModuleHost())
+        registry.register(Showcase(), host: MemoryModuleHost())
         let line = "Idea [Showcase, text: Hi, ok: Copy, ok.text: \"{{displayed}}!\"]"
         mac.outcomes = [.then("ok", values: ["displayed": "Hi"])]
         let both = expectation(description: "ran both")

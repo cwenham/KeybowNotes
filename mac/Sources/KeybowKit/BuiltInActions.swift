@@ -30,19 +30,6 @@ public enum BuiltInActions {
 
     public static func type(_ name: String) -> ModuleActionType? { byType[name]?.manifest }
 
-    /// Lowercased keyword → type: `copy` → clipboard.copy.
-    public static let keywords: [String: String] = {
-        var result: [String: String] = [:]
-        for type in types {
-            for word in type.keywords { result[word.lowercased()] = type.type }
-        }
-        return result
-    }()
-
-    /// Every field a built-in action takes, and `type` and `instant`, which
-    /// every action does.
-    public static let fields: Set<String> = Set(types.flatMap { $0.fields.map(\.key) }).union(["type", "instant"])
-
     /// Each type's defaults, by type.
     public static let defaults: [String: [String: JSONValue]] = byType.compactMapValues {
         $0.defaults.isEmpty ? nil : $0.defaults
@@ -392,17 +379,4 @@ public enum BuiltInActions {
                     Examples: {{selection}} · {{clipboard}}
                     """),
             ]))
-}
-
-/// Any action type: built in, or a module's.
-public enum ActionTypes {
-    /// Those built in, then each module's.
-    public static var all: [ModuleActionType] { BuiltInActions.types + ModuleRegistry.shared.actionTypes }
-
-    public static func describe(_ type: String) -> ModuleActionType? {
-        BuiltInActions.type(type) ?? ModuleRegistry.shared.actionType(type)
-    }
-
-    /// Every field any action takes.
-    public static var fields: [ModuleField] { all.flatMap(\.fields) }
 }

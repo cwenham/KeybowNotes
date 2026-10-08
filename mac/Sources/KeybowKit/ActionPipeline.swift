@@ -144,12 +144,12 @@ public final class ActionPipeline {
         let settings = settings()
         let path = selection.pathDescription
         func refuse(_ message: String) {
-            display.showRefused(message, summary: ActionSummary(selection: selection, config: config))
+            display.showRefused(message, summary: ActionSummary(selection: selection, config: config, registry: registry))
             report?(.failure(message))
         }
 
         if settings.dryRun {
-            let summary = ActionSummary(selection: selection, config: config)
+            let summary = ActionSummary(selection: selection, config: config, registry: registry)
             display.showPreview(summary, path: path)
             report?(.success("Dry run: nothing done", "It would: \(summary.verb) \(summary.subject)"))
             return
@@ -168,14 +168,14 @@ public final class ActionPipeline {
         // reply could steer the action, and one lot at a time.
         let blockTexts: [String]
         do {
-            blockTexts = try ActionPlanner.blockTexts(for: selection, context: context)
+            blockTexts = try ActionPlanner.blockTexts(for: selection, context: context, vocabulary: registry.vocabulary)
         } catch {
             surroundings.log("  can't run: \(error)")
             refuse("\(error)")
             return
         }
         // Values modules fetch — {{api.weather}} — and what they need first.
-        let used = ActionPlanner.placeholders(for: selection, context: context)
+        let used = ActionPlanner.placeholders(for: selection, context: context, vocabulary: registry.vocabulary)
         // A value the tree gives itself — `location: Office` — isn't fetched.
         let given = ActionPlanner.values(for: selection, context: context)
         let fetchedNames = registry.fetchedNames(in: used).filter { given[$0] == nil }
@@ -233,7 +233,7 @@ public final class ActionPipeline {
     private func prepare(_ fetchedNames: [String], _ texts: [String], selection: ResolvedSelection,
                          context: ActionContext, config: KeybowConfig) async -> ActionContext? {
         var context = context
-        let summary = ActionSummary(selection: selection, config: config, environment: context.environment)
+        let summary = ActionSummary(selection: selection, config: config, environment: context.environment, registry: registry)
         let askers = Set(texts.flatMap(TemplateBlocks.names(in:)).compactMap { name in
             registry.module(handlingBlock: name)?.manifest.blocks.first { $0.name == name }?.title
         })
@@ -300,19 +300,19 @@ public final class ActionPipeline {
     private func run(_ selection: ResolvedSelection, context: ActionContext, typingInto frontApp: pid_t? = nil,
                      report: ((ActionOutcome) -> Void)? = nil) {
         let config = config()
-        let summary = ActionSummary(selection: selection, config: config, environment: context.environment)
+        let summary = ActionSummary(selection: selection, config: config, environment: context.environment, registry: registry)
         let path = selection.pathDescription
         func refuse(_ message: String) {
             display.showRefused(message, summary: summary)
             report?(.failure(message))
         }
 
-        var isPrivate = !ActionPlanner.placeholders(for: selection, context: context)
+        var isPrivate = !ActionPlanner.placeholders(for: selection, context: context, vocabulary: registry.vocabulary)
             .isDisjoint(with: ["selection", "clipboard", "displayed", "answer"])
 
         let planned: PlannedAction
         do {
-            planned = try ActionPlanner.plan(selection, config: config, context: context)
+            planned = try ActionPlanner.plan(selection, config: config, context: context, registry: registry)
         } catch {
             surroundings.log("  can't run: \(isPrivate ? "(details not logged)" : "\(error)")")
             refuse("\(error)")

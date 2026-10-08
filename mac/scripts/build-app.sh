@@ -45,6 +45,37 @@ cp "$OUT/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 # What AppleScript can ask of it.
 cp Packaging/KeybowNotes.sdef "$APP/Contents/Resources/KeybowNotes.sdef"
 
+# Shortcuts' actions: the metadata Shortcuts reads them from, which Xcode
+# would make. The compiler records the app's App Intents types as constant
+# values — type-checking alone, against the release build's modules — and
+# Xcode's processor turns those into Metadata.appintents.
+echo "==> Extracting Shortcuts' actions"
+INTENTS=$(mktemp -d)
+find Sources/KeybowNotesApp -name '*.swift' | sed "s|^|$PWD/|" > "$INTENTS/sources.txt"
+cat > "$INTENTS/protocols.json" <<'JSON'
+["AppIntent", "EntityQuery", "AppEntity", "TransientEntity", "AppEnum", "AppShortcutProviding", "AppShortcutsProvider",
+ "AnyResolverProviding", "AppIntentsPackage", "DynamicOptionsProvider", "_IntentValueRepresentable",
+ "_AssistantIntentsProvider", "_GenerativeFunctionExtractable", "IntentValueQuery", "EntityStringQuery",
+ "EntityPropertyQuery", "UniqueAppEntity"]
+JSON
+SDK=$(xcrun --show-sdk-path --sdk macosx)
+xcrun swiftc -typecheck -module-name KeybowNotesApp -target arm64-apple-macos15.0 -sdk "$SDK" -swift-version 5 \
+    -I "$BIN_DIR" -wmo $(cat "$INTENTS/sources.txt") \
+    -emit-const-values-path "$INTENTS/KeybowNotesApp.swiftconstvalues" \
+    -Xfrontend -const-gather-protocols-file -Xfrontend "$INTENTS/protocols.json" 2> "$INTENTS/typecheck.log" \
+    || { cat "$INTENTS/typecheck.log"; exit 1; }
+echo "$INTENTS/KeybowNotesApp.swiftconstvalues" > "$INTENTS/constvalues.txt"
+xcrun appintentsmetadataprocessor --output "$APP/Contents/Resources" \
+    --toolchain-dir "$(dirname "$(dirname "$(dirname "$(xcrun --find swiftc)")")")" \
+    --module-name KeybowNotesApp --sdk-root "$SDK" \
+    --xcode-version "$(xcodebuild -version | awk '/Build version/ { print $3 }')" \
+    --platform-family macOS --deployment-target 15.0 --target-triple arm64-apple-macos15.0 \
+    --source-file-list "$INTENTS/sources.txt" --swift-const-vals-list "$INTENTS/constvalues.txt" \
+    --binary-file "$BIN_DIR/keybownotes" --force > "$INTENTS/metadata.log" 2>&1 \
+    || { cat "$INTENTS/metadata.log"; exit 1; }
+[[ -f "$APP/Contents/Resources/Metadata.appintents/extract.actionsdata" ]] || { echo "No Shortcuts metadata was made"; exit 1; }
+rm -rf "$INTENTS"
+
 # Installed into ~/Library/Application Support/KeybowNotes on first run, when
 # there is no tree yet.
 cp tree.demo.md "$APP/Contents/Resources/tree.demo.md"
@@ -82,6 +113,9 @@ if $install; then
     fi
     rm -rf "/Applications/$APP_NAME.app"
     cp -R "$APP" "/Applications/$APP_NAME.app"
+    # Told to the system at once, so Shortcuts sees the actions it has now.
+    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+        -f "/Applications/$APP_NAME.app" || true
     echo "    installed /Applications/$APP_NAME.app"
 fi
 

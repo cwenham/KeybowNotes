@@ -165,7 +165,12 @@ and menu commands. See [docs/MODULES.md](docs/MODULES.md).
 
 ## Getting started
 
-1. **Build and install the app** — from the `mac` folder:
+1. **Install the app.** From a disk image (`KeybowNotes-….dmg`), drag
+   KeybowNotes onto Applications. It isn't notarized, so the first time it's
+   opened macOS blocks it: choose Done, then **Open Anyway** in System Settings →
+   Privacy & Security. The note in the disk image says more.
+
+   Or **build and install it** — from the `mac` folder:
 
    ```bash
    scripts/build-app.sh --install

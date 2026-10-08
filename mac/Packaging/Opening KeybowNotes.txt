@@ -1,0 +1,42 @@
+Installing KeybowNotes
+======================
+
+1. Drag KeybowNotes onto the Applications folder beside it.
+2. Open it from Applications. A keyboard icon appears in the menu bar.
+
+KeybowNotes needs macOS 15 (Sequoia) or later.
+
+
+If macOS won't open it
+----------------------
+
+This copy of KeybowNotes isn't notarized by Apple, so the first time you open
+it macOS says it can't check it, and offers only Done or Move to Trash.
+Choose Done, then:
+
+1. Open System Settings → Privacy & Security.
+2. Scroll down to Security, where it says KeybowNotes was blocked.
+3. Click Open Anyway, and confirm with your password or Touch ID.
+
+macOS remembers, and opens it straight away from then on. Each new version
+you install asks once again.
+
+Or, in Terminal, after dragging it to Applications:
+
+    xattr -dr com.apple.quarantine /Applications/KeybowNotes.app
+
+
+What it will ask for
+--------------------
+
+KeybowNotes asks for each permission the first time something needs it — and
+those prompts can open behind other windows:
+
+- Removable volumes, to set a keypad up.
+- Notes, Mail, Music: to control them, for the actions that use them.
+- Calendars and Reminders, Contacts, Location: for the actions that use them.
+- Accessibility, to type text and read the selection in other apps.
+- Local Network, to talk to Home Assistant.
+
+Getting started, the configuration language, and everything else:
+https://github.com/cwenham/KeybowNotes

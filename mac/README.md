@@ -54,6 +54,23 @@ identity keeps them across rebuilds; an ad-hoc signature would be asked about
 again after every build. The first signing asks whether `codesign` may use your
 key — that dialog can open behind other windows and isn't in Exposé or the Dock.
 
+### A disk image, for others to install
+
+```bash
+scripts/make-dmg.sh              # build the app, then build/KeybowNotes-<version>-<build>.dmg
+scripts/make-dmg.sh --no-build   # from the app already built
+```
+
+The image holds the app, a shortcut to Applications to drag it onto, and *If
+macOS won't open it.txt* (from `Packaging/Opening KeybowNotes.txt`). It's
+signed with the same identity as the app. Signed for development and not
+notarized, the app is blocked the first time it's opened on another Mac: macOS
+offers only Done or Move to Trash, and **Open Anyway** in System Settings →
+Privacy & Security lets it run from then on. The note walks through that. A
+Developer ID certificate and notarization (`xcrun notarytool`) would remove the
+step; they'd also need the hardened runtime, and entitlements for Apple Events,
+calendars, contacts and location.
+
 Once installed it runs like any menu-bar app:
 
 - **The tree** is `~/Library/Application Support/KeybowNotes/tree.md`, with

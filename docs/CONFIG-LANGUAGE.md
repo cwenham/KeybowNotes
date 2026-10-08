@@ -1052,6 +1052,11 @@ Settings → Home Assistant.
   temperature, `set_temperature`, or a mode alone, `set_hvac_mode`; for a
   scene or script, `turn_on`; a button is pressed, an automation triggered, a
   media player played or paused; a number or select set to its `value`.
+- **A thermostat given a mode and a temperature** — `service: turn_on,
+  mode: heat, temperature: 21` — has its mode set first, then its
+  temperature: many heaters ignore a mode sent with the temperature, and a
+  temperature while they're off. Given only a temperature, `turn_on` turns it
+  on first.
 - **Locks and alarms never toggle:** say `service: lock` or `unlock`, `arm_away`
   or `disarm`. The time to cancel is there for second thoughts.
 - **The overlay says what happened,** from what Home Assistant reports back:

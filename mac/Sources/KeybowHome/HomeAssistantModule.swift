@@ -191,8 +191,8 @@ public final class HomeAssistantModule: KeybowModule, @unchecked Sendable {
         var domain: String
         var service: String
         var data: [String: JSONValue]
-        /// Called first: turning a thermostat on before setting it, when the
-        /// mode to turn it on in isn't given.
+        /// Called first: a thermostat's mode, or turning it on, before its
+        /// temperature is set.
         var before: [Call] = []
     }
 
@@ -252,7 +252,7 @@ public final class HomeAssistantModule: KeybowModule, @unchecked Sendable {
         }
         switch domain {
         case "climate":
-            if temperature != nil { return Call(domain: domain, service: "set_temperature", data: data) }
+            if temperature != nil { return settingTemperature(data, turningOn: false) }
             if mode != nil { return Call(domain: domain, service: "set_hvac_mode", data: data) }
         case "light":
             if brightness != nil || kelvin != nil || color != nil { return Call(domain: domain, service: "turn_on", data: data) }
@@ -278,18 +278,31 @@ public final class HomeAssistantModule: KeybowModule, @unchecked Sendable {
         var call = call
         let settings = ["temperature", "hvac_mode", "brightness_pct", "rgb_color", "color_name", "color_temp_kelvin"]
         switch (call.domain, call.service) {
-        case ("climate", "turn_on") where temperature:
-            if !mode {
-                let entity = call.data["entity_id"].map { ["entity_id": $0] } ?? [:]
-                call.before = [Call(domain: "climate", service: "turn_on", data: entity)]
-            }
-            call.service = "set_temperature"
+        case ("climate", "turn_on") where temperature, ("climate", "set_temperature") where temperature:
+            call = settingTemperature(call.data, turningOn: call.service == "turn_on")
         case ("climate", "turn_on") where mode:
             call.service = "set_hvac_mode"
         case (_, "turn_off"):
             for key in settings { call.data.removeValue(forKey: key) }
         default:
             break
+        }
+        return call
+    }
+
+    /// Setting a thermostat's temperature. set_temperature takes a mode too,
+    /// but many integrations ignore it — and ignore a temperature while
+    /// they're off — so a mode is set first, by itself; else, when it's being
+    /// turned on, it's turned on first.
+    static func settingTemperature(_ data: [String: JSONValue], turningOn: Bool) -> Call {
+        var data = data
+        let entity = data["entity_id"].map { ["entity_id": $0] } ?? [:]
+        let mode = data.removeValue(forKey: "hvac_mode")
+        var call = Call(domain: "climate", service: "set_temperature", data: data)
+        if let mode {
+            call.before = [Call(domain: "climate", service: "set_hvac_mode", data: entity.merging(["hvac_mode": mode]) { $1 })]
+        } else if turningOn {
+            call.before = [Call(domain: "climate", service: "turn_on", data: entity)]
         }
         return call
     }
@@ -348,11 +361,13 @@ public final class HomeAssistantModule: KeybowModule, @unchecked Sendable {
         let verbs = ["toggle": "Toggle", "turn_on": "Turn on", "turn_off": "Turn off", "press": "Press",
                      "trigger": "Run", "set_temperature": "Set", "set_hvac_mode": "Set", "set_value": "Set",
                      "select_option": "Set", "media_play_pause": "Play or pause"]
+        // What's sent, first calls and all: a thermostat's mode goes first.
+        let sent = (call.before + [call]).reduce(into: [String: JSONValue]()) { $0.merge($1.data) { $1 } }
         var details: [String] = []
-        if case .number(let level)? = call.data["brightness_pct"] { details.append("\(Int(level))%") }
-        if case .number(let degrees)? = call.data["temperature"] { details.append(JSONValue.number(degrees).stringValue! + "°") }
-        if case .string(let mode)? = call.data["hvac_mode"] { details.append(mode) }
-        if case .string(let colour)? = call.data["color_name"] { details.append(colour) }
+        if case .number(let level)? = sent["brightness_pct"] { details.append("\(Int(level))%") }
+        if case .number(let degrees)? = sent["temperature"] { details.append(JSONValue.number(degrees).stringValue! + "°") }
+        if case .string(let mode)? = sent["hvac_mode"] { details.append(mode) }
+        if case .string(let colour)? = sent["color_name"] { details.append(colour) }
         if let value = request.field("value") { details.append(value) }
         let verb = call.domain == "scene" || call.domain == "script" ? "Run" : verbs[call.service] ?? "\(call.domain).\(call.service)"
         return ModuleSummary(verb: verb, subject: subject, details: details)
@@ -362,8 +377,12 @@ public final class HomeAssistantModule: KeybowModule, @unchecked Sendable {
         do {
             let call = try Self.call(for: request)
             let api = try client()
-            for first in call.before { _ = try await api.call(first.domain, first.service, data: first.data) }
-            let changed = try await api.call(call.domain, call.service, data: call.data)
+            // What each call changed, the latest of each entity's.
+            var changed: [EntityState] = []
+            for step in call.before + [call] {
+                let now = try await api.call(step.domain, step.service, data: step.data)
+                changed = changed.filter { old in !now.contains { $0.entityID == old.entityID } } + now
+            }
             return Self.outcome(of: call, entities: Self.entities(request), changed: changed)
         } catch let error as ModuleError {
             return .failure(error.message, error.detail)

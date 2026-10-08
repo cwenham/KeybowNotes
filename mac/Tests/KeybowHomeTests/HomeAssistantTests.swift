@@ -165,10 +165,19 @@ final class HomeAssistantTests: XCTestCase {
                         "flash": .bool(false)])
         XCTAssertEqual(try call(["entity": "light.desk_lamp", "data": #"{"transition": 5}"#]).data["transition"], .number(5))
 
-        // A thermostat's turn_on takes no temperature: setting it is what's meant.
-        XCTAssertEqual(try call(["entity": "climate.study", "service": "turn_on", "temperature": "26", "mode": "heat"]),
-                       .init(domain: "climate", service: "set_temperature",
-                             data: ["entity_id": .string("climate.study"), "temperature": .number(26), "hvac_mode": .string("heat")]))
+        // A thermostat's turn_on takes no temperature: setting it is what's
+        // meant — in its mode, set first and by itself, since many integrations
+        // ignore a mode sent with the temperature, and a temperature while off.
+        let heatTo26 = HomeAssistantModule.Call(
+            domain: "climate", service: "set_temperature",
+            data: ["entity_id": .string("climate.study"), "temperature": .number(26)],
+            before: [.init(domain: "climate", service: "set_hvac_mode",
+                           data: ["entity_id": .string("climate.study"), "hvac_mode": .string("heat")])])
+        XCTAssertEqual(try call(["entity": "climate.study", "service": "turn_on", "temperature": "26", "mode": "heat"]), heatTo26)
+        XCTAssertEqual(try call(["entity": "climate.study", "service": "set_temperature", "temperature": "26", "mode": "heat"]),
+                       heatTo26, "named, the same")
+        XCTAssertEqual(try call(["entity": "climate.study", "temperature": "26", "mode": "heat"]), heatTo26, "unnamed, the same")
+        XCTAssertEqual(try call(["entity": "climate.study", "temperature": "26"]).before, [], "setting it, not turning it on")
         let warm = try call(["entity": "climate.study", "service": "turn_on", "temperature": "26"])
         XCTAssertEqual(warm.service, "set_temperature")
         XCTAssertEqual(warm.before, [.init(domain: "climate", service: "turn_on", data: ["entity_id": .string("climate.study")])],
@@ -219,6 +228,27 @@ final class HomeAssistantTests: XCTestCase {
         _ = await module.run(request(["entity": "climate.hallway", "service": "turn_on", "temperature": "21"]), now: now)
         XCTAssertEqual(home.requests.dropFirst(before).map { $0.url!.path },
                        ["/api/services/climate/turn_on", "/api/services/climate/set_temperature"])
+
+        // Off, at the 7° it shows while off: the mode first, then the
+        // temperature — each by itself — and what it ended up as.
+        func study(_ state: String, _ target: Int) -> String {
+            #"{"entity_id": "climate.study", "state": "\#(state)", "attributes": {"temperature": \#(target), "friendly_name": "Study"}}"#
+        }
+        home.answers["POST /api/services/climate/set_hvac_mode"] = (200, "[\(study("heat", 7))]")
+        home.answers["POST /api/services/climate/set_temperature"] = (200, "[\(study("heat", 26))]")
+        let start = home.requests.count
+        let heated = await module.run(request(["entity": "climate.study", "service": "turn_on", "temperature": "26",
+                                               "mode": "heat"]), now: now)
+        XCTAssertEqual(home.requests.dropFirst(start).map { $0.url!.path },
+                       ["/api/services/climate/set_hvac_mode", "/api/services/climate/set_temperature"])
+        XCTAssertEqual(home.body(start)["hvac_mode"] as? String, "heat")
+        XCTAssertNil(home.body(start)["temperature"])
+        XCTAssertEqual(home.body(start + 1)["temperature"] as? Int, 26)
+        XCTAssertNil(home.body(start + 1)["hvac_mode"], "not sent again, where it'd be ignored")
+        XCTAssertEqual(heated, .success("Study: heat, 26°"))
+        XCTAssertEqual(module.summary(of: request(["entity": "climate.study", "service": "turn_on", "temperature": "26",
+                                                   "mode": "heat"]), now: now),
+                       ModuleSummary(verb: "Set", subject: "study", details: ["26°", "heat"]))
 
         home.answers["POST /api/services/light/toggle"] = (200, "[]")
         let unchanged = await module.run(request(["entity": "light.desk_lamp"]), now: now)

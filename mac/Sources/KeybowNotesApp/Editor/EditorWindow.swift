@@ -27,6 +27,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         window.center()
         window.setFrameAutosaveName("KeybowNotesTreeEditor")
         model.undoManager = window.undoManager
+        // On the trees a keypad that's plugged in uses: not Default, when
+        // every one has a section of its own.
+        if let used = KeypadBar.users(of: model).keys.min(), model.keypad == 0, KeypadBar.users(of: model)[0] == nil {
+            model.keypad = used
+        }
         updateTitle()
         preselectForDebugging()
     }
@@ -337,10 +342,38 @@ private struct KeypadBar: View {
 
     private var document: OutlineDocument { model.document }
 
+    /// The keypads connected, by the trees each uses: 0 for Default.
+    static func users(of model: EditorModel) -> [Int: [String]] {
+        Dictionary(grouping: USBSerialPorts.keypads()) { device in
+            model.compilation.config?.keypadIndex(for: device) ?? 0
+        }.mapValues { $0.map(\.model.title) }
+    }
+
     var body: some View {
+        let users = Self.users(of: model)
+        VStack(alignment: .leading, spacing: 6) {
+            bar(users)
+            if !users.isEmpty, users[min(model.keypad, document.keypads.count)] == nil { unused(users) }
+        }
+    }
+
+    /// Edits here wouldn't reach a keypad: say which trees each one uses.
+    private func unused(_ users: [Int: [String]]) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            Text("No keypad that's plugged in uses these trees.")
+            ForEach(users.keys.sorted(), id: \.self) { index in
+                Button("\(users[index]!.joined(separator: " and ")) uses “\(title(index))”") { model.keypad = index }
+                    .buttonStyle(.link)
+            }
+        }
+        .font(.callout)
+    }
+
+    private func bar(_ users: [Int: [String]]) -> some View {
         HStack(spacing: 10) {
             HStack(spacing: 2) {
-                ForEach(0..<document.keypadCount, id: \.self) { index in tab(index) }
+                ForEach(0..<document.keypadCount, id: \.self) { index in tab(index, inUse: users[index] != nil) }
                 Button(action: add) {
                     Image(systemName: "plus").padding(.horizontal, 6).padding(.vertical, 4).contentShape(Rectangle())
                 }
@@ -358,7 +391,7 @@ private struct KeypadBar: View {
         index == 0 ? "Default" : document.keypads[index - 1].name
     }
 
-    private func tab(_ index: Int) -> some View {
+    private func tab(_ index: Int, inUse: Bool) -> some View {
         let chosen = index == min(model.keypad, document.keypads.count)
         return Button {
             model.keypad = index
@@ -366,6 +399,10 @@ private struct KeypadBar: View {
             HStack(spacing: 5) {
                 Image(systemName: "square.grid.4x3.fill").imageScale(.small)
                 Text(title(index)).fontWeight(chosen ? .semibold : .regular)
+                if inUse {
+                    // A keypad that's plugged in uses these.
+                    Circle().fill(.green).frame(width: 6, height: 6)
+                }
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 4)

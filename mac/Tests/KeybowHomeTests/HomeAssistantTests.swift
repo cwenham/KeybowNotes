@@ -165,6 +165,20 @@ final class HomeAssistantTests: XCTestCase {
                         "flash": .bool(false)])
         XCTAssertEqual(try call(["entity": "light.desk_lamp", "data": #"{"transition": 5}"#]).data["transition"], .number(5))
 
+        // A thermostat's turn_on takes no temperature: setting it is what's meant.
+        XCTAssertEqual(try call(["entity": "climate.lounge", "service": "turn_on", "temperature": "26", "mode": "heat"]),
+                       .init(domain: "climate", service: "set_temperature",
+                             data: ["entity_id": .string("climate.lounge"), "temperature": .number(26), "hvac_mode": .string("heat")]))
+        let warm = try call(["entity": "climate.lounge", "service": "turn_on", "temperature": "26"])
+        XCTAssertEqual(warm.service, "set_temperature")
+        XCTAssertEqual(warm.before, [.init(domain: "climate", service: "turn_on", data: ["entity_id": .string("climate.lounge")])],
+                       "turned on first, with no mode to turn it on in")
+        XCTAssertEqual(try call(["entity": "climate.lounge", "service": "turn_on", "mode": "heat"]).service, "set_hvac_mode")
+        XCTAssertEqual(try call(["entity": "climate.lounge", "service": "turn_off", "temperature": "26"]).data,
+                       ["entity_id": .string("climate.lounge")])
+        XCTAssertEqual(try call(["entity": "light.desk_lamp", "service": "turn_off", "brightness": "40"]).data,
+                       ["entity_id": .string("light.desk_lamp")])
+
         XCTAssertThrowsError(try call(["entity": "lock.front_door"])) { error in
             XCTAssertEqual((error as? ModuleError)?.message, "Say what to do with lock.front_door")
         }
@@ -198,6 +212,13 @@ final class HomeAssistantTests: XCTestCase {
             """)
         let scene = await module.run(request(["entity": "scene.evening"]), now: now)
         XCTAssertEqual(scene, .success("Ran Evening"))
+
+        home.answers["POST /api/services/climate/turn_on"] = (200, "[]")
+        home.answers["POST /api/services/climate/set_temperature"] = (200, "[\(hallway)]")
+        let before = home.requests.count
+        _ = await module.run(request(["entity": "climate.hallway", "service": "turn_on", "temperature": "21"]), now: now)
+        XCTAssertEqual(home.requests.dropFirst(before).map { $0.url!.path },
+                       ["/api/services/climate/turn_on", "/api/services/climate/set_temperature"])
 
         home.answers["POST /api/services/light/toggle"] = (200, "[]")
         let unchanged = await module.run(request(["entity": "light.desk_lamp"]), now: now)

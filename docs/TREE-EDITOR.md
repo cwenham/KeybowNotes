@@ -69,6 +69,10 @@ it. Nothing the editor knows is kept anywhere but the outline.
 With more than one keypad, each can have trees of its own: a `# keypad`
 section of the outline ([CONFIG-LANGUAGE.md](CONFIG-LANGUAGE.md#keypads)).
 
+- **A green dot** on a tab: a keypad that's plugged in uses those trees. On
+  trees none of them uses — Default, when each has a section of its own — a
+  note under the tabs says so, with a link to each keypad's own tab, since
+  edits there won't reach a keypad. The editor opens on trees that are in use.
 - **+** adds one. It's named and set for the first connected keypad still using
   the Default trees, if there is one; else it's "Keypad 2" for no model yet.
 - Choosing a keypad's tab shows its settings beside the tabs:

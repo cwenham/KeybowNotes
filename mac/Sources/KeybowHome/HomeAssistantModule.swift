@@ -191,6 +191,9 @@ public final class HomeAssistantModule: KeybowModule, @unchecked Sendable {
         var domain: String
         var service: String
         var data: [String: JSONValue]
+        /// Called first: turning a thermostat on before setting it, when the
+        /// mode to turn it on in isn't given.
+        var before: [Call] = []
     }
 
     static func entities(_ request: ModuleRequest) -> [String] {
@@ -240,8 +243,9 @@ public final class HomeAssistantModule: KeybowModule, @unchecked Sendable {
         if let named = request.field("service") {
             let parts = named.split(separator: ".", maxSplits: 1).map(String.init)
             if let value { data[["select", "input_select"].contains(domain) ? "option" : "value"] = .string(value) }
-            return parts.count == 2 ? Call(domain: parts[0], service: parts[1], data: data)
+            let call = parts.count == 2 ? Call(domain: parts[0], service: parts[1], data: data)
                 : Call(domain: domain, service: named, data: data)
+            return meant(call, temperature: temperature != nil, mode: mode != nil)
         }
         if mustSay.contains(domain) {
             throw ModuleError("Say what to do with \(first)", "service: lock or service: unlock — or arm, or disarm.")
@@ -264,6 +268,30 @@ public final class HomeAssistantModule: KeybowModule, @unchecked Sendable {
             break
         }
         return Call(domain: domain, service: services[domain] ?? "toggle", data: data)
+    }
+
+    /// What a named service takes, given what else is set. A thermostat's
+    /// turn_on takes no temperature, so turning one on to 21° is setting it
+    /// — in the mode given, or after turning it on — and turning one off, or
+    /// a light, sends nothing about how it would be.
+    static func meant(_ call: Call, temperature: Bool, mode: Bool) -> Call {
+        var call = call
+        let settings = ["temperature", "hvac_mode", "brightness_pct", "rgb_color", "color_name", "color_temp_kelvin"]
+        switch (call.domain, call.service) {
+        case ("climate", "turn_on") where temperature:
+            if !mode {
+                let entity = call.data["entity_id"].map { ["entity_id": $0] } ?? [:]
+                call.before = [Call(domain: "climate", service: "turn_on", data: entity)]
+            }
+            call.service = "set_temperature"
+        case ("climate", "turn_on") where mode:
+            call.service = "set_hvac_mode"
+        case (_, "turn_off"):
+            for key in settings { call.data.removeValue(forKey: key) }
+        default:
+            break
+        }
+        return call
     }
 
     /// `#ff8800` → [255, 136, 0].
@@ -333,7 +361,9 @@ public final class HomeAssistantModule: KeybowModule, @unchecked Sendable {
     public func run(_ request: ModuleRequest, now: Date) async -> ActionOutcome {
         do {
             let call = try Self.call(for: request)
-            let changed = try await client().call(call.domain, call.service, data: call.data)
+            let api = try client()
+            for first in call.before { _ = try await api.call(first.domain, first.service, data: first.data) }
+            let changed = try await api.call(call.domain, call.service, data: call.data)
             return Self.outcome(of: call, entities: Self.entities(request), changed: changed)
         } catch let error as ModuleError {
             return .failure(error.message, error.detail)

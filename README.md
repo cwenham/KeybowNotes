@@ -186,6 +186,17 @@ and menu commands. See [docs/MODULES.md](docs/MODULES.md).
 5. **Try things safely** — *Dry Run* in the menu shows what a key would do without
    doing it.
 
+## From other apps, and AI agents
+
+KeybowNotes can be driven from outside as well as by its keys. **AppleScript**
+and **Shortcuts** can run an entry as though its keys were pressed, add,
+change and remove entries, read a tree, and start, stop and lap the
+stopwatch. An **MCP server** gives AI agents — Claude Desktop, Claude Code —
+the same, with a guide to designing trees and a checker for what they write.
+And **Describe Your Keypads…** has Claude draft trees from what you say you'd
+like the keypads for, shown to you before anything changes. See
+[docs/AUTOMATION.md](docs/AUTOMATION.md).
+
 ## When a keypad isn't found
 
 *Set Up a Keypad…* brings in a troubleshooter by itself when no keypad turns up,
@@ -223,6 +234,10 @@ through AppleScript rules that out.
 - [docs/TREE-EDITOR.md](docs/TREE-EDITOR.md) — the editor, its keys and its panes
 - [docs/MODULES.md](docs/MODULES.md) — the module interface, the stopwatch and
   Claude
+- [docs/AUTOMATION.md](docs/AUTOMATION.md) — AppleScript, Shortcuts, the MCP
+  server for AI agents, and having Claude draft your trees
+- [docs/AGENT-GUIDE.md](docs/AGENT-GUIDE.md) — what AI agents are told about
+  designing trees
 - [firmware/README.md](firmware/README.md) — the keypad's side and its protocol
 - [mac/README.md](mac/README.md) — building, running and testing the Mac side
 

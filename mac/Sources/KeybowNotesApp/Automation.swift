@@ -89,6 +89,12 @@ final class Automation {
         OutlineWriter.text(try document())
     }
 
+    /// "Keybow 2040, using the trees “Desk”", for each keypad plugged in.
+    func connectedKeypads(in document: OutlineDocument) -> [String] {
+        let names = TreeControl.keypadNames(document)
+        return hooks.connected().map { "\($0.name), using the trees “\(names[min($0.keypad, names.count - 1)])”" }
+    }
+
     func check(_ text: String) -> String {
         TreeControl.check(text, locateApp: AppLocator.locate)
     }
@@ -161,6 +167,11 @@ final class Automation {
             try TreeControl.replace(kind, keypad: index, with: text, in: &document)
             return "Replaced the \(TreeControl.treeName(kind)) tree of \(TreeControl.keypadNames(document)[index])."
         }
+    }
+
+    /// Claude's draft, where it was asked for.
+    func applyDraft(_ outline: String, scope: TreeDraft.Scope) throws -> String {
+        try edit { document in try TreeDraft.apply(outline, scope: scope, to: &document) }
     }
 
     /// A new keypad section, for a keypad of `model`, optionally one board's.

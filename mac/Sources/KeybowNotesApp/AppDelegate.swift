@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var editorWindow: EditorWindowController?
     private var setupWindow: KeypadSetupWindowController?
     private var troubleshooterWindow: TroubleshooterWindowController?
+    private var draftWindow: TreeDraftWindowController?
     /// Every keypad this Mac has had plugged in: where, and when last.
     private var knownKeypads = KnownKeypads.load()
     /// What was plugged in when they were last noted down, and when.
@@ -115,6 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Automation.shared = Automation(hooks: automationHooks())
         if options.setUpKeypad { showKeypadSetup() }
         if options.troubleshoot { showTroubleshooter() }
+        if options.draft { showDraft() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -720,6 +722,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         addItem(to: menu, "Edit Tree…", #selector(openEditor), key: "e")
         addItem(to: menu, "Set Up a Keypad…", #selector(openKeypadSetup))
         addItem(to: menu, "Find a Missing Keypad…", #selector(openTroubleshooter))
+        addItem(to: menu, "Describe Your Keypads…", #selector(openDraft))
         addItem(to: menu, "Settings…", #selector(openSettings), key: ",")
         addItem(to: menu, "Reload Config", #selector(reloadConfig), key: "r")
         addItem(to: menu, "Open Config Folder", #selector(openConfigFolder))
@@ -860,6 +863,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func openTroubleshooter() { showTroubleshooter() }
+
+    @objc private func openDraft() { showDraft() }
+
+    /// Claude drafts trees from what the person says they want.
+    private func showDraft() {
+        if draftWindow == nil {
+            draftWindow = TreeDraftWindowController(
+                openSettings: { [weak self] in self?.showSettings() },
+                openEditor: { [weak self] keypad in
+                    self?.showEditor()
+                    self?.editorWindow?.model.keypad = keypad
+                })
+        }
+        draftWindow?.show()
+    }
 
     /// Looks for a keypad that's gone missing, or isn't working: `wanted`
     /// is one's unique ID or model; nil for those not connected, else all.

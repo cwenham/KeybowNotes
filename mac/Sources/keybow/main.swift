@@ -43,6 +43,10 @@ usage: keybow <command>
                      what's plugged in, the USB log, drives and ports.
                      --console starts a keypad's program again to read what it
                      says; --watch watches while you unplug one and plug it in
+  mcp                for AI agents: a Model Context Protocol server on standard
+                     input and output — read the guide and the action types,
+                     check outline text, read and change the trees, run
+                     entries and work the stopwatch, through the app
   upgrade-outline <outline>
                      rewrite an older outline in the current syntax: [brackets]
                      instead of (parentheses), plus # contacts and # projects
@@ -483,6 +487,9 @@ case "setup":
         }
     }
     dispatchMain()
+
+case "mcp":
+    MCPServer().run()
 
 case "troubleshoot":
     var rest = Array(arguments.dropFirst())

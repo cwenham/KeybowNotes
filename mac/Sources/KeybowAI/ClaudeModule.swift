@@ -118,11 +118,19 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
     /// window's model and effort. With a `schema`, the reply is JSON that
     /// matches it (structured outputs). Other modules find this through
     /// `ModuleRegistry.shared.module(id: ClaudeModule.id) as? ClaudeModule`.
-    public func ask(system: String, prompt: String, schema: [String: Any]? = nil) async throws -> String {
+    /// `effort`, `maxTokens` and `timeout` raise the Settings window's — and
+    /// the blocks' limits — for work that's bigger: drafting a whole tree.
+    public func ask(system: String, prompt: String, schema: [String: Any]? = nil, effort atLeast: String? = nil,
+                    maxTokens: Int? = nil, timeout: TimeInterval? = nil) async throws -> String {
         let modelName = host?.setting("model", for: Self.id) ?? Self.defaultModel
         let model = Self.model(named: modelName) ?? Self.model(named: Self.defaultModel)!
-        let effort = host?.setting("effort", for: Self.id) ?? Self.defaultEffort
-        return try await send(try request(model: model, effort: effort, system: system, prompt: prompt, schema: schema))
+        var effort = host?.setting("effort", for: Self.id) ?? Self.defaultEffort
+        if let atLeast, let wanted = Self.efforts.firstIndex(of: atLeast), let set = Self.efforts.firstIndex(of: effort),
+           wanted > set {
+            effort = atLeast
+        }
+        return try await send(try request(model: model, effort: effort, system: system, prompt: prompt, schema: schema,
+                                          maxTokens: maxTokens ?? Self.maxTokens, timeout: timeout ?? Self.timeout))
     }
 
     /// Whether there's a key to ask with.
@@ -144,7 +152,7 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
             case .notConnectedToInternet, .networkConnectionLost:
                 throw ModuleError("Can't reach Claude", "There's no internet connection.")
             case .timedOut:
-                throw ModuleError("Claude took too long to reply", "Nothing came back in \(Int(Self.timeout)) seconds.")
+                throw ModuleError("Claude took too long to reply", "Nothing came back in \(Int(request.timeoutInterval)) seconds.")
             default:
                 throw ModuleError("Can't reach Claude", error.localizedDescription)
             }
@@ -176,14 +184,14 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
     }
 
     func request(model: Model, effort: String, system: String, prompt: String,
-                 schema: [String: Any]?) throws -> URLRequest {
+                 schema: [String: Any]?, maxTokens: Int = maxTokens, timeout: TimeInterval = timeout) throws -> URLRequest {
         guard let key = host?.secret("apiKey", for: Self.id), !key.isEmpty else {
             throw ModuleError("Claude needs an API key", "Make one in the Claude Console, then add it in Settings → Claude.")
         }
 
         var body: [String: Any] = [
             "model": model.id,
-            "max_tokens": Self.maxTokens,
+            "max_tokens": maxTokens,
             "system": system,
             "messages": [["role": "user", "content": try Self.content(prompt)]],
         ]
@@ -195,7 +203,7 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
         if !outputConfig.isEmpty { body["output_config"] = outputConfig }
         if model.fallbacks { body["fallbacks"] = "default" }
 
-        var request = URLRequest(url: Self.endpoint, timeoutInterval: Self.timeout)
+        var request = URLRequest(url: Self.endpoint, timeoutInterval: timeout)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.setValue(key, forHTTPHeaderField: "x-api-key")

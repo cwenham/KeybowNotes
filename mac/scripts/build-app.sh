@@ -24,6 +24,7 @@ install=false
 
 echo "==> Building a universal release binary"
 swift build -c release --arch arm64 --arch x86_64 --product keybownotes
+swift build -c release --arch arm64 --arch x86_64 --product keybow
 BIN_DIR=$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)
 
 echo "==> Assembling $APP"
@@ -44,6 +45,12 @@ cp "$OUT/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 # What AppleScript can ask of it.
 cp Packaging/KeybowNotes.sdef "$APP/Contents/Resources/KeybowNotes.sdef"
+
+# For AI agents: the command line, whose `keybow mcp` an MCP client runs, and
+# the guides it — and the app's own drafting — give them.
+mkdir -p "$APP/Contents/Helpers" "$APP/Contents/Resources/Guide"
+cp "$BIN_DIR/keybow" "$APP/Contents/Helpers/keybow"
+cp ../docs/AGENT-GUIDE.md ../docs/CONFIG-LANGUAGE.md "$APP/Contents/Resources/Guide/"
 
 # Shortcuts' actions: the metadata Shortcuts reads them from, which Xcode
 # would make. The compiler records the app's App Intents types as constant
@@ -95,9 +102,11 @@ if [[ -n "$identity" ]]; then
     echo "    The first time, macOS asks whether codesign may use your signing key."
     echo "    That dialog can open behind other windows and isn't in Exposé or the Dock;"
     echo "    if this seems stuck, look for it, and choose Always Allow."
+    codesign --force --sign "$identity" --timestamp=none "$APP/Contents/Helpers/keybow"
     codesign --force --sign "$identity" --timestamp=none "$APP"
     echo "    signed as: $identity"
 else
+    codesign --force --sign - "$APP/Contents/Helpers/keybow"
     codesign --force --sign - "$APP"
     echo "    signed ad hoc — permissions will be asked for again after each rebuild"
 fi

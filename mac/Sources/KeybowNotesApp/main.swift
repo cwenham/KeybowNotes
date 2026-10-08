@@ -9,7 +9,7 @@ import KeybowKit
 //
 //   swift run keybownotes [--config tree.md] [--screen cursor|main] [--dry-run]
 //                         [--show-settings] [--show-data-sources] [--edit-tree] [--set-up-keypad]
-//                         [--troubleshoot]
+//                         [--troubleshoot] [--draft]
 //                         [--simulate "4 8 12"] [--pace 1.2]
 //                         [--debug-snapshots dir]
 //
@@ -32,6 +32,7 @@ struct Options {
     var editTree = false
     var setUpKeypad = false
     var troubleshoot = false
+    var draft = false
 }
 
 func fail(_ message: String) -> Never {
@@ -71,6 +72,8 @@ func parseOptions() -> Options {
             options.setUpKeypad = true
         case "--troubleshoot":
             options.troubleshoot = true
+        case "--draft":
+            options.draft = true
         case "--debug-snapshots":
             guard let path = arguments.next() else { fail("--debug-snapshots needs a directory") }
             let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)

@@ -41,6 +41,8 @@ struct PrivacyPane: View {
             Text("macOS asks once about each, the first time it's needed — or now, with Allow. Once answered, it can "
                  + "only be changed in System Settings → Privacy & Security.")
                 .font(.caption).foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
 
         Section {
@@ -58,6 +60,8 @@ struct PrivacyPane: View {
             Text("macOS says how it stands only for an app that's open: Ask Now opens it out of the way to ask. Apps "
                  + "that control KeybowNotes — an AI agent's, Shortcuts, a script — are asked about in the same place.")
                 .font(.caption).foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
 
         claude
@@ -86,6 +90,8 @@ struct PrivacyPane: View {
             Text("What you write in the conversation always goes, with which keypads are plugged in. It goes to "
                  + "Anthropic, with your API key.")
                 .font(.caption).foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
 
         Section {
@@ -106,6 +112,8 @@ struct PrivacyPane: View {
             Text("Claude looks only when it makes music keys, and sees only what it asks for. AI agents asking through "
                  + "KeybowNotes' MCP server or AppleScript see no more than this either.")
                 .font(.caption).foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
 
         Section {
@@ -133,6 +141,8 @@ struct PrivacyPane: View {
                  + "The block's own words always go, and anything else it fills in. Data Sources' Find It sends "
                  + "Claude the page it's looking at.")
                 .font(.caption).foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

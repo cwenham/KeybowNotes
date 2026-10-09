@@ -35,7 +35,10 @@ struct SettingsView: View {
                     }
                 }
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
+            // In a window of AppKit's making the column width alone is
+            // ignored, and the sidebar cuts "Calendar & Reminders" short.
+            .frame(minWidth: 200)
+            .navigationSplitViewColumnWidth(min: 200, ideal: 200, max: 260)
             .toolbar(removing: .sidebarToggle)
         } detail: {
             Form { page }

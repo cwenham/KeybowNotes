@@ -269,6 +269,20 @@ public struct CalendarList: Equatable, Sendable {
     }
 }
 
+extension Array where Element == CalendarList {
+    /// One a name, as calendars are kept and matched, with the accounts that
+    /// have one by that name: "Calendar — iCloud, Google".
+    public var choices: [FieldChoice] {
+        var accounts: [String: [String]] = [:]
+        for list in self where !(accounts[list.name]?.contains(list.account) ?? false) {
+            accounts[list.name, default: []].append(list.account)
+        }
+        return accounts.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }.map { name in
+            FieldChoice(name, title: accounts[name, default: []].joined(separator: ", "))
+        }
+    }
+}
+
 /// Where events and reminders are read and changed: EventKit in the app,
 /// something made up in tests.
 public protocol CalendarSource: Sendable {
@@ -296,14 +310,21 @@ extension EventKitService: CalendarSource {
         try lists(for: .reminder)
     }
 
-    /// Only with access already given: Settings mustn't raise a prompt.
-    private func lists(for type: EKEntityType) throws -> [CalendarList] {
+    /// The calendars a new event can go in, for the tree editor to offer.
+    public func calendarsForNewEvents() throws -> [CalendarList] {
+        try lists(for: .event, writable: true)
+    }
+
+    /// Only with access already given: Settings and the editor mustn't raise
+    /// a prompt.
+    private func lists(for type: EKEntityType, writable: Bool = false) throws -> [CalendarList] {
         let label = type == .event ? "Calendars" : "Reminders"
         guard Self.status(for: type) == .fullAccess else {
-            throw AccessError(message: "KeybowNotes can't see your \(label.lowercased()) yet",
+            throw AccessError(message: "\(label) aren't allowed for KeybowNotes yet",
                               detail: "Allow \(label) in Settings → Privacy, and they'll be listed here.")
         }
-        return store.calendars(for: type).map { CalendarList($0.title, account: $0.source.title) }
+        return store.calendars(for: type).filter { !writable || $0.allowsContentModifications }
+            .map { CalendarList($0.title, account: $0.source.title) }
     }
 
     public func events(from start: Date, to end: Date) async throws -> [CalendarEvent] {

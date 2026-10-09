@@ -126,13 +126,7 @@ public final class AgendaModule: KeybowModule, @unchecked Sendable {
         case "lists": lists = try await access { try await self.calendarSource().allReminderLists() }
         default: return []
         }
-        var accounts: [String: [String]] = [:]
-        for list in lists where !(accounts[list.name]?.contains(list.account) ?? false) {
-            accounts[list.name, default: []].append(list.account)
-        }
-        return accounts.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }.map { name in
-            FieldChoice(name, title: "\(name) — \(accounts[name, default: []].joined(separator: ", "))")
-        }
+        return lists.choices.map { FieldChoice($0.value, title: "\($0.value) — \($0.title ?? "")") }
     }
 
     private func chosen(_ setting: String) -> Set<String> {

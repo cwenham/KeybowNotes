@@ -133,7 +133,7 @@ public enum BuiltInActions {
                 ModuleField(key: "calendar", title: "Calendar", help: """
                     The calendar, by name. Empty: the one chosen in Settings, else Calendar's default.
                     Example: Work
-                    """),
+                    """, offersChoices: true),
                 ModuleField(key: "calendarId", title: "Calendar ID", help: """
                     The calendar by its identifier, which survives renaming. Usually left empty; name it in Calendar instead.
                     """),

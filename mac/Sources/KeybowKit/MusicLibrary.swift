@@ -462,12 +462,16 @@ extension MusicLibrary.Contents {
 
 /// What a built-in action's field can be set to, for the tree editor to
 /// offer as it's edited — a Music key's playlists, songs, albums, artists
-/// and genres — as a module offers its own.
+/// and genres, a Calendar key's calendars — as a module offers its own.
 public enum BuiltInChoices {
     /// Given the action's other fields as they stand, so one choice follows
-    /// another: an artist's albums, a genre's artists.
+    /// another: an artist's albums, a genre's artists. `calendars` lists the
+    /// calendars new events can go in: EventKit's, unless a test says.
     public static func choices(for field: String, type: String, fields: [String: String],
-                               library: MusicLibrary = .shared) async throws -> [FieldChoice] {
+                               library: MusicLibrary = .shared,
+                               calendars: @Sendable () async throws -> [CalendarList] = calendarsForNewEvents)
+        async throws -> [FieldChoice] {
+        if type == "calendar.createEvent", field == "calendar" { return try await calendars().choices }
         guard type == "music.play", ["playlist", "song", "album", "artist", "genre"].contains(field) else { return [] }
         let contents = try await library.contents()
         // A placeholder — artist: {{leaf}} — names nothing until the key's pressed.
@@ -491,6 +495,20 @@ public enum BuiltInChoices {
             return songs.prefix(2000).map { song in
                 FieldChoice(song.title, title: [song.artist, song.album].filter { !$0.isEmpty }.joined(separator: ", "))
             }
+        }
+    }
+
+    /// The calendars a new event can go in, as far as macOS lets KeybowNotes
+    /// see them: none, and why, until Calendars is allowed — never a prompt.
+    @Sendable public static func calendarsForNewEvents() async throws -> [CalendarList] {
+        guard EventKitService.isAvailable else {
+            throw ModuleError("Calendars are listed by KeybowNotes.app",
+                              "A development build can't ask macOS for access to Calendars.")
+        }
+        do {
+            return try await EventKitService.shared.calendarsForNewEvents()
+        } catch let error as EventKitService.AccessError {
+            throw ModuleError(error.message, error.detail)
         }
     }
 }

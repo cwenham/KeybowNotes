@@ -87,6 +87,34 @@ final class BuiltInActionsTests: XCTestCase {
         XCTAssertEqual(doc.node(id)?.text, "Docs [Notes, template.md]")
     }
 
+    func testACalendarKeyOffersTheCalendarsEventsCanGoIn() async throws {
+        let calendars: @Sendable () async throws -> [CalendarList] = {
+            [CalendarList("Work", account: "Exchange"), CalendarList("Calendar", account: "iCloud"),
+             CalendarList("Calendar", account: "Google")]
+        }
+        let offered = try await BuiltInChoices.choices(for: "calendar", type: "calendar.createEvent", fields: [:],
+                                                       calendars: calendars)
+        XCTAssertEqual(offered, [FieldChoice("Calendar", title: "iCloud, Google"), FieldChoice("Work", title: "Exchange")],
+                       "one a name, as the action finds it")
+        let title = try await BuiltInChoices.choices(for: "title", type: "calendar.createEvent", fields: [:],
+                                                     calendars: calendars)
+        XCTAssertEqual(title, [])
+        XCTAssertTrue(vocabulary.describe("calendar.createEvent")?.fields.first { $0.key == "calendar" }?.offersChoices
+                      == true, "so the editor offers them")
+    }
+
+    func testWithoutEventKitTheCalendarsArentListed() async {
+        guard !EventKitService.isAvailable else { return }
+        do {
+            _ = try await BuiltInChoices.choices(for: "calendar", type: "calendar.createEvent", fields: [:])
+            XCTFail()
+        } catch let error as ModuleError {
+            XCTAssertEqual(error.message, "Calendars are listed by KeybowNotes.app")
+        } catch {
+            XCTFail("\(error)")
+        }
+    }
+
     func testTheCatalogListsThem() {
         let catalog = AgentGuide.catalog()
         XCTAssertTrue(catalog.contains("- `phone.call`, Phone call — `Call`, `FaceTime`"), catalog)

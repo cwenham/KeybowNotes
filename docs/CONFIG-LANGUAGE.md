@@ -579,6 +579,10 @@ checklist can't be detected beforehand, so there is no guard for it.
 With neither `calendarId` nor `calendar`: the default calendar chosen in
 Settings, else Calendar's own default.
 
+In the tree editor, *Calendar* lists the calendars an event can go in, with
+their accounts, once Calendars is allowed in Settings → Privacy; until then it
+says so, and asks nothing. A name can still be typed, or a placeholder.
+
 ### `reminders.create` — a reminder
 
 | Field | |

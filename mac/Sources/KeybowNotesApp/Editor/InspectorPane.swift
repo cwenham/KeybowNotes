@@ -73,6 +73,24 @@ private func outcomeWord(for type: String) -> String {
     ModuleRegistry.shared.vocabulary.keyword(for: type) ?? type
 }
 
+/// What a node's brackets hold for a type, beside its title in the Type menu
+/// so the menu can be scanned for the word: `[Done]`, `[type: shortcut]`.
+private func bracketWord(for type: String) -> String {
+    if let word = ModuleRegistry.shared.vocabulary.keyword(for: type) { return "[\(word)]" }
+    return type == "app.open" ? "[app name]" : "[type: \(type)]"
+}
+
+/// Every way of writing a type, under the Type menu: `[Done]`,
+/// `[Complete Reminder]` or `[Tick Off]`. An app is opened by its name.
+private func writingHint(for type: String) -> String? {
+    guard let words = ModuleRegistry.shared.vocabulary.describe(type)?.keywords else { return nil }
+    if type == "app.open" { return "In the outline: the app's name, like [Safari]." }
+    let written = words.isEmpty ? [bracketWord(for: type)] : words.map { "[\($0)]" }
+    let listed = written.count < 2 ? written.joined()
+        : written.dropLast().joined(separator: ", ") + " or " + written.last!
+    return "In the outline: \(listed)."
+}
+
 private struct NodeInspector: View {
     let model: EditorModel
     let id: UUID
@@ -212,16 +230,22 @@ private struct NodeInspector: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Action").font(.subheadline.weight(.semibold))
             InspectorRow("Type", help: FieldHelp.type) {
-                Picker("Type", selection: Binding(
-                    get: { ownType },
-                    set: { type in model.edit("Set Type") { try $0.setType(id, type) } }
-                )) {
-                    ForEach(Array(typeNames.enumerated()), id: \.offset) { _, entry in
-                        let (type, name) = entry
-                        Text(type == nil ? "Inherit (\(typeName(inheritedTypeAbove)))" : name).tag(type)
+                VStack(alignment: .leading, spacing: 2) {
+                    Picker("Type", selection: Binding(
+                        get: { ownType },
+                        set: { type in model.edit("Set Type") { try $0.setType(id, type) } }
+                    )) {
+                        ForEach(Array(typeNames.enumerated()), id: \.offset) { _, entry in
+                            let (type, name) = entry
+                            Text(type.map { "\(name)  \(bracketWord(for: $0))" }
+                                 ?? "Inherit (\(typeName(inheritedTypeAbove)))").tag(type)
+                        }
+                    }
+                    .labelsHidden()
+                    if let hint = ownType.flatMap(writingHint) {
+                        Text(hint).font(.caption2).foregroundStyle(.secondary)
                     }
                 }
-                .labelsHidden()
             }
             if let type = action?.type, let fields = fields(for: type) {
                 let shown = ModuleRegistry.shared.module(handling: type)?.shownFields(type: type, fields: effectiveFields(of: type))
@@ -453,7 +477,7 @@ private struct NodeInspector: View {
                     Text("Nothing: just close").tag(String?.none)
                     ForEach(Array(typeNames.enumerated()), id: \.offset) { _, entry in
                         if let type = entry.0 {
-                            Text(entry.1).tag(Optional(type))
+                            Text("\(entry.1)  \(spec.key): \(outcomeWord(for: type))").tag(Optional(type))
                         }
                     }
                 }

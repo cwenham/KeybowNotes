@@ -222,7 +222,10 @@ For the selected node:
   and **where it comes from**: *set here*, *from Meeting* (an ancestor), or *from
   the defaults*. Setting a field writes a pair into this node's brackets;
   clearing one removes the pair, so the inherited value shows through again.
-  The type is a menu: *inherit*, or a type — which writes the keyword.
+  The type is a menu: *inherit*, or a type, each beside the word that writes
+  it in the outline — *Reminder done  [Done]* — and choosing one writes that
+  word. Under the menu, every word for the chosen type: `[Done]`,
+  `[Complete Reminder]` or `[Tick Off]`; for one with no word, `[type: …]`.
 - **Values** — template values set here, editable as key and value; and those
   inherited from above, read-only, with where each comes from.
 - **Contact / project** — when the node's label names a contact or project, its
@@ -270,7 +273,8 @@ For the selected node:
   values, like the stopwatch's *Do*, is a menu.
 - **When OK is chosen / When Cancel is chosen** — for *Display* and *Ask*, what
   each button runs: a Type menu of its own (*Nothing: just close*, or any action
-  type) and that type's fields, indented under it. Choosing a type writes
+  type, beside how it's written: *Copy to clipboard  ok: Copy*) and that type's
+  fields, indented under it. Choosing a type writes
   `ok: Copy` — its keyword where it has one — and each field `ok.text: …`. A
   display's sections appear once its Buttons include that button; an Ask always
   has both. A note under each says what `{{displayed}}` or `{{answer}}` holds,

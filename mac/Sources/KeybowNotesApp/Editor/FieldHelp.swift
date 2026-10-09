@@ -22,8 +22,8 @@ enum FieldHelp {
 
     static let type = """
         What pressing a leaf here does. Inherit takes the type from above; choosing one \
-        writes its keyword into the node's brackets.
-        Example: Calendar event writes [Calendar]
+        writes the word beside it into the node's brackets, and writing that word in the outline does the same.
+        Example: Reminder done writes [Done]
         """
 
     static let instant = """

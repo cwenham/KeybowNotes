@@ -135,10 +135,11 @@ own, with only the modules it needs.
 - **Settings.** A module describes its settings — text, a secret, a choice, a
   flag, or several of a list it gives as the window shows it
   (`choices(forSetting:)`: the person's calendars, to tick) — and the host
-  draws them on a page of its own in the Settings window, listed in the
-  sidebar under its name and `manifest.symbol`, an SF Symbol. The module reads
-  them with `setting(_:for:)`, and secrets with `secret(_:for:)`, which the
-  host keeps in the Keychain. A module never draws or stores them.
+  draws them on a page of its own in the Settings window, each with its `help`
+  written beneath, listed in the sidebar under its name and `manifest.symbol`,
+  an SF Symbol. The module reads them with `setting(_:for:)`, and secrets with
+  `secret(_:for:)`, which the host keeps in the Keychain. A module never draws
+  or stores them.
 - **Refusing a block.** Before a key's action reads or fetches anything, the
   host asks each module that replies to a block in it,
   `refusal(forBlock:using:)`, with the names of the placeholders inside the

@@ -444,8 +444,6 @@ private struct SeveralSettingRow: View {
                 Text(problem).font(.caption).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text(setting.help).font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
         .task {
             chosen = host.setting(setting.key, for: module).map(Self.names) ?? []
@@ -495,8 +493,9 @@ private struct SeveralSettingRow: View {
     }
 }
 
-/// One module setting: a secret goes to the Keychain and is never shown
-/// again; the rest are kept with the app's settings.
+/// One module setting, with what it's for written beneath: a secret goes to
+/// the Keychain and is never shown again; the rest are kept with the app's
+/// settings.
 private struct ModuleSettingRow: View {
     let module: String
     let setting: ModuleSetting
@@ -510,32 +509,45 @@ private struct ModuleSettingRow: View {
     private var host: AppModuleHost { Modules.host }
 
     var body: some View {
-        Group {
-            switch setting.kind {
-            case .secret: secret
-            case .choice(let choices):
-                Picker(setting.title, selection: Binding(
-                    get: { value.isEmpty ? setting.defaultValue : value },
-                    set: { value = $0; host.setSetting($0, setting.key, for: module) }
-                )) {
-                    ForEach(choices, id: \.value) { Text($0.title).tag($0.value) }
-                }
-            case .flag:
-                Toggle(setting.title, isOn: Binding(
-                    get: { (value.isEmpty ? setting.defaultValue : value) == "true" },
-                    set: { value = $0 ? "true" : "false"; host.setSetting(value, setting.key, for: module) }
-                ))
-            case .text:
-                TextField(setting.title, text: $value, prompt: Text(setting.defaultValue))
-                    .onSubmit { host.setSetting(value.isEmpty ? nil : value, setting.key, for: module) }
-            case .several(let all):
-                SeveralSettingRow(module: module, setting: setting, all: all)
+        VStack(alignment: .leading, spacing: 4) {
+            control
+            if let problem {
+                Text(problem).font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            // Written out, rather than a tooltip: one went unseen.
+            if !setting.help.isEmpty {
+                Text(setting.help).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .help(setting.help)
         .onAppear {
             value = host.setting(setting.key, for: module) ?? ""
             stored = setting.kind == .secret && host.hasSecret(setting.key, for: module)
+        }
+    }
+
+    @ViewBuilder
+    private var control: some View {
+        switch setting.kind {
+        case .secret: secret
+        case .choice(let choices):
+            Picker(setting.title, selection: Binding(
+                get: { value.isEmpty ? setting.defaultValue : value },
+                set: { value = $0; host.setSetting($0, setting.key, for: module) }
+            )) {
+                ForEach(choices, id: \.value) { Text($0.title).tag($0.value) }
+            }
+        case .flag:
+            Toggle(setting.title, isOn: Binding(
+                get: { (value.isEmpty ? setting.defaultValue : value) == "true" },
+                set: { value = $0 ? "true" : "false"; host.setSetting(value, setting.key, for: module) }
+            ))
+        case .text:
+            TextField(setting.title, text: $value, prompt: Text(setting.defaultValue))
+                .onSubmit { host.setSetting(value.isEmpty ? nil : value, setting.key, for: module) }
+        case .several(let all):
+            SeveralSettingRow(module: module, setting: setting, all: all)
         }
     }
 
@@ -554,19 +566,11 @@ private struct ModuleSettingRow: View {
                 }
             }
         } else {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    SecureField(setting.title, text: $draft, prompt: Text("Paste it here"))
-                        .onSubmit(save)
-                    Button("Save", action: save).disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
-                    if replacing { Button("Cancel") { replacing = false; draft = "" } }
-                }
-                if let problem {
-                    Text(problem).font(.caption).foregroundStyle(.orange)
-                } else {
-                    Text(setting.help).font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            HStack {
+                SecureField(setting.title, text: $draft, prompt: Text("Paste it here"))
+                    .onSubmit(save)
+                Button("Save", action: save).disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
+                if replacing { Button("Cancel") { replacing = false; draft = "" } }
             }
         }
     }

@@ -256,7 +256,8 @@ public struct ModuleSetting: Sendable {
     public let kind: Kind
     /// Used until the person sets one.
     public let defaultValue: String
-    /// The tooltip: what it does, and an example.
+    /// Written beneath it in the Settings window: what it's for, and an
+    /// example.
     public let help: String
 
     public init(key: String, title: String, kind: Kind, defaultValue: String = "", help: String = "") {

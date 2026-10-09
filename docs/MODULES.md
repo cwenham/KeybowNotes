@@ -219,10 +219,10 @@ dependency at all: another module's values are in every action's placeholders.
 - `sharing` is what the person lets Claude see, from Settings → Privacy, kept
   with the module's settings under `share.…` and `send.…` keys — everything,
   until something's unticked. It refuses a block that would send the selected
-  text, the clipboard or where they are when those are kept from it, and an
-  image or PDF on the clipboard as the request is made. The app reads the
-  rest — what goes with a drafting request, and how much of the Music library
-  (`MusicSharing`) its tool and AppleScript may show.
+  text, the clipboard, where they are or their calendar when those are kept
+  from it, and an image or PDF on the clipboard as the request is made. The app
+  reads the rest — what goes with a drafting request, and how much of the Music
+  library (`MusicSharing`) its tool and AppleScript may show.
 
 ## Data sources
 

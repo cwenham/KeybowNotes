@@ -286,6 +286,23 @@ final class ClaudeModuleTests: XCTestCase {
         }
     }
 
+    func testTheCalendarKeptFromClaudeIsRefused() {
+        let host = MemoryModuleHost()
+        let module = ClaudeModule(transport: StubTransport())
+        module.start(host: host)
+        XCTAssertNil(module.refusal(forBlock: "ai", using: ["event", "agenda.today", "reminder.due"]))
+
+        var sharing = ClaudeModule.Sharing()
+        sharing.calendar = false
+        for (key, value) in sharing.settings { host.set(value, for: key, of: ClaudeModule.id) }
+        XCTAssertEqual(module.sharing, sharing, "as it was kept")
+        XCTAssertEqual(module.refusal(forBlock: "ai", using: ["event.attendees", "leaf"]),
+                       "This key would send {{event.attendees}} to Claude, and Settings → Privacy keeps your calendar and reminders from it.")
+        XCTAssertNotNil(module.refusal(forBlock: "ai", using: ["agenda"]))
+        XCTAssertNotNil(module.refusal(forBlock: "ai", using: ["reminder.list"]))
+        XCTAssertNil(module.refusal(forBlock: "ai", using: ["events", "date", "leaf", "selection"]))
+    }
+
     func testImagesAndPDFsKeptFromClaudeArentSent() async {
         let transport = StubTransport()
         let host = MemoryModuleHost()

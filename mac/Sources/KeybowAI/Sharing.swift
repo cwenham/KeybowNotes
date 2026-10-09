@@ -28,6 +28,9 @@ extension ClaudeModule {
         public var media = true
         /// `{{location}}` and its parts.
         public var location = true
+        /// `{{event}}`, `{{agenda}}` and `{{reminder}}`, and their parts: the
+        /// person's meetings, who's in them, and what they've to do.
+        public var calendar = true
 
         public init() {}
 
@@ -43,6 +46,7 @@ extension ClaudeModule {
             clipboard = flag(Key.clipboard)
             media = flag(Key.media)
             location = flag(Key.location)
+            calendar = flag(Key.calendar)
         }
 
         /// Each setting as it's kept: nil where it's as it was to begin with.
@@ -52,7 +56,7 @@ extension ClaudeModule {
                 (Key.tree, flag(tree)), (Key.apps, flag(apps)), (Key.home, flag(home)),
                 (Key.music, music.detail == .songs ? nil : music.detail.rawValue), (Key.playlists, flag(music.playlists)),
                 (Key.selection, flag(selection)), (Key.clipboard, flag(clipboard)), (Key.media, flag(media)),
-                (Key.location, flag(location)),
+                (Key.location, flag(location)), (Key.calendar, flag(calendar)),
             ]
         }
 
@@ -66,6 +70,7 @@ extension ClaudeModule {
             static let clipboard = "send.clipboard"
             static let media = "send.media"
             static let location = "send.location"
+            static let calendar = "send.calendar"
         }
 
         /// Of the names used in a block, the first that's kept from Claude,
@@ -75,8 +80,15 @@ extension ClaudeModule {
                 if name == "selection", !selection { return (name, "the selected text") }
                 if name == "clipboard", !clipboard { return (name, "the clipboard") }
                 if name == "location" || name.hasPrefix("location."), !location { return (name, "where you are") }
+                if Self.isCalendar(name), !calendar { return (name, "your calendar and reminders") }
             }
             return nil
+        }
+
+        /// `event`, `agenda.today`, `reminder.due`: what the Meetings and
+        /// Agenda module reads from the calendar.
+        static func isCalendar(_ name: String) -> Bool {
+            ["event", "agenda", "reminder"].contains { name == $0 || name.hasPrefix($0 + ".") }
         }
     }
 }

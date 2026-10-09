@@ -94,7 +94,8 @@ public final class AgendaModule: KeybowModule, @unchecked Sendable {
                 Example: Reminders, Errands
                 """),
         ],
-        fetches: ["event", "agenda", "reminder"])
+        fetches: ["event", "agenda", "reminder"],
+        symbol: "calendar.badge.clock")
 
     private let source: CalendarSource?
     private let open: @Sendable (URL) async throws -> Void

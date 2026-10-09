@@ -1225,8 +1225,9 @@ the block's place. `{{#ai}}` asks Claude:
   reply›`, and never ask anything.
 - **What a block may send** is chosen in Settings → Privacy: the selected text
   (`{{selection}}`), the clipboard (`{{clipboard}}`), images and PDFs on it,
-  and where you are (`{{location}}` and its parts) — all of them, until
-  unticked. A key whose block uses one that's unticked is refused before
+  where you are (`{{location}}` and its parts), and your meetings and reminders
+  (`{{event}}`, `{{agenda}}`, `{{reminder}}` and their parts) — all of them,
+  until unticked. A key whose block uses one that's unticked is refused before
   anything is read, fetched or asked, and says which. Whether the clipboard
   holds an image is known only once it's read, so an image or PDF unticked
   stops the action then, before anything is sent. What the block's own words
@@ -1446,6 +1447,9 @@ Next [Display, text: "Next: **{{event.next|nothing}}** at {{event.next.start|}}"
   without it). Only KeybowNotes.app can ask for that: a development build says
   so instead. Nothing read is written to the log. **Previews** show
   `‹the meeting›`.
+- **Claude** is sent them, in a `{{#ai}}` block, only while Settings → Privacy
+  ticks *My meetings and reminders*; unticked, the key is refused before
+  anything is read.
 
 ### Quotes from a file: `{{quote file="…"}}`
 

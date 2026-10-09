@@ -274,12 +274,12 @@ all of it until the person says otherwise:
   isn't shared. AppleScript's `music library`, which the MCP server asks
   through, is held to the same, since AI agents are who use it.
 - **`{{#ai}}` blocks:** the selected text, the clipboard, images and PDFs on
-  it, and where you are. A module can refuse a block by what's written inside
-  it (`KeybowModule.refusal(forBlock:using:)`, given the placeholder names at
-  any depth); the pipeline asks before reading the selection or fetching
-  anything, so a refused key does nothing at all. Whether the clipboard holds
-  an image is known only once it's read, so that one is checked as the
-  request is made.
+  it, where you are, and the calendar — meetings, the agenda and reminders. A
+  module can refuse a block by what's written inside it
+  (`KeybowModule.refusal(forBlock:using:)`, given the placeholder names at any
+  depth); the pipeline asks before reading the selection or fetching anything,
+  so a refused key does nothing at all. Whether the clipboard holds an image is
+  known only once it's read, so that one is checked as the request is made.
 
 ### Overlay
 

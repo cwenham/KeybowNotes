@@ -134,6 +134,10 @@ struct PrivacyPane: View {
                 Text("Where I am")
                 Text("{{location}} and its parts — as exactly as Settings → Location says.")
             }
+            Toggle(isOn: shared.calendar) {
+                Text("My meetings and reminders")
+                Text("{{event}}, {{agenda}} and {{reminder}}: titles, times, who's invited, notes and links.")
+            }
         } header: {
             Text("Keys That Ask Claude")
         } footer: {
@@ -311,8 +315,10 @@ enum Permission: String, CaseIterable, Identifiable {
     var purpose: String {
         switch self {
         case .accessibility: return "Reads the selected text for {{selection}}, types and pastes into apps, and moves windows."
-        case .calendars: return "Adds the events your keys make, and lists your calendars to choose a default."
-        case .reminders: return "Adds the reminders your keys make, and lists your lists to choose a default."
+        case .calendars:
+            return "Adds the events your keys make, reads your meetings for {{event}} and {{agenda}}, and lists your calendars."
+        case .reminders:
+            return "Adds the reminders your keys make, reads and ticks off those due for {{reminder}}, and lists your lists."
         case .contacts: return "Looks people up when you add them in the tree editor."
         case .location: return "Puts where you are into keys that use {{location}}, only when one's pressed."
         case .music: return "Lists your music in the tree editor, and lets Claude look through as much as you share below."

@@ -70,7 +70,7 @@ public final class AgendaModule: KeybowModule, @unchecked Sendable {
                 ],
                 takesText: true),
             ModuleActionType(
-                type: "reminders.complete", title: "Complete reminder", keywords: ["Done", "Complete Reminder", "Tick Off"],
+                type: "reminders.complete", title: "Reminder done", keywords: ["Done", "Complete Reminder", "Tick Off"],
                 symbol: "checkmark.circle",
                 fields: [
                     ModuleField(key: "title", title: "Reminder", hint: "empty: the one due next", help: """

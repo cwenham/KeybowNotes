@@ -257,9 +257,26 @@ public struct CalendarReminder: Equatable, Sendable {
     }
 }
 
+/// A calendar or a Reminders list, by name, and the account it's in.
+public struct CalendarList: Equatable, Sendable {
+    public var name: String
+    /// iCloud, Google, On My Mac…
+    public var account: String
+
+    public init(_ name: String, account: String) {
+        self.name = name
+        self.account = account
+    }
+}
+
 /// Where events and reminders are read and changed: EventKit in the app,
 /// something made up in tests.
 public protocol CalendarSource: Sendable {
+    /// Every calendar, read-only ones too — birthdays, holidays — for
+    /// Settings to offer. Throws, rather than asking, without access.
+    func allCalendars() async throws -> [CalendarList]
+    /// Every Reminders list, likewise.
+    func allReminderLists() async throws -> [CalendarList]
     /// Every event that's on at some point between these, all calendars.
     func events(from start: Date, to end: Date) async throws -> [CalendarEvent]
     /// Every reminder not yet done, all lists.
@@ -271,6 +288,24 @@ public protocol CalendarSource: Sendable {
 }
 
 extension EventKitService: CalendarSource {
+    public func allCalendars() async throws -> [CalendarList] {
+        try lists(for: .event)
+    }
+
+    public func allReminderLists() async throws -> [CalendarList] {
+        try lists(for: .reminder)
+    }
+
+    /// Only with access already given: Settings mustn't raise a prompt.
+    private func lists(for type: EKEntityType) throws -> [CalendarList] {
+        let label = type == .event ? "Calendars" : "Reminders"
+        guard Self.status(for: type) == .fullAccess else {
+            throw AccessError(message: "KeybowNotes can't see your \(label.lowercased()) yet",
+                              detail: "Allow \(label) in Settings → Privacy, and they'll be listed here.")
+        }
+        return store.calendars(for: type).map { CalendarList($0.title, account: $0.source.title) }
+    }
+
     public func events(from start: Date, to end: Date) async throws -> [CalendarEvent] {
         try await ensureAccess(to: .event)
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)

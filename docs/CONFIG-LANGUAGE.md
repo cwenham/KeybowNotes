@@ -1440,8 +1440,8 @@ Next [Display, text: "Next: **{{event.next|nothing}}** at {{event.next.start|}}"
   come those due that day — and before, for today — with their times.
 - **Nothing there is empty,** so `{{event|No meeting}}` and
   `{{agenda|Nothing more today.}}` say so in your words.
-- **Which calendars and lists,** in Settings → Meetings and Agenda: names,
-  separated by commas. Empty reads every one — birthdays and holidays included.
+- **Which calendars and lists,** in Settings → Meetings and Agenda: every one,
+  or only those you tick. Birthdays and holidays are calendars too.
 - **Read when a key uses them,** through EventKit, which needs full access to
   Calendars (and Reminders, for `{{reminder}}`; the agenda leaves reminders out
   without it). Only KeybowNotes.app can ask for that: a development build says

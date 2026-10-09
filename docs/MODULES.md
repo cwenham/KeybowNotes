@@ -133,10 +133,12 @@ own, with only the modules it needs.
   the attributes back. Fetched values aren't blocks: they may go in fields
   that steer an action. Previews use `standIn(forValue:)`.
 - **Settings.** A module describes its settings — text, a secret, a choice, a
-  flag — and the host draws them on a page of its own in the Settings window,
-  listed in the sidebar under its name and `manifest.symbol`, an SF Symbol. The
-  module reads them with `setting(_:for:)`, and secrets with `secret(_:for:)`,
-  which the host keeps in the Keychain. A module never draws or stores them.
+  flag, or several of a list it gives as the window shows it
+  (`choices(forSetting:)`: the person's calendars, to tick) — and the host
+  draws them on a page of its own in the Settings window, listed in the
+  sidebar under its name and `manifest.symbol`, an SF Symbol. The module reads
+  them with `setting(_:for:)`, and secrets with `secret(_:for:)`, which the
+  host keeps in the Keychain. A module never draws or stores them.
 - **Refusing a block.** Before a key's action reads or fetches anything, the
   host asks each module that replies to a block in it,
   `refusal(forBlock:using:)`, with the names of the placeholders inside the
@@ -415,7 +417,9 @@ it did is on the screen, and the overlay steps aside.
   provides: EventKit's access and objects stay there. A repeating event's
   occurrences share an identifier, so a note goes to the occurrence that
   starts when the meeting meant does.
-- Settings: *Calendars* and *Reminder lists*, by name; empty for all.
+- Settings: *Calendars* and *Reminder lists*, every one or only those ticked —
+  the person's own, listed through `CalendarSource` once access is given, and
+  kept by name.
 
 ## Not yet
 

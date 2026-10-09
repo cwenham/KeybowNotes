@@ -6,13 +6,22 @@ import XCTest
 private actor FakeCalendar: CalendarSource {
     var events: [CalendarEvent]
     var reminders: [CalendarReminder]
+    var calendars: [CalendarList]
+    var lists: [CalendarList]
     private(set) var completed: [String] = []
     private(set) var appended: [(id: String, start: Date, text: String)] = []
 
-    init(events: [CalendarEvent] = [], reminders: [CalendarReminder] = []) {
+    init(events: [CalendarEvent] = [], reminders: [CalendarReminder] = [], calendars: [CalendarList] = [],
+         lists: [CalendarList] = []) {
         self.events = events
         self.reminders = reminders
+        self.calendars = calendars
+        self.lists = lists
     }
+
+    func allCalendars() async throws -> [CalendarList] { calendars }
+
+    func allReminderLists() async throws -> [CalendarList] { lists }
 
     func events(from start: Date, to end: Date) async throws -> [CalendarEvent] {
         events.filter { $0.start < end && $0.end > start }
@@ -180,6 +189,22 @@ final class AgendaModuleTests: XCTestCase {
         ])
         let values = try await module(calendar, host: host).fetch(["event"], params: [:], now: now)
         XCTAssertEqual(values["event"], "Review")
+    }
+
+    func testSettingsOfferEachCalendarAndListOnceByName() async throws {
+        let module = AgendaModule(source: FakeCalendar(
+            calendars: [CalendarList("Work", account: "Exchange"), CalendarList("Birthdays", account: "Other"),
+                        CalendarList("Calendar", account: "iCloud"), CalendarList("Calendar", account: "Google")],
+            lists: [CalendarList("Errands", account: "iCloud")]))
+        let calendars = try await module.choices(forSetting: "calendars")
+        XCTAssertEqual(calendars, [FieldChoice("Birthdays", title: "Birthdays — Other"),
+                                   FieldChoice("Calendar", title: "Calendar — iCloud, Google"),
+                                   FieldChoice("Work", title: "Work — Exchange")],
+                       "one a name, as they're kept and matched")
+        let lists = try await module.choices(forSetting: "lists")
+        XCTAssertEqual(lists, [FieldChoice("Errands", title: "Errands — iCloud")])
+        let other = try await module.choices(forSetting: "other")
+        XCTAssertEqual(other, [])
     }
 
     func testAnUnknownValueIsSaid() async {

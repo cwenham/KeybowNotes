@@ -100,6 +100,12 @@ public protocol KeybowModule: AnyObject, Sendable {
     /// to say why there are none: no token, nothing answering.
     func choices(for field: String, type: String, fields: [String: String]) async throws -> [FieldChoice]
 
+    /// What a setting of the `several` kind can be set to, as things stand:
+    /// the person's calendars. Asked as the Settings window shows it, so it
+    /// mustn't raise a prompt. Throw a `ModuleError` to say why there are
+    /// none.
+    func choices(forSetting key: String) async throws -> [FieldChoice]
+
     /// The fields worth showing in the editor for the action as it's set up
     /// — a thermostat's temperature, not a lamp's brightness — or nil for
     /// all of them. A field that's been set is shown whatever this says.
@@ -150,6 +156,7 @@ extension KeybowModule {
     public func standIn(forValue name: String) -> String { "‹\(name)›" }
     public func fetchSubject(for names: [String]) -> String { manifest.name }
     public func choices(for field: String, type: String, fields: [String: String]) async throws -> [FieldChoice] { [] }
+    public func choices(forSetting key: String) async throws -> [FieldChoice] { [] }
     public func shownFields(type: String, fields: [String: String]) -> Set<String>? { nil }
 }
 
@@ -227,6 +234,11 @@ public struct ModuleSetting: Sendable {
         case secret
         case choice([Choice])
         case flag
+        /// Any of a list the module gives as the window shows it — the
+        /// person's calendars — from `choices(forSetting:)`. Kept as their
+        /// values, separated by commas; kept empty, it means every one, which
+        /// `all` says: "Every calendar".
+        case several(all: String)
     }
 
     public struct Choice: Sendable, Equatable {

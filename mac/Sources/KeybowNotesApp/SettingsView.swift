@@ -405,6 +405,96 @@ private struct TimingRow: View {
     }
 }
 
+/// A setting of the `several` kind: every one of what the module lists —
+/// the person's calendars — or only those ticked, kept as their values
+/// separated by commas. Kept empty, it's every one.
+private struct SeveralSettingRow: View {
+    let module: String
+    let setting: ModuleSetting
+    /// "Every calendar".
+    let all: String
+
+    /// As kept, in the order ticked.
+    @State private var chosen: [String] = []
+    @State private var onlySome = false
+    /// Nil until the module has said.
+    @State private var choices: [FieldChoice]?
+    @State private var problem: String?
+
+    private var host: AppModuleHost { Modules.host }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Picker(setting.title, selection: Binding(get: { onlySome }, set: chooseOnlySome)) {
+                Text(all).tag(false)
+                Text("Only these:").tag(true)
+            }
+            .pickerStyle(.radioGroup)
+            if onlySome {
+                if choices == nil { ProgressView().controlSize(.small) }
+                ForEach(rows, id: \.value) { choice in
+                    Toggle(choice.title ?? choice.value, isOn: ticked(choice.value))
+                        .toggleStyle(.checkbox)
+                        // One stays ticked: none would be kept as every one.
+                        .disabled(chosen.count == 1 && isChosen(choice.value))
+                }
+                .padding(.leading, 20)
+            }
+            if let problem {
+                Text(problem).font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text(setting.help).font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .task {
+            chosen = host.setting(setting.key, for: module).map(Self.names) ?? []
+            onlySome = !chosen.isEmpty
+            do {
+                choices = try await ModuleRegistry.shared.module(id: module)?.choices(forSetting: setting.key) ?? []
+            } catch {
+                choices = []
+                problem = "\(error)"
+            }
+        }
+    }
+
+    /// What's offered, and anything kept that isn't among it any more.
+    private var rows: [FieldChoice] {
+        let offered = choices ?? []
+        let gone = chosen.filter { name in !offered.contains { $0.value.lowercased() == name.lowercased() } }
+        return offered + gone.map { FieldChoice($0, title: "\($0) — not found") }
+    }
+
+    private func isChosen(_ value: String) -> Bool {
+        chosen.contains { $0.lowercased() == value.lowercased() }
+    }
+
+    private func ticked(_ value: String) -> Binding<Bool> {
+        Binding(get: { isChosen(value) }, set: { on in
+            if on, !isChosen(value) { chosen.append(value) }
+            if !on { chosen.removeAll { $0.lowercased() == value.lowercased() } }
+            keep()
+        })
+    }
+
+    /// Only some starts with every one ticked, to untick from.
+    private func chooseOnlySome(_ some: Bool) {
+        onlySome = some
+        chosen = some ? (choices ?? []).map(\.value) : []
+        keep()
+    }
+
+    private func keep() {
+        host.setSetting(chosen.isEmpty ? nil : chosen.joined(separator: ", "), setting.key, for: module)
+    }
+
+    /// "Work, Family" → ["Work", "Family"].
+    static func names(_ kept: String) -> [String] {
+        kept.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+}
+
 /// One module setting: a secret goes to the Keychain and is never shown
 /// again; the rest are kept with the app's settings.
 private struct ModuleSettingRow: View {
@@ -438,6 +528,8 @@ private struct ModuleSettingRow: View {
             case .text:
                 TextField(setting.title, text: $value, prompt: Text(setting.defaultValue))
                     .onSubmit { host.setSetting(value.isEmpty ? nil : value, setting.key, for: module) }
+            case .several(let all):
+                SeveralSettingRow(module: module, setting: setting, all: all)
             }
         }
         .help(setting.help)

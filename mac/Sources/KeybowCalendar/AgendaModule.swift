@@ -85,13 +85,12 @@ public final class AgendaModule: KeybowModule, @unchecked Sendable {
                 ]),
         ],
         settings: [
-            ModuleSetting(key: "calendars", title: "Calendars", kind: .text, help: """
-                The calendars {{event}} and {{agenda}} read, by name, separated by commas. Left empty, every one.
-                Example: Work, Family
+            ModuleSetting(key: "calendars", title: "Calendars", kind: .several(all: "Every calendar"), help: """
+                Where keys look for your meetings: {{event}}, {{agenda}} and Join. Birthdays and holidays are \
+                calendars too, so tick only the ones that hold meetings if those get in the way.
                 """),
-            ModuleSetting(key: "lists", title: "Reminder lists", kind: .text, help: """
-                The Reminders lists {{reminder}} and {{agenda}} read, by name, separated by commas. Left empty, every one.
-                Example: Reminders, Errands
+            ModuleSetting(key: "lists", title: "Reminder lists", kind: .several(all: "Every list"), help: """
+                Where keys look for what's due: {{reminder}}, {{agenda}} and Done.
                 """),
         ],
         fetches: ["event", "agenda", "reminder"],
@@ -117,6 +116,25 @@ public final class AgendaModule: KeybowModule, @unchecked Sendable {
     }
 
     /// "Work, Family" → their names, lowercased; empty for every one.
+    /// The person's calendars, or Reminders lists, to tick in Settings: one
+    /// a name, since that's how they're kept and matched, with the accounts
+    /// that have one by that name.
+    public func choices(forSetting key: String) async throws -> [FieldChoice] {
+        let lists: [CalendarList]
+        switch key {
+        case "calendars": lists = try await access { try await self.calendarSource().allCalendars() }
+        case "lists": lists = try await access { try await self.calendarSource().allReminderLists() }
+        default: return []
+        }
+        var accounts: [String: [String]] = [:]
+        for list in lists where !(accounts[list.name]?.contains(list.account) ?? false) {
+            accounts[list.name, default: []].append(list.account)
+        }
+        return accounts.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }.map { name in
+            FieldChoice(name, title: "\(name) — \(accounts[name, default: []].joined(separator: ", "))")
+        }
+    }
+
     private func chosen(_ setting: String) -> Set<String> {
         let text = host?.setting(setting, for: Self.id) ?? ""
         return Set(text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }

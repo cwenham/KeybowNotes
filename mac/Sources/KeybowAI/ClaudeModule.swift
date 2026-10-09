@@ -69,7 +69,8 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
                 summaries; higher suits harder writing.
                 Example: {{#ai effort="high"}}…{{/ai}} sets its own.
                 """),
-        ])
+        ],
+        symbol: "sparkles")
 
     private let transport: HTTPTransport
     private var host: ModuleHost?
@@ -199,6 +200,19 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
         !(host?.secret("apiKey", for: Self.id) ?? "").isEmpty
     }
 
+    /// What the person lets Claude see, as it stands in Settings → Privacy.
+    public var sharing: Sharing {
+        Sharing { host?.setting($0, for: Self.id) }
+    }
+
+    /// A block that would send what the person keeps from Claude — the
+    /// selected text, the clipboard, where they are — is refused before
+    /// anything is read.
+    public func refusal(forBlock name: String, using names: Set<String>) -> String? {
+        guard let kept = sharing.kept(of: names) else { return nil }
+        return "This key would send {{\(kept.name)}} to Claude, and Settings → Privacy keeps \(kept.what) from it."
+    }
+
     // MARK: - Sending
 
     private func send(_ request: URLRequest) async throws -> String {
@@ -246,6 +260,10 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
         }
         let prompt = call.body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else { throw ModuleError("A {{#ai}} block is empty", "There's nothing to ask.") }
+        // Only known once the clipboard's read: it may hold text, or not.
+        if MediaToken.contains(prompt), !sharing.media {
+            throw ModuleError("Images and PDFs aren't sent to Claude", "Settings → Privacy keeps them from it.")
+        }
         return try request(model: model, effort: effort, system: Self.system, prompt: prompt, schema: nil)
     }
 

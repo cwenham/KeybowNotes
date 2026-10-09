@@ -81,6 +81,9 @@ Keychain.
 Copy a screenshot, an image or a PDF, and `{{clipboard}}` sends it to Claude as
 itself — *What does this error mean? {{clipboard}}*. Replies come back in
 Markdown, and Copy and Insert paste them formatted into Mail, Notes or Pages.
+Settings → Privacy says what a block may send: untick the selected text, the
+clipboard, its images and PDFs, or where you are, and a key that would send it
+refuses before anything is read.
 
 **Values from APIs** — bring a live value from a web API into whatever a key writes
 or opens: the temperature, an exchange rate, the next train, a parcel's status. In
@@ -216,7 +219,7 @@ keypad in its bootloader or safe mode, firmware that needs a restart or
 reinstalling. *Copy Report* puts everything it found on the clipboard, for anyone
 helping.
 
-## Permissions
+## Permissions and privacy
 
 macOS asks the first time each is needed:
 
@@ -227,7 +230,19 @@ macOS asks the first time each is needed:
 | `{{selection}}`, typing text into other apps, and moving windows | Accessibility |
 | Looking people up in the editor | Contacts |
 | `{{location}}`, where your Mac is | Location Services |
+| Your Music library, for music keys | Media & Apple Music |
+| Home Assistant on your network | Local Network |
 | Setting a keypad up | Files on a removable volume: the keypad's drive |
+
+**Settings → Privacy** has them all in one place: how each stands, a button to
+ask now rather than mid-keypress, and a way to System Settings for one that's
+been refused. Below them, it says what Claude is sent. For *Design with
+Claude*: your tree file, the names of your apps and shortcuts, and your Home
+Assistant devices, each ticked or not; and how much of your Music library
+Claude may look through — nothing, its genres, its artists too, its albums
+too, or every song — and whether your playlists' names go with it. Agents
+reading the library through the MCP server see no more. For `{{#ai}}` blocks:
+the selected text, the clipboard, images and PDFs on it, and where you are.
 
 The app isn't sandboxed and isn't on the App Store: driving Notes, Mail and Music
 through AppleScript rules that out.

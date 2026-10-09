@@ -118,6 +118,51 @@ final class MusicLibraryTests: XCTestCase {
         XCTAssertEqual(reads.value, 2)
     }
 
+    // MARK: - Shared
+
+    func testOnlyWhatsSharedIsAnswered() throws {
+        let genres = MusicSharing(.genres, playlists: false)
+        XCTAssertEqual(genres.lists, [.overview, .genres])
+        XCTAssertEqual(try library.answer(MusicQuery(.overview), sharing: genres), """
+            8 songs in 3 genres; 2 favourites; 170 plays recorded.
+            Top genres: Jazz, Rock, Classical.
+            """, "no artists, and no playlists")
+        XCTAssertThrowsError(try library.answer(MusicQuery(.artists), sharing: genres)) { error in
+            XCTAssertEqual((error as? ModuleError)?.message, "Of the Music library, only the genres are shared — not its artists")
+        }
+        XCTAssertThrowsError(try library.answer(MusicQuery(.genres, artist: "Radiohead"), sharing: genres),
+                             "narrowing by an artist would say whether they're there")
+        XCTAssertThrowsError(try library.answer(MusicQuery(.playlists), sharing: genres))
+
+        let albums = MusicSharing(.albums)
+        XCTAssertEqual(albums.lists, [.overview, .genres, .artists, .albums, .playlists])
+        XCTAssertEqual(albums.summary, "genres, artists, albums and playlists")
+        XCTAssertNoThrow(try library.answer(MusicQuery(.albums, artist: "Radiohead"), sharing: albums))
+        XCTAssertThrowsError(try library.answer(MusicQuery(.favourites), sharing: albums)) { error in
+            XCTAssertEqual((error as? ModuleError)?.message,
+                           "Of the Music library, only the genres, artists, albums and playlists are shared — not its favourite songs")
+        }
+        XCTAssertThrowsError(try library.answer(MusicQuery(.songs, album: "OK Computer"), sharing: albums))
+
+        XCTAssertEqual(try library.answer(MusicQuery(.overview), sharing: .everything), library.answer(MusicQuery(.overview)))
+        XCTAssertThrowsError(try library.answer(MusicQuery(.overview), sharing: MusicSharing(.nothing))) { error in
+            XCTAssertEqual((error as? ModuleError)?.message, "The person doesn't share their Music library")
+        }
+    }
+
+    func testTheToolOffersOnlyWhatsShared() {
+        let tool = MusicQuery.tool(sharing: MusicSharing(.artists, playlists: false))
+        let properties = (tool["input_schema"] as? [String: Any])?["properties"] as? [String: Any] ?? [:]
+        XCTAssertEqual((properties["list"] as? [String: Any])?["enum"] as? [String], ["overview", "genres", "artists"])
+        XCTAssertNotNil(properties["artist"])
+        XCTAssertNil(properties["album"], "albums aren't shared, so there's no narrowing by one")
+        XCTAssertTrue((tool["description"] as? String ?? "")
+            .hasSuffix("The person shares only the library's genres and artists: ask for nothing else."))
+        XCTAssertFalse((MusicQuery.tool["description"] as? String ?? "").contains("shares only"))
+        let all = (MusicQuery.tool["input_schema"] as? [String: Any])?["properties"] as? [String: Any] ?? [:]
+        XCTAssertEqual((all["list"] as? [String: Any])?["enum"] as? [String], MusicQuery.List.allCases.map(\.rawValue))
+    }
+
     // MARK: - Music keys
 
     private func plan(_ outline: String, path: [Int]) throws -> ActionPlan {

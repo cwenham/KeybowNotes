@@ -59,11 +59,14 @@ public enum Template {
     /// "contact.phone", "date" — inside blocks too. An operator's name is the
     /// whole of it, attributes and all: `quote file="quotes.md"`.
     public static func names(in template: String) -> Set<String> {
-        Set(TemplateDocument(template).placeholderBodies.map { body in
-            let name = split(body).name
-            if TemplateDocument.isOperator(Substring(name)) { return name }
-            return name.prefix { $0 != ":" }.trimmingCharacters(in: .whitespaces)
-        })
+        Set(TemplateDocument(template).placeholderBodies.map(name(of:)))
+    }
+
+    /// A placeholder's name, from what's between its braces.
+    static func name(of body: String) -> String {
+        let name = split(body).name
+        if TemplateDocument.isOperator(Substring(name)) { return name }
+        return name.prefix { $0 != ":" }.trimmingCharacters(in: .whitespaces)
     }
 
     /// `quote file="quotes.md" order=sequential` → ("quote", [file: quotes.md,

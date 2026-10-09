@@ -76,6 +76,12 @@ public final class MusicLibrary: @unchecked Sendable {
         Bundle.main.object(forInfoDictionaryKey: "NSAppleMusicUsageDescription") != nil
     }
 
+    /// Whether the library has been read, or tried, on this Mac — and so
+    /// macOS asked about it. Reading again then asks nothing, so Settings →
+    /// Privacy can find out how it was answered; macOS offers no other way.
+    public static var hasAsked: Bool { UserDefaults.standard.bool(forKey: askedKey) }
+    static let askedKey = "musicLibraryAsked"
+
     /// Music's library, through iTunesLibrary: songs only — no podcasts,
     /// audiobooks or videos — and the playlists a person made.
     @Sendable public static func readMusic() throws -> Contents {
@@ -83,6 +89,8 @@ public final class MusicLibrary: @unchecked Sendable {
             throw ModuleError("Only the installed app can read your Music library",
                               "macOS gives access to the app itself, which asks for it.")
         }
+        // Asked or not, macOS has had its say once this has been tried.
+        defer { UserDefaults.standard.set(true, forKey: askedKey) }
         let library: ITLibrary
         do {
             library = try ITLibrary(apiVersion: "1.1")
@@ -237,35 +245,128 @@ public struct MusicQuery: Equatable, Sendable {
                   album: input["album"] as? String, ranking: ranking ?? .plays, limit: limit)
     }
 
-    /// The tool, as Claude is told of it.
-    public static let tool: [String: Any] = [
-        "name": "music_library",
-        "description": """
+    /// The tool, as Claude is told of it, with the whole library to look at.
+    public static let tool: [String: Any] = MusicQuery.tool(sharing: .everything)
+
+    /// The tool, offering only what's shared: a list Claude may not see isn't
+    /// among the choices, nor a name it may not narrow by.
+    public static func tool(sharing: MusicSharing) -> [String: Any] {
+        var description = """
             Read the person's Apple Music library: its genres, artists, albums, songs, favourites and playlists, \
             with how many songs each has and how often they've been played. Use it whenever they want keys for \
             their music — "my top genres", "artists I play most", "my favourites" — so the tree names what's \
             really there. Start with list: overview. Names are matched without regard to case.
-            """,
-        "input_schema": [
-            "type": "object",
-            "properties": [
-                "list": ["type": "string", "enum": List.allCases.map(\.rawValue),
-                         "description": "What to list. overview: the library in brief."],
-                "genre": ["type": "string", "description": "Only this genre's."],
-                "artist": ["type": "string", "description": "Only this artist's."],
-                "album": ["type": "string", "description": "Only this album's songs."],
-                "rank_by": ["type": "string", "enum": MusicLibrary.Contents.Ranking.allCases.map(\.rawValue),
-                            "description": "plays (the default): most played first. songs: most songs first. name: A to Z."],
-                "limit": ["type": "integer", "description": "How many, at most. Left out: 25."],
+            """
+        if sharing != .everything {
+            description += " The person shares only the library's \(sharing.summary): ask for nothing else."
+        }
+        var properties: [String: Any] = [
+            "list": ["type": "string", "enum": sharing.lists.map(\.rawValue),
+                     "description": "What to list. overview: the library in brief."],
+            "genre": ["type": "string", "description": "Only this genre's."],
+            "rank_by": ["type": "string", "enum": MusicLibrary.Contents.Ranking.allCases.map(\.rawValue),
+                        "description": "plays (the default): most played first. songs: most songs first. name: A to Z."],
+            "limit": ["type": "integer", "description": "How many, at most. Left out: 25."],
+        ]
+        if sharing.detail >= .artists { properties["artist"] = ["type": "string", "description": "Only this artist's."] }
+        if sharing.detail >= .albums { properties["album"] = ["type": "string", "description": "Only this album's songs."] }
+        return [
+            "name": "music_library",
+            "description": description,
+            "input_schema": [
+                "type": "object",
+                "properties": properties,
+                "required": ["list"],
             ] as [String: Any],
-            "required": ["list"],
-        ] as [String: Any],
-    ]
+        ]
+    }
+}
+
+// MARK: - Shared
+
+/// How much of the Music library Claude may see — and agents, asking
+/// through AppleScript or the MCP server — as chosen in Settings → Privacy.
+/// Each detail takes in those before it: albums come with their artists and
+/// genres.
+public struct MusicSharing: Equatable, Sendable {
+    public enum Detail: String, CaseIterable, Comparable, Sendable {
+        case nothing, genres, artists, albums, songs
+
+        public static func < (a: Detail, b: Detail) -> Bool {
+            allCases.firstIndex(of: a)! < allCases.firstIndex(of: b)!
+        }
+    }
+
+    public var detail: Detail
+    /// The names of the person's playlists, and how many songs each has.
+    public var playlists: Bool
+
+    public init(_ detail: Detail, playlists: Bool = true) {
+        self.detail = detail
+        self.playlists = playlists
+    }
+
+    /// All of it: as it was before there was a choice.
+    public static let everything = MusicSharing(.songs)
+
+    /// Whether any of it may be seen.
+    public var isShared: Bool { detail != .nothing }
+
+    /// What may be listed.
+    public var lists: [MusicQuery.List] { MusicQuery.List.allCases.filter { allows($0) } }
+
+    public func allows(_ list: MusicQuery.List) -> Bool {
+        switch list {
+        case .overview, .genres: return detail >= .genres
+        case .artists: return detail >= .artists
+        case .albums: return detail >= .albums
+        case .songs, .favourites: return detail >= .songs
+        case .playlists: return isShared && playlists
+        }
+    }
+
+    /// "genres, artists and playlists", or "nothing".
+    public var summary: String {
+        guard isShared else { return "nothing" }
+        let levels: [Detail] = [.genres, .artists, .albums, .songs]
+        var shared = levels.filter { $0 <= detail }.map(\.rawValue)
+        if playlists { shared.append("playlists") }
+        return shared.joinedAsList
+    }
+
+    /// Why a question can't be answered with what's shared, or nil when it
+    /// can: for Claude, or an agent, to work around.
+    public func refusal(_ query: MusicQuery) -> ModuleError? {
+        let why = "In KeybowNotes, Settings → Privacy says how much of it may be seen."
+        guard isShared else { return ModuleError("The person doesn't share their Music library", why) }
+        let asked: String
+        if !allows(query.list) {
+            asked = query.list == .favourites ? "favourite songs" : query.list.rawValue
+        } else if query.artist != nil, detail < .artists {
+            asked = "artists"
+        } else if query.album != nil, detail < .albums {
+            asked = "albums"
+        } else {
+            return nil
+        }
+        return ModuleError("Of the Music library, only the \(summary) are shared — not its \(asked)", why)
+    }
 }
 
 extension MusicLibrary.Contents {
     /// The answer, as text to read: a heading, then a line each.
     public func answer(_ query: MusicQuery) -> String {
+        answer(query, showing: .everything)
+    }
+
+    /// The answer, with only what's shared: a question about more is
+    /// refused, and the overview leaves out what isn't shared.
+    public func answer(_ query: MusicQuery, sharing: MusicSharing) throws -> String {
+        if let refusal = sharing.refusal(query) { throw refusal }
+        return answer(query, showing: sharing)
+    }
+
+    private func answer(_ query: MusicQuery, showing sharing: MusicSharing) -> String {
         var narrowed: [String] = []
         if let genre = query.genre { narrowed.append("in \(genre)") }
         if let artist = query.artist { narrowed.append("by \(artist)") }
@@ -309,12 +410,15 @@ extension MusicLibrary.Contents {
             let genres = Self(songs: all).genres(ranked: ranking)
             let artists = Self(songs: all).artists(ranked: ranking)
             let plays = all.reduce(0) { $0 + $1.plays }
-            var text = "\(all.count) songs\(scope) by \(artists.count) artists in \(genres.count) genres; "
+            let byArtists = sharing.detail >= .artists ? " by \(artists.count) artists" : ""
+            var text = "\(all.count) songs\(scope)\(byArtists) in \(genres.count) genres; "
                 + "\(all.filter(\.favourite).count) favourites; \(plays) plays recorded"
-            if narrowed.isEmpty { text += "; \(playlists.count) playlists" }
+            if narrowed.isEmpty, sharing.allows(.playlists) { text += "; \(playlists.count) playlists" }
             text += ".\(note)\n"
-            text += "Top genres: " + genres.prefix(8).map(\.name).joined(separator: ", ") + ".\n"
-            text += "Top artists: " + artists.prefix(8).map(\.name).joined(separator: ", ") + "."
+            text += "Top genres: " + genres.prefix(8).map(\.name).joined(separator: ", ") + "."
+            if sharing.detail >= .artists {
+                text += "\nTop artists: " + artists.prefix(8).map(\.name).joined(separator: ", ") + "."
+            }
             return text
         case .genres:
             let all = Self(songs: matching).genres(ranked: ranking)

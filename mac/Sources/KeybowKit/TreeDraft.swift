@@ -25,16 +25,20 @@ public enum TreeDraft {
         public var shortcuts: [String]
         /// "light.desk_lamp — Desk lamp".
         public var homeEntities: [String]
+        /// Home Assistant's entities are the person's to keep, rather than
+        /// not there: Settings → Privacy keeps them from Claude.
+        public var homeWithheld: Bool
         /// Their Music library can be read, with the music_library tool.
         public var music: Bool
 
         public init(outline: String? = nil, keypads: [String] = [], apps: [String] = [], shortcuts: [String] = [],
-                    homeEntities: [String] = [], music: Bool = false) {
+                    homeEntities: [String] = [], homeWithheld: Bool = false, music: Bool = false) {
             self.outline = outline
             self.keypads = keypads
             self.apps = apps
             self.shortcuts = shortcuts
             self.homeEntities = homeEntities
+            self.homeWithheld = homeWithheld
             self.music = music
         }
     }
@@ -74,6 +78,8 @@ public enum TreeDraft {
         if !context.homeEntities.isEmpty {
             have.append("Home Assistant entities, which `[Home, entity: …]` controls:\n"
                         + context.homeEntities.map { "- \($0)" }.joined(separator: "\n"))
+        } else if context.homeWithheld {
+            have.append("I keep my Home Assistant entities private: use `[Home]` only for entities I name.")
         } else {
             have.append("Home Assistant isn't set up: don't use `[Home]`.")
         }

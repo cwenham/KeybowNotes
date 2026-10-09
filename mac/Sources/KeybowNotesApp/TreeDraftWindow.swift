@@ -28,8 +28,9 @@ final class DesignModel {
     var newModel: KeypadDevice.Model?
     var keypad = 0
     var tree: TreeKind = .main
-    var sendOutline = true
-    var sendWhatsHere = true
+    /// What may go with the first turn, from Settings → Privacy: read again
+    /// as the window comes forward, since it's changed there.
+    private(set) var sharing = ClaudeModule.Sharing()
 
     var input = ""
     private(set) var messages: [Message] = []
@@ -59,6 +60,26 @@ final class DesignModel {
         newModel = editor.connectedKeypads().first?.model
         editor.showTreesInUse()
         keypad = editor.keypad
+        refreshSharing()
+    }
+
+    func refreshSharing() {
+        sharing = (ModuleRegistry.shared.module(id: ClaudeModule.id) as? ClaudeModule)?.sharing ?? ClaudeModule.Sharing()
+    }
+
+    /// "your tree file, the names of your apps and shortcuts, and your music
+    /// library's genres and artists" — or nil, for nothing but what's written.
+    var whatsSent: String? {
+        var parts: [String] = []
+        if sharing.tree { parts.append("your tree file") }
+        if sharing.apps { parts.append("the names of your apps and shortcuts") }
+        if sharing.home { parts.append("your Home Assistant devices") }
+        if sharing.music.isShared, MusicLibrary.canAsk {
+            parts.append(sharing.music == .everything ? "your music library, as Claude looks through it"
+                         : "your music library's \(sharing.music.summary)")
+        }
+        guard !parts.isEmpty else { return nil }
+        return parts.count == 1 ? parts[0] : parts.dropLast().joined(separator: ", ") + " and " + parts.last!
     }
 
     var claudeIsReady: Bool {
@@ -182,17 +203,20 @@ final class DesignModel {
                                          timeout: 600)
     }
 
-    /// What Claude may look at as it drafts, when what's here is sent: the
-    /// Music library — read the first time it asks, which is when macOS asks
-    /// you whether it may be.
+    /// What Claude may look at as it drafts: the Music library, as much of
+    /// it as Settings → Privacy shares — read the first time Claude asks,
+    /// which is when macOS asks you whether it may be.
     private var tools: [ClaudeModule.Tool] {
-        guard context?.music == true else { return [] }
+        let shared = sharing.music
+        guard context?.music == true, shared.isShared else { return [] }
         let step = working?.step ?? "Claude is drafting…"
-        return [ClaudeModule.Tool(MusicQuery.tool) { [weak self] input in
+        return [ClaudeModule.Tool(MusicQuery.tool(sharing: shared)) { [weak self] input in
+            let query = try MusicQuery(input: input)
+            // Refused before the library is read: nothing more is looked at.
+            if let refusal = shared.refusal(query) { throw refusal }
             await self?.setStep("Claude is looking through your music…")
             defer { Task { @MainActor in self?.setStep(step) } }
-            let query = try MusicQuery(input: input)
-            return try await MusicLibrary.shared.contents().answer(query)
+            return try await MusicLibrary.shared.contents().answer(query, sharing: shared)
         }]
     }
 
@@ -225,17 +249,21 @@ final class DesignModel {
         }
     }
 
-    /// What the person has, as far as they've agreed to send it.
+    /// What the person has, as far as Settings → Privacy lets it be sent.
     private func gather() async -> TreeDraft.Context {
+        refreshSharing()
         var context = TreeDraft.Context()
-        if sendOutline { context.outline = OutlineWriter.text(original) }
+        if sharing.tree { context.outline = OutlineWriter.text(original) }
         context.keypads = Automation.shared?.connectedKeypads(in: original) ?? []
-        guard sendWhatsHere else { return context }
-        context.apps = AppCatalog.all.map(\.name)
-        context.shortcuts = await ShortcutsApp.names()
-        context.music = MusicLibrary.canAsk
-        if let home = ModuleRegistry.shared.module(id: "home"),
-           let entities = try? await home.choices(for: "entity", type: "home", fields: [:]) {
+        if sharing.apps {
+            context.apps = AppCatalog.all.map(\.name)
+            context.shortcuts = await ShortcutsApp.names()
+        }
+        context.music = sharing.music.isShared && MusicLibrary.canAsk
+        if !sharing.home {
+            context.homeWithheld = Modules.host.hasSecret("token", for: "home")
+        } else if let home = ModuleRegistry.shared.module(id: "home"),
+                  let entities = try? await home.choices(for: "entity", type: "home", fields: [:]) {
             context.homeEntities = entities.prefix(400).map { entity in
                 entity.title.map { "\(entity.value) — \($0)" } ?? entity.value
             }
@@ -298,7 +326,7 @@ final class DesignModel {
 /// beside it, in the window's split view.
 struct DesignConversationView: View {
     @Bindable var model: DesignModel
-    let openSettings: () -> Void
+    let openSettings: (SettingsPane) -> Void
 
     var body: some View {
         conversation.frame(minWidth: 340, idealWidth: 400, maxWidth: 560, minHeight: 600)
@@ -323,7 +351,7 @@ struct DesignConversationView: View {
                         Label("Needs your Anthropic API key, in Settings → Claude.", systemImage: "key.fill")
                             .foregroundStyle(.orange).font(.callout)
                         Spacer()
-                        Button("Settings…", action: openSettings).controlSize(.small)
+                        Button("Settings…") { openSettings(.module(ClaudeModule.id)) }.controlSize(.small)
                     }
                 }
                 if model.drafted == nil, model.messages.isEmpty { setup }
@@ -365,10 +393,13 @@ struct DesignConversationView: View {
                     keypadPicker
                 }
             }
-            Toggle("Send my tree file, so it fits — contacts and projects too", isOn: $model.sendOutline)
-            Toggle("Send the names of my apps, shortcuts and Home Assistant entities", isOn: $model.sendWhatsHere)
-            Text("What you write, and what's ticked, goes to Anthropic with your key. Your tree changes only when you add "
-                 + "the draft.")
+            HStack(alignment: .firstTextBaseline) {
+                Text(model.whatsSent.map { "Sent with what you write: \($0)." } ?? "Only what you write is sent.")
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Change…") { openSettings(.privacy) }.controlSize(.small)
+            }
+            Text("It goes to Anthropic with your key. Your tree changes only when you add the draft.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .font(.callout)
@@ -478,7 +509,7 @@ final class DesignWindowController: NSWindowController, NSWindowDelegate {
     private let model: DesignModel
     private let editor: TreeEditorViewController
 
-    init(outlineURL: URL, openSettings: @escaping () -> Void) {
+    init(outlineURL: URL, openSettings: @escaping (SettingsPane) -> Void) {
         model = DesignModel(outlineURL: outlineURL)
         // A draft has nothing to save: no save.
         editor = TreeEditorViewController(model: model.editor, save: nil)
@@ -543,6 +574,11 @@ final class DesignWindowController: NSWindowController, NSWindowDelegate {
         alert.addButton(withTitle: "Keep Designing")
         alert.addButton(withTitle: "Close")
         return alert.runModal() == .alertSecondButtonReturn
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        // Back from Settings → Privacy, perhaps.
+        model.refreshSharing()
     }
 
     func windowWillClose(_ notification: Notification) {

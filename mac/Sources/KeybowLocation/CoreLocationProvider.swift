@@ -80,6 +80,15 @@ public final class CoreLocationProvider: NSObject, LocationProvider, CLLocationM
 
     // MARK: Permission
 
+    /// Whether KeybowNotes may use Location Services: for Settings → Privacy.
+    public var authorizationStatus: CLAuthorizationStatus { manager.authorizationStatus }
+
+    /// Asks, if macOS hasn't yet — from Settings → Privacy, rather than at a
+    /// key press — without finding where the Mac is.
+    public func requestAccess() async {
+        try? await authorize()
+    }
+
     private func authorize() async throws {
         if manager.authorizationStatus == .notDetermined {
             // The prompt belongs to a menu-bar app that isn't in front, and

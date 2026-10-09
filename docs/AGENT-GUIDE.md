@@ -73,7 +73,9 @@ result is **outline text**, the same text the tree file holds.
   if you say which — `albums`, `songs`, `favourites` and `playlists`, the most
   played first. Use it whenever they want music keys, and use its names as it
   spells them. "Top" means most played; with no plays recorded, it ranks by
-  songs and says so.
+  songs and says so. The person chooses how much of it you may see — perhaps
+  only genres, or artists — and anything more is refused, saying what's
+  shared: work with that, and ask them for any names you need.
 - **What a key plays:** `[Music]` with `song:`, `album:`, `playlist:`,
   `artist:` or `genre:` — `artist` and `genre` together for an artist's songs in
   a genre. With none of them, the label names a playlist.

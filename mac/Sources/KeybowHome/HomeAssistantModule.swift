@@ -86,7 +86,8 @@ public final class HomeAssistantModule: KeybowModule, @unchecked Sendable {
                 at the bottom of the page. Kept in the Keychain.
                 """),
         ],
-        fetches: [id])
+        fetches: [id],
+        symbol: "house.fill")
 
     private let transport: HTTPTransport
     private var host: ModuleHost?

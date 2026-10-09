@@ -35,7 +35,8 @@ public final class LocationModule: KeybowModule, @unchecked Sendable {
                 needs no more than about 1 km.
                 """),
         ],
-        fetches: [id])
+        fetches: [id],
+        symbol: "location.fill")
 
     private let provider: LocationProvider
     private var host: ModuleHost?

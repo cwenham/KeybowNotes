@@ -34,6 +34,10 @@ final class AppSettings {
 
     // MARK: Live status, shown in the window but not saved
 
+    /// The page the window shows.
+    var pane: SettingsPane? = .general
+    /// The window is open: a page watches what it shows only then.
+    var isWindowOpen = false
     var keybowStatus = "Looking for keypads…"
     /// Keypads known, or named in the tree, that aren't connected.
     var missingKeypads: [MissingKeypad] = []
@@ -128,6 +132,40 @@ extension OverlayPlacement {
     }
 }
 
+/// A page of the Settings window, chosen in its sidebar.
+enum SettingsPane: Hashable {
+    case general, keys, overlay, calendar, tree, privacy
+    /// A module's own settings, by its id.
+    case module(String)
+
+    /// The app's own pages, in the sidebar's order: modules' come after.
+    static let standard: [SettingsPane] = [.general, .keys, .overlay, .calendar, .tree, .privacy]
+
+    var title: String {
+        switch self {
+        case .general: return "General"
+        case .keys: return "Keys"
+        case .overlay: return "Overlay"
+        case .calendar: return "Calendar & Reminders"
+        case .tree: return "Tree File"
+        case .privacy: return "Privacy"
+        case .module(let id): return ModuleRegistry.shared.module(id: id)?.manifest.name ?? id
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .general: return "gearshape"
+        case .keys: return "keyboard"
+        case .overlay: return "macwindow"
+        case .calendar: return "calendar"
+        case .tree: return "doc.text"
+        case .privacy: return "hand.raised"
+        case .module(let id): return ModuleRegistry.shared.module(id: id)?.manifest.symbol ?? "puzzlepiece.extension"
+        }
+    }
+}
+
 /// What the settings window can ask the app to do.
 struct SettingsActions {
     var testOverlay: () -> Void
@@ -161,16 +199,24 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         self.actions = actions
     }
 
-    func show() {
+    /// Shows the window, at `pane` if one's given, else where it was.
+    func show(_ pane: SettingsPane? = nil) {
+        if let pane { settings.pane = pane }
+        settings.isWindowOpen = true
         if window == nil {
             let hosting = NSHostingController(rootView: SettingsView(settings: settings, actions: actions))
+            // The pages scroll: the window takes any size above the least.
+            hosting.sizingOptions = [.minSize]
             let window = NSWindow(contentViewController: hosting)
             window.title = "KeybowNotes Settings"
-            window.styleMask = [.titled, .closable]
+            window.styleMask = [.titled, .closable, .resizable]
             window.isReleasedWhenClosed = false
             window.delegate = self
+            window.setContentSize(NSSize(width: 760, height: 580))
             window.center()
-            window.setFrameAutosaveName("KeybowNotesSettings")
+            // A name of its own: the frame kept under the old one was for a
+            // window a third narrower.
+            window.setFrameAutosaveName("KeybowNotesSettingsPages")
             self.window = window
             WindowSnapshots.keep(window, as: "settings")
         }
@@ -178,6 +224,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        settings.isWindowOpen = false
         // Hand focus back to whatever was in use before.
         NSApp.hide(nil)
     }

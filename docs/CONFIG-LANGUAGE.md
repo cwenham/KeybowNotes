@@ -1170,6 +1170,15 @@ the block's place. `{{#ai}}` asks Claude:
   into the new one; the text goes on the clipboard instead.
 - **Previews** in the editor and the overlay show a stand-in, `‹Claude's
   reply›`, and never ask anything.
+- **What a block may send** is chosen in Settings → Privacy: the selected text
+  (`{{selection}}`), the clipboard (`{{clipboard}}`), images and PDFs on it,
+  and where you are (`{{location}}` and its parts) — all of them, until
+  unticked. A key whose block uses one that's unticked is refused before
+  anything is read, fetched or asked, and says which. Whether the clipboard
+  holds an image is known only once it's read, so an image or PDF unticked
+  stops the action then, before anything is sent. What the block's own words
+  say always goes, and anything else it fills in — `{{leaf}}`, a data source's
+  value — including another block's reply inside it.
 - **Refused or failed** replies stop the action with the reason: no API key, a
   model that doesn't exist, Claude declining the request, no connection.
 
@@ -1512,6 +1521,8 @@ window instead of the file. Two of them feed into the language:
 - **Timings** — a slider, once moved, overrides the file's `commitDelayMs`,
   `idleTimeoutMs` or `longPressCancelMs`.
 - **Default calendar and reminders list** — used when an action names neither.
+- **Privacy** — what a `{{#ai}}` block may send Claude (§6, *Blocks*); a key whose block
+  would send something kept from it doesn't run.
 
 What the app remembers between runs — the stopwatch, data sources, each
 `{{quote}}` sequence's place — is neither: it's kept in `state.json` beside

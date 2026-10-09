@@ -50,7 +50,7 @@ tell application "KeybowNotes"
     reset stopwatch
     toggle stopwatch
     stopwatch reading                               -- "4:12, running"
-    music library "artists" genre "Jazz" limit 4    -- the most played, as text
+    music library "artists" genre "Jazz" limit 4    -- the most played, as text: as much as Settings → Privacy shares
 end tell
 ```
 
@@ -115,7 +115,7 @@ Its tools:
 | `replace_tree` | A whole tree, from outline text |
 | `add_keypad` | A keypad section with trees of its own |
 | `run_entry` | Runs an entry, for real |
-| `music_library` | What's in the Music library — genres, artists, albums, songs, favourites, playlists — the most played first |
+| `music_library` | What's in the Music library — genres, artists, albums, songs, favourites, playlists — the most played first; no more than Settings → Privacy shares with Claude |
 | `stopwatch` | start, stop, lap, reset, toggle or read |
 
 And a prompt, `design_keypad`, that starts an agent off on designing trees for
@@ -142,15 +142,19 @@ keys light in which colours, and change anything by hand. Your tree changes
 only when you add the draft.
 
 1. **Choose what to draft:** a new keypad section with all its trees; all of a
-   keypad's trees; or one tree. And what to send with it: your tree file, so
-   the draft fits with it and uses your contacts, projects and lists; and the
-   names of your apps, shortcuts and Home Assistant entities, so it uses the
-   ones you have — and, with that, your Music library for Claude to look
-   through when it makes music keys: your genres, artists, albums, songs,
-   favourites and playlists, and how often each is played. Ask for "my top 4
-   genres, then the top 4 artists in each". The first look asks you for Media &
-   Apple Music access. What you write and what's ticked goes to Anthropic with
-   your key, and of your library only what Claude asks for.
+   keypad's trees; or one tree. Below that, the window says what goes with
+   what you write, as Settings → Privacy has it — **Change…** opens it there.
+   Each can be ticked or not: your tree file, so the draft fits with it and
+   uses your contacts, projects and lists; the names of your apps and
+   shortcuts, so it uses the ones you have; and your Home Assistant devices.
+   And how much of your Music library Claude may look through when it makes
+   music keys: nothing; your genres; your artists too; your albums too; or
+   every song, your favourites among them — each with how often it's played —
+   and, if ticked, your playlists' names. Ask for "my top 4 genres, then the
+   top 4 artists in each". Claude is offered only what's shared, and a question
+   about more is refused before the library is read. The first look asks you
+   for Media & Apple Music access. It all goes to Anthropic with your key, and
+   of your library only what Claude asks for.
 2. **Say what you'd like** the keypads for, in your own words: the apps you
    use, what you do again and again, the people you message, the lamps you
    switch. Claude is told what KeybowNotes can do — the same guide an agent

@@ -91,9 +91,13 @@ Once installed it runs like any menu-bar app:
   `Keypad Backups` beside the tree; CircuitPython downloads are cached in
   `~/Library/Caches/KeybowNotes/CircuitPython`. See
   [firmware/README.md](../firmware/README.md#install).
-- **Settings** (⌘, from the menu): Open at login, dry run, key brightness, which
-  screen the overlay uses, timings, the default calendar and reminders list, and
-  which tree to load. Settings belong to this Mac and live in
+- **Settings** (⌘, from the menu), a page at a time from a sidebar: General
+  (keypads, Open at login, dry run, selected text), Keys (brightness and
+  timings), Overlay (which screen), Calendar & Reminders (the defaults), Tree
+  File (which tree to load), Privacy, and a page for each module with settings
+  of its own — Claude, Location, Home Assistant. **Privacy** lists every
+  permission macOS asks about, with how it stands and a button to ask now, and
+  says what Claude is sent. Settings belong to this Mac and live in
   UserDefaults; the tree stays in its file. A timing slider overrides the
   file's value only once moved, and says which is in force.
 - **Logs** go to the unified log. From a terminal (zsh has its own `log`, hence the path):

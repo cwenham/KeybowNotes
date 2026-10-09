@@ -260,6 +260,50 @@ final class ClaudeModuleTests: XCTestCase {
             XCTAssertTrue(error is CancellationError)
         }
     }
+
+    // MARK: - Privacy
+
+    func testWhatsKeptFromClaudeIsRefused() {
+        let host = MemoryModuleHost()
+        let module = ClaudeModule(transport: StubTransport())
+        module.start(host: host)
+        XCTAssertEqual(module.sharing, ClaudeModule.Sharing(), "everything, until it's changed")
+        XCTAssertNil(module.refusal(forBlock: "ai", using: ["selection", "clipboard", "location.latitude"]))
+
+        var sharing = ClaudeModule.Sharing()
+        sharing.selection = false
+        sharing.location = false
+        sharing.music = MusicSharing(.artists, playlists: false)
+        for (key, value) in sharing.settings { host.set(value, for: key, of: ClaudeModule.id) }
+        XCTAssertEqual(module.sharing, sharing, "as it was kept")
+        XCTAssertEqual(module.refusal(forBlock: "ai", using: ["leaf", "location.latitude"]),
+                       "This key would send {{location.latitude}} to Claude, and Settings → Privacy keeps where you are from it.")
+        XCTAssertNotNil(module.refusal(forBlock: "ai", using: ["selection"]))
+        XCTAssertNil(module.refusal(forBlock: "ai", using: ["clipboard", "leaf", "locations"]))
+
+        for (key, value) in ClaudeModule.Sharing().settings {
+            XCTAssertNil(value, "\(key): nothing kept while it's as it was to begin with")
+        }
+    }
+
+    func testImagesAndPDFsKeptFromClaudeArentSent() async {
+        let transport = StubTransport()
+        let host = MemoryModuleHost()
+        host.set("sk-test", for: "apiKey", of: ClaudeModule.id, secret: true)
+        let module = ClaudeModule(transport: transport)
+        module.start(host: host)
+        var sharing = ClaudeModule.Sharing()
+        sharing.media = false
+        for (key, value) in sharing.settings { host.set(value, for: key, of: ClaudeModule.id) }
+
+        let image = MediaStore.shared.token(for: MediaItem(kind: .image, data: Data([1]), mediaType: "image/png",
+                                                           summary: "image 1×1"))
+        await assertFails(module, TemplateBlockCall(name: "ai", body: "What's in this? \(image)"),
+                          message: "Images and PDFs aren't sent to Claude")
+        XCTAssertTrue(transport.requests.isEmpty)
+        _ = try? await module.reply(to: TemplateBlockCall(name: "ai", body: "Text is still sent"))
+        XCTAssertEqual(transport.requests.count, 1)
+    }
 }
 
 private final class Heard: @unchecked Sendable {

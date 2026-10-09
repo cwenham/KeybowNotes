@@ -79,6 +79,19 @@ private final class Showcase: KeybowModule, @unchecked Sendable {
     func run(_ request: ModuleRequest, now: Date) async -> ActionOutcome { .quiet }
 }
 
+/// Replies to `{{#guarded}}` blocks, in capitals — and is never sent the selection.
+private final class Guarded: KeybowModule, @unchecked Sendable {
+    let manifest = ModuleManifest(id: "guarded", name: "Guarded",
+                                  blocks: [ModuleBlockType(name: "guarded", title: "Guarded")])
+    func start(host: ModuleHost) {}
+    func summary(of request: ModuleRequest, now: Date) -> ModuleSummary { ModuleSummary(verb: "", subject: "") }
+    func run(_ request: ModuleRequest, now: Date) async -> ActionOutcome { .quiet }
+    func reply(to call: TemplateBlockCall) async throws -> String { call.body.uppercased() }
+    func refusal(forBlock name: String, using names: Set<String>) -> String? {
+        names.contains("selection") ? "Guarded isn't sent {{selection}}" : nil
+    }
+}
+
 /// From a key's press to its action — and what's shown, logged and refused
 /// on the way.
 @MainActor
@@ -214,6 +227,20 @@ final class ActionPipelineTests: XCTestCase {
         XCTAssertEqual(mac.ran.count, 0)
         XCTAssertTrue(overlay.shown.contains("cancelled"), "\(overlay.shown)")
         XCTAssertFalse(pipeline.isWaiting)
+    }
+
+    func testABlockIsntSentWhatsKeptFromIt() async throws {
+        registry.register(Guarded(), host: MemoryModuleHost())
+        mac.selection = .notAllowed
+        let refused = try await fire("Shout [Copy, text: \"{{#guarded}}{{selection}}{{/guarded}}\"]")
+        XCTAssertFalse(refused.succeeded)
+        XCTAssertEqual(overlay.shown, ["refused: Guarded isn't sent {{selection}}"])
+        XCTAssertEqual(mac.askedForAccess, 0, "refused before the selection was read")
+        XCTAssertEqual(mac.ran.count, 0)
+
+        try await fire("Shout [Copy, text: \"{{#guarded}}{{frontApp}}{{/guarded}}\"]")
+        guard case .copyToClipboard(let text, _)? = mac.ran.first else { return XCTFail("\(mac.ran)") }
+        XCTAssertEqual(text, "TEXTEDIT")
     }
 
     func testAnOutcomeRunsTheNextAction() async throws {

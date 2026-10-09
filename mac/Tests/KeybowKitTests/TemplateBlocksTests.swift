@@ -54,6 +54,16 @@ final class TemplateBlocksTests: XCTestCase {
         XCTAssertEqual(Template.names(in: "{{#ai}}Summarise {{selection}}{{/ai}} for {{leaf}}"), ["selection", "leaf"])
     }
 
+    func testTheNamesInsideABlockAreWhatsSentToIt() {
+        let text = "{{selection}} {{#ai}}Say {{clipboard|nothing}} in {{#quote}}{{location.latitude}}{{/quote}}{{/ai}} "
+            + "{{#other}}{{date:yyyy}}{{/other}}"
+        XCTAssertEqual(TemplateBlocks.names(insideBlocks: "ai", in: text), ["clipboard", "location.latitude"],
+                       "a block inside it is sent to it in the end, as its reply")
+        XCTAssertEqual(TemplateBlocks.names(insideBlocks: "quote", in: text), ["location.latitude"])
+        XCTAssertEqual(TemplateBlocks.names(insideBlocks: "other", in: text), ["date"])
+        XCTAssertEqual(TemplateBlocks.names(insideBlocks: "none", in: text), [])
+    }
+
     func testDeepNestingNeedsNoStack() {
         let depth = 20_000
         let template = String(repeating: "{{#t}}", count: depth) + "x" + String(repeating: "{{/t}}", count: depth)

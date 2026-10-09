@@ -153,7 +153,7 @@
 			<result type="text"/>
 		</command>
 
-		<command name="music library" code="KBntMusL" description="What's in the Music library, and what's played most: for designing music keys. Asks for Media &amp; Apple Music access the first time.">
+		<command name="music library" code="KBntMusL" description="What's in the Music library, and what's played most: for designing music keys. No more than Settings → Privacy shares with Claude. Asks for Media &amp; Apple Music access the first time.">
 			<cocoa class="KBMusicLibraryCommand"/>
 			<direct-parameter type="text" optional="yes" description="What to list: overview, genres, artists, albums, songs, favourites or playlists. Left out: overview."/>
 			<parameter name="genre" code="KBge" type="text" optional="yes" description="Only this genre's.">

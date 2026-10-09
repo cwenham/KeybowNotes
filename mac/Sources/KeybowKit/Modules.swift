@@ -67,6 +67,13 @@ public protocol KeybowModule: AnyObject, Sendable {
     /// What a block shows in previews, where nothing is asked: "‹Claude's reply›".
     func standIn(for call: TemplateBlockCall) -> String
 
+    /// Why one of its blocks mustn't be sent what's written in it — a
+    /// `{{selection}}` the person keeps from Claude — or nil when it may.
+    /// `names` are those used inside the block, at any depth, as
+    /// `Template.names` gives them. Asked before anything is read or
+    /// fetched, so a refused key does nothing.
+    func refusal(forBlock name: String, using names: Set<String>) -> String?
+
     /// Values it fetches when an action uses them — `{{api.weather}}` for a
     /// module whose manifest lists "api" in `fetches`. Asked before an action
     /// runs, only for the names it uses, with the values it can draw on.
@@ -135,6 +142,7 @@ extension KeybowModule {
         throw ModuleError("{{#\(call.name)}} isn't something this module can reply to")
     }
     public func standIn(for call: TemplateBlockCall) -> String { "‹\(call.name)›" }
+    public func refusal(forBlock name: String, using names: Set<String>) -> String? { nil }
     public func fetch(_ names: [String], params: [String: String], now: Date) async throws -> [String: String] {
         throw ModuleError("This module doesn't fetch values")
     }
@@ -182,15 +190,18 @@ public struct ModuleManifest: Sendable {
     public let settings: [ModuleSetting]
     /// Value prefixes it fetches: "api" for `{{api.weather}}`.
     public let fetches: [String]
+    /// An SF Symbol for it, beside its name in the Settings window's sidebar.
+    public let symbol: String
 
     public init(id: String, name: String, actionTypes: [ModuleActionType] = [], blocks: [ModuleBlockType] = [],
-                settings: [ModuleSetting] = [], fetches: [String] = []) {
+                settings: [ModuleSetting] = [], fetches: [String] = [], symbol: String = "puzzlepiece.extension") {
         self.id = id
         self.name = name
         self.actionTypes = actionTypes
         self.blocks = blocks
         self.settings = settings
         self.fetches = fetches
+        self.symbol = symbol
     }
 }
 
@@ -582,6 +593,20 @@ public final class ModuleRegistry: @unchecked Sendable {
     /// What a block shows in previews, whether or not anything handles it.
     public func standIn(for call: TemplateBlockCall) -> String {
         module(handlingBlock: call.name)?.standIn(for: call) ?? "‹\(call.name)›"
+    }
+
+    /// Why these templates' blocks mustn't be sent what's written in them,
+    /// as the modules that reply to them say — or nil when they may.
+    public func refusal(forBlocksIn texts: [String]) -> String? {
+        for text in texts {
+            for name in Set(TemplateBlocks.names(in: text)) {
+                guard let module = module(handlingBlock: name) else { continue }
+                if let refusal = module.refusal(forBlock: name, using: TemplateBlocks.names(insideBlocks: name, in: text)) {
+                    return refusal
+                }
+            }
+        }
+        return nil
     }
 
     /// The module that fetches a value: `api.weather` → the one fetching

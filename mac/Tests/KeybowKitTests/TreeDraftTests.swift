@@ -156,5 +156,8 @@ final class TreeDraftTests: XCTestCase {
         let bare = TreeDraft.request("x", scope: .newKeypad(name: "Pad", model: nil), document: document, context: TreeDraft.Context())
         XCTAssertTrue(bare.contains("Home Assistant isn't set up"))
         XCTAssertFalse(bare.contains("My tree file"))
+        let kept = TreeDraft.request("x", scope: .newKeypad(name: "Pad", model: nil), document: document,
+                                     context: TreeDraft.Context(homeWithheld: true))
+        XCTAssertTrue(kept.contains("use `[Home]` only for entities I name"), "kept, not missing")
     }
 }

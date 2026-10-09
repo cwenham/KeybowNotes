@@ -127,6 +127,26 @@ struct TemplateDocument {
         nodes.compactMap { if case .placeholder(let body) = $0.kind { return body }; return nil }
     }
 
+    /// The placeholders inside blocks called `name`, at any depth — what's
+    /// sent to whatever replies to them. One pass: a node's children always
+    /// come after it.
+    func placeholderBodies(insideBlocksNamed name: String) -> [String] {
+        var inside = Set<Int>()
+        var bodies: [String] = []
+        for (index, node) in nodes.enumerated() {
+            let within = inside.contains(index)
+            switch node.kind {
+            case .block(let block, _) where within || block == name:
+                inside.formUnion(node.children)
+            case .placeholder(let body) where within:
+                bodies.append(body)
+            default:
+                break
+            }
+        }
+        return bodies
+    }
+
     // MARK: - Filling in
 
     struct Rendering {
@@ -339,6 +359,12 @@ public enum TemplateBlocks {
     /// The block names a template uses: "ai".
     public static func names(in text: String) -> [String] {
         TemplateDocument(text).blockNames
+    }
+
+    /// The names used inside a template's `{{#name}}` blocks, at any depth,
+    /// as `Template.names` gives them: "selection", "location.latitude".
+    public static func names(insideBlocks name: String, in text: String) -> Set<String> {
+        Set(TemplateDocument(text).placeholderBodies(insideBlocksNamed: name).map(Template.name(of:)))
     }
 
     /// Why a template can't run as written, if it can't.

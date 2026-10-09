@@ -174,6 +174,13 @@ public final class ActionPipeline {
             refuse("\(error)")
             return
         }
+        // Nor is a block sent what the person keeps from whoever replies —
+        // the selection, from Claude — and nothing is read to find out.
+        if let refusal = registry.refusal(forBlocksIn: blockTexts) {
+            surroundings.log("  can't run: \(refusal)")
+            refuse(refusal)
+            return
+        }
         // Values modules fetch — {{api.weather}} — and what they need first.
         let used = ActionPlanner.placeholders(for: selection, context: context, vocabulary: registry.vocabulary)
         // A value the tree gives itself — `location: Office` — isn't fetched.

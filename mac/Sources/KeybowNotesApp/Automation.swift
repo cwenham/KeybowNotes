@@ -1,4 +1,5 @@
 import AppKit
+import KeybowAI
 import KeybowKit
 
 /// What other apps and AI agents can ask of KeybowNotes — through
@@ -202,7 +203,9 @@ final class Automation {
 
     // MARK: Music
 
-    /// What's in the Music library, as Claude's music_library tool answers.
+    /// What's in the Music library, as Claude's music_library tool answers —
+    /// and no more than Settings → Privacy shares with Claude, since it's
+    /// AI agents that ask, through the MCP server.
     func musicLibrary(_ list: String, genre: String?, artist: String?, album: String?, rankedBy: String?,
                       limit: Int?) async throws -> String {
         var input: [String: Any] = ["list": list]
@@ -210,7 +213,11 @@ final class Automation {
             if let value { input[key] = value }
         }
         if let limit { input["limit"] = limit }
-        return try await MusicLibrary.shared.contents().answer(try MusicQuery(input: input))
+        let query = try MusicQuery(input: input)
+        let sharing = (ModuleRegistry.shared.module(id: ClaudeModule.id) as? ClaudeModule)?.sharing.music ?? .everything
+        // Refused before the library is read: nothing more is looked at.
+        if let refusal = sharing.refusal(query) { throw refusal }
+        return try await MusicLibrary.shared.contents().answer(query, sharing: sharing)
     }
 
     // MARK: Running

@@ -24,9 +24,10 @@ bar or the outline directly.
 | Keep **state** between runs of the app | `ModuleHost.load` / `save` |
 | Put text on the **clipboard** | `ModuleHost.copy` |
 | Reply to **template blocks** — `{{#ai}}…{{/ai}}` | `manifest.blocks`, `reply(to:)`, `standIn(for:)` |
+| **Refuse a block** for what's written in it — a `{{selection}}` the person keeps from it — before anything is read | `refusal(forBlock:using:)` |
 | **Fetch values** when an action needs them — `{{api.weather}}`, `{{quote file="q.md"}}` | `manifest.fetches`, `fetch(_:params:now:)`, `valuesNeeded(toFetch:)`, `standIn(forValue:)`, `fetchSubject(for:)` |
 | Read files the tree names, beside its templates | `ModuleHost.templatesFolder` |
-| Add **settings** to the Settings window, secrets kept in the Keychain | `manifest.settings`, `ModuleHost.setting` / `secret` |
+| Add **settings** to the Settings window — a page of its own — secrets kept in the Keychain | `manifest.settings`, `manifest.symbol`, `ModuleHost.setting` / `secret` |
 | **Show something on screen** until it's dismissed, with OK and Cancel — and a field to type in | `ModuleHost.display(_:)`, `ModuleDisplay.Field` |
 | Take a **template or text** whole, like Copy | `ModuleActionType.takesText` |
 | Offer **choices for a field** in the tree editor — what's there to control, following the other fields | `ModuleField.offersChoices`, `choices(for:type:fields:)` |
@@ -132,9 +133,17 @@ own, with only the modules it needs.
   the attributes back. Fetched values aren't blocks: they may go in fields
   that steer an action. Previews use `standIn(forValue:)`.
 - **Settings.** A module describes its settings — text, a secret, a choice, a
-  flag — and the host draws them in its own section of the Settings window. The
+  flag — and the host draws them on a page of its own in the Settings window,
+  listed in the sidebar under its name and `manifest.symbol`, an SF Symbol. The
   module reads them with `setting(_:for:)`, and secrets with `secret(_:for:)`,
   which the host keeps in the Keychain. A module never draws or stores them.
+- **Refusing a block.** Before a key's action reads or fetches anything, the
+  host asks each module that replies to a block in it,
+  `refusal(forBlock:using:)`, with the names of the placeholders inside the
+  block at any depth — "selection", "location.latitude" — as
+  `TemplateBlocks.names(insideBlocks:in:)` finds them. A reason refuses the
+  key, and the overlay shows it. Claude refuses what Settings → Privacy keeps
+  from it.
 - **State.** `load` and `save` keep data per module between runs. In the app
   they're the module's part of `state.json`, beside `tree.md`, under
   `modules.<id>.<key>`: the app reads and writes the file for every module,
@@ -207,6 +216,13 @@ dependency at all: another module's values are in every action's placeholders.
 - For other modules, `ask(system:prompt:schema:)` sends one request and returns
   the text; with a JSON schema it asks for structured output
   (`output_config.format`), so the reply is JSON matching it.
+- `sharing` is what the person lets Claude see, from Settings → Privacy, kept
+  with the module's settings under `share.…` and `send.…` keys — everything,
+  until something's unticked. It refuses a block that would send the selected
+  text, the clipboard or where they are when those are kept from it, and an
+  image or PDF on the clipboard as the request is made. The app reads the
+  rest — what goes with a drafting request, and how much of the Music library
+  (`MusicSharing`) its tool and AppleScript may show.
 
 ## Data sources
 
@@ -387,6 +403,7 @@ it did is on the screen, and the overlay steps aside.
 
 - **Loading modules at run time.** They're compiled in. A plugin system would
   load bundles against this same interface.
-- **A module's own settings pane**, and **its own overlay layout**. A status
-  is text and a clock; anything richer would need the interface to grow.
+- **A module's own settings view**, beyond the rows its settings describe, and
+  **its own overlay layout**. A status is text and a clock; anything richer
+  would need the interface to grow.
 - **Default fields per type** from a module, as the built-in types have.

@@ -146,7 +146,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func showSettings() {
+    /// At `pane`, if one's given: Privacy, or a module's page.
+    private func showSettings(_ pane: SettingsPane? = nil) {
         if settingsWindow == nil {
             settingsWindow = SettingsWindowController(settings: settings, actions: SettingsActions(
                 testOverlay: { [weak self] in
@@ -165,7 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             ))
         }
         refreshOpenAtLogin()
-        settingsWindow?.show()
+        settingsWindow?.show(pane)
     }
 
     // MARK: - Config
@@ -648,7 +649,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func showDraft() {
         if designWindow?.window?.isVisible != true {
             let outline = AppLocations.outline(for: store.url)
-            designWindow = DesignWindowController(outlineURL: outline, openSettings: { [weak self] in self?.showSettings() })
+            designWindow = DesignWindowController(outlineURL: outline,
+                                                  openSettings: { [weak self] pane in self?.showSettings(pane) })
         }
         designWindow?.show()
     }

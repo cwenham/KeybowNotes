@@ -240,6 +240,47 @@ stored by permanent identifier. Timings can live in either place: the config
 file sets them, and a slider in the window overrides the file's value only once
 it is moved, with "Use the Config File's Timings" to undo that.
 
+The window is a page at a time, chosen from a sidebar — General, Keys, Overlay,
+Calendar & Reminders, Tree File, Privacy — then a page for each module with
+settings of its own, drawn from what its manifest describes, under the
+manifest's symbol. A module needs nothing from the app to get one, so the
+window grows as modules are added.
+
+### Privacy
+
+The Privacy page gathers every permission macOS asks about (§7) with how it
+stands, a button to ask now — so the prompt doesn't interrupt a key press —
+and, once refused, one to the place in System Settings it can be changed.
+macOS reports most of them directly; for the rest it says nothing, so the page
+finds out the only way there is: the Music library by reading it (once macOS
+has been asked, so looking never asks), the local network by reaching Home
+Assistant, Automation by `AEDeterminePermissionToAutomateTarget` — which
+answers only for an app that's open, so asking opens it out of sight first.
+System Settings doesn't announce a change, so the page looks again every two
+seconds while it shows.
+
+Below that, what Claude is sent, kept with the Claude module's settings and
+all of it until the person says otherwise:
+
+- **Designing trees:** the tree file; the names of apps and shortcuts; Home
+  Assistant's entities — each sent with the first request, or not. What's
+  written, and which keypads are plugged in, always go.
+- **The Music library,** in steps — nothing, genres, artists, albums, every
+  song — each taking in those before it, and playlists' names besides.
+  `MusicSharing` decides what the `music_library` tool offers (its `list`
+  choices, and whether it can narrow by artist or album) and refuses any
+  question beyond it before the library is read: narrowing genres by an
+  artist would say whether the artist is there. The overview leaves out what
+  isn't shared. AppleScript's `music library`, which the MCP server asks
+  through, is held to the same, since AI agents are who use it.
+- **`{{#ai}}` blocks:** the selected text, the clipboard, images and PDFs on
+  it, and where you are. A module can refuse a block by what's written inside
+  it (`KeybowModule.refusal(forBlock:using:)`, given the placeholder names at
+  any depth); the pipeline asks before reading the selection or fetching
+  anything, so a refused key does nothing at all. Whether the clipboard holds
+  an image is known only once it's read, so that one is checked as the
+  request is made.
+
 ### Overlay
 
 A non-activating HUD panel, so it never steals focus: borderless, ignores the
@@ -610,11 +651,11 @@ should explain a refusal rather than failing silently.
 | Network (Anthropic API) | `{{#ai}}` blocks: prompts go to `api.anthropic.com` with an API key from the Keychain. No permission prompt; the key is the gate |
 | Location Services | `{{location}}` and its parts, including in a data source's URL. Asked for when first needed. The app isn't under the hardened runtime; if it were, it would also need the `com.apple.security.personal-information.location` entitlement |
 | Local Network | `home` and `{{home.…}}`: talking to Home Assistant on your network. Asked for when first used. Plain http is allowed only to local hosts — `.local` names, names without dots, private address ranges |
-| Media & Apple Music | Reading the Music library through iTunesLibrary — the tree editor's lists of songs, albums, artists, genres and playlists, and Claude's `music_library` tool — without opening Music. Asked for when first read; the packaged app only, since it needs `NSAppleMusicUsageDescription` |
+| Media & Apple Music | Reading the Music library through iTunesLibrary — the tree editor's lists of songs, albums, artists, genres and playlists, and Claude's `music_library` tool — without opening Music. Asked for when first read, or from Settings → Privacy; the packaged app only, since it needs `NSAppleMusicUsageDescription` |
 | Files on removable volumes | *Set Up a Keypad…*: reading a keypad's drive, and writing CircuitPython and the firmware to it. Asked for when the setup window first looks |
 | Automation (being controlled) | AppleScript, Shortcuts' *Run AppleScript* and the MCP server: macOS asks, once per app, whether it may control KeybowNotes |
-| Network (Anthropic API), drafting | *Design with Claude…*: the description, and — if ticked — the tree file and the names of apps, shortcuts and Home Assistant entities go to `api.anthropic.com` with the person's key |
-| Accessibility | `text.insert`: pressing ⌘V in the app in front. `text.insertDirect`: setting the selected text, or typing. `{{selection}}`: reading the selected text, and sending ⌘C to apps that won't share it. `window`: moving and sizing the window in front. Asked for when first needed, or from Settings → Selected Text |
+| Network (Anthropic API), drafting | *Design with Claude…*: the description, and — as Settings → Privacy allows — the tree file, the names of apps and shortcuts, Home Assistant's entities, and as much of the Music library as Claude asks for and is shared, go to `api.anthropic.com` with the person's key |
+| Accessibility | `text.insert`: pressing ⌘V in the app in front. `text.insertDirect`: setting the selected text, or typing. `{{selection}}`: reading the selected text, and sending ⌘C to apps that won't share it. `window`: moving and sizing the window in front. Asked for when first needed, or from Settings → Privacy |
 
 `url.open`, `clipboard.copy` and `maps.search` need nothing. `clock.timer` needs
 a helper shortcut, *KeybowNotes Timer*, that the person makes once in Shortcuts:

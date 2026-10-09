@@ -1,4 +1,5 @@
 import AppKit
+import KeybowAI
 import KeybowKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -9,28 +10,80 @@ struct SettingsView: View {
 
     @State private var calendars: [EventKitService.Choice] = []
     @State private var lists: [EventKitService.Choice] = []
+    /// What macOS allows, for the Privacy page.
+    @State private var access = MacAccess()
 
-    var body: some View {
-        Form {
-            general
-            overlay
-            timing
-            calendarSection
-            selectionSection
-            moduleSections
-            configSection
-        }
-        .formStyle(.grouped)
-        .frame(width: 500)
-        .fixedSize(horizontal: false, vertical: true)
-        .task { await loadChoices() }
+    /// Modules with settings of their own: a page each, after the app's.
+    private var modules: [KeybowModule] {
+        ModuleRegistry.shared.all.filter { !$0.manifest.settings.isEmpty }
     }
 
-    // MARK: - Sections
+    var body: some View {
+        NavigationSplitView {
+            List(selection: $settings.pane) {
+                Section {
+                    ForEach(SettingsPane.standard, id: \.self) { pane in
+                        Label(pane.title, systemImage: pane.symbol).tag(pane)
+                    }
+                }
+                if !modules.isEmpty {
+                    Section("Modules") {
+                        ForEach(modules, id: \.manifest.id) { module in
+                            Label(module.manifest.name, systemImage: module.manifest.symbol)
+                                .tag(SettingsPane.module(module.manifest.id))
+                        }
+                    }
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
+            .toolbar(removing: .sidebarToggle)
+        } detail: {
+            Form { page }
+                .formStyle(.grouped)
+                // A page of its own each time: its rows read their settings afresh.
+                .id(settings.pane)
+                // Closed, the window keeps its views: nothing's watched then.
+                .task(id: settings.isWindowOpen ? settings.pane : nil) {
+                    guard settings.isWindowOpen else { return }
+                    switch settings.pane {
+                    case .privacy?: await access.watch()
+                    // Again each time: access may have been given since, on the Privacy page.
+                    case .calendar?: await loadChoices()
+                    default: break
+                    }
+                }
+        }
+        .frame(minWidth: 680, minHeight: 460)
+    }
 
-    private var general: some View {
-        Section("General") {
-            LabeledContent("Keypads") {
+    @ViewBuilder
+    private var page: some View {
+        switch settings.pane ?? .general {
+        case .general:
+            keypads
+            general
+            selectionSection
+        case .keys:
+            lights
+            timing
+        case .overlay:
+            overlay
+        case .calendar:
+            calendarSection
+        case .tree:
+            configSection
+        case .privacy:
+            PrivacyPane(access: access)
+        case .module(let id):
+            moduleSections(id)
+        }
+    }
+
+    // MARK: - Pages
+
+    private var keypads: some View {
+        Section("Keypads") {
+            LabeledContent("Status") {
                 HStack {
                     Text(settings.keybowStatus).foregroundStyle(.secondary)
                     Button("Troubleshoot…") { actions.troubleshoot(nil) }
@@ -40,6 +93,11 @@ struct SettingsView: View {
             ForEach(settings.missingKeypads) { missing in
                 MissingKeypadRow(missing: missing, actions: actions)
             }
+        }
+    }
+
+    private var general: some View {
+        Section {
             Toggle("Open at login", isOn: Binding(get: { settings.openAtLogin }, set: actions.setOpenAtLogin))
             if let note = settings.openAtLoginNote {
                 Text(note).font(.caption).foregroundStyle(.secondary)
@@ -48,6 +106,11 @@ struct SettingsView: View {
                 Text("Dry run")
                 Text("Show what an action would do, without doing it.")
             }
+        }
+    }
+
+    private var lights: some View {
+        Section("Lights") {
             LabeledContent("Key brightness") {
                 HStack {
                     Slider(value: $settings.brightness, in: 0.05...1)
@@ -168,13 +231,23 @@ struct SettingsView: View {
         }
     }
 
-    /// Each module's own settings, as it describes them.
+    /// A module's own settings, as it describes them.
     @ViewBuilder
-    private var moduleSections: some View {
-        ForEach(ModuleRegistry.shared.all.filter { !$0.manifest.settings.isEmpty }, id: \.manifest.id) { module in
+    private func moduleSections(_ id: String) -> some View {
+        if let module = ModuleRegistry.shared.module(id: id) {
             Section(module.manifest.name) {
                 ForEach(module.manifest.settings, id: \.key) { setting in
-                    ModuleSettingRow(module: module.manifest.id, setting: setting)
+                    ModuleSettingRow(module: id, setting: setting)
+                }
+            }
+            if id == ClaudeModule.id {
+                Section {
+                    HStack {
+                        Text("What Claude is sent — your tree, your music, the selected text — is chosen in Privacy.")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Privacy…") { settings.pane = .privacy }
+                    }
                 }
             }
         }

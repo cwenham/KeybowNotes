@@ -462,16 +462,20 @@ extension MusicLibrary.Contents {
 
 /// What a built-in action's field can be set to, for the tree editor to
 /// offer as it's edited — a Music key's playlists, songs, albums, artists
-/// and genres, a Calendar key's calendars — as a module offers its own.
+/// and genres, a Calendar key's calendars, a Reminder key's lists — as a
+/// module offers its own.
 public enum BuiltInChoices {
     /// Given the action's other fields as they stand, so one choice follows
-    /// another: an artist's albums, a genre's artists. `calendars` lists the
-    /// calendars new events can go in: EventKit's, unless a test says.
+    /// another: an artist's albums, a genre's artists. `calendars` and
+    /// `reminderLists` list where new events and reminders can go:
+    /// EventKit's, unless a test says.
     public static func choices(for field: String, type: String, fields: [String: String],
                                library: MusicLibrary = .shared,
-                               calendars: @Sendable () async throws -> [CalendarList] = calendarsForNewEvents)
+                               calendars: @Sendable () async throws -> [CalendarList] = calendarsForNewEvents,
+                               reminderLists: @Sendable () async throws -> [CalendarList] = listsForNewReminders)
         async throws -> [FieldChoice] {
         if type == "calendar.createEvent", field == "calendar" { return try await calendars().choices }
+        if type == "reminders.create", field == "list" { return try await reminderLists().choices }
         guard type == "music.play", ["playlist", "song", "album", "artist", "genre"].contains(field) else { return [] }
         let contents = try await library.contents()
         // A placeholder — artist: {{leaf}} — names nothing until the key's pressed.
@@ -501,12 +505,23 @@ public enum BuiltInChoices {
     /// The calendars a new event can go in, as far as macOS lets KeybowNotes
     /// see them: none, and why, until Calendars is allowed — never a prompt.
     @Sendable public static func calendarsForNewEvents() async throws -> [CalendarList] {
+        try await fromEventKit("Calendars") { try await EventKitService.shared.calendarsForNewEvents() }
+    }
+
+    /// The Reminders lists a new reminder can go in, likewise.
+    @Sendable public static func listsForNewReminders() async throws -> [CalendarList] {
+        try await fromEventKit("Reminders lists") { try await EventKitService.shared.listsForNewReminders() }
+    }
+
+    /// EventKit's refusals, as a module says them.
+    private static func fromEventKit(_ what: String, _ read: () async throws -> [CalendarList]) async throws
+        -> [CalendarList] {
         guard EventKitService.isAvailable else {
-            throw ModuleError("Calendars are listed by KeybowNotes.app",
-                              "A development build can't ask macOS for access to Calendars.")
+            throw ModuleError("\(what) are listed by KeybowNotes.app",
+                              "A development build can't ask macOS for access to Calendars and Reminders.")
         }
         do {
-            return try await EventKitService.shared.calendarsForNewEvents()
+            return try await read()
         } catch let error as EventKitService.AccessError {
             throw ModuleError(error.message, error.detail)
         }

@@ -207,6 +207,17 @@ final class AgendaModuleTests: XCTestCase {
         XCTAssertEqual(other, [])
     }
 
+    func testADoneKeyOffersTheLists() async throws {
+        let module = AgendaModule(source: FakeCalendar(lists: [CalendarList("Errands", account: "iCloud"),
+                                                               CalendarList("Work", account: "Exchange")]))
+        let lists = try await module.choices(for: "list", type: "reminders.complete", fields: [:])
+        XCTAssertEqual(lists, [FieldChoice("Errands", title: "iCloud"), FieldChoice("Work", title: "Exchange")])
+        let titles = try await module.choices(for: "title", type: "reminders.complete", fields: [:])
+        XCTAssertEqual(titles, [])
+        XCTAssertTrue(module.manifest.actionTypes.first { $0.type == "reminders.complete" }?.fields
+            .first { $0.key == "list" }?.offersChoices == true)
+    }
+
     func testAnUnknownValueIsSaid() async {
         do {
             _ = try await module(FakeCalendar()).fetch(["event.colour"], params: [:], now: now)

@@ -81,7 +81,7 @@ public final class AgendaModule: KeybowModule, @unchecked Sendable {
                     ModuleField(key: "list", title: "List", hint: "empty: the lists in Settings", help: """
                         The Reminders list to look in. Left out, the lists chosen in Settings, else all.
                         Example: Errands
-                        """),
+                        """, offersChoices: true),
                 ]),
         ],
         settings: [
@@ -116,6 +116,12 @@ public final class AgendaModule: KeybowModule, @unchecked Sendable {
     }
 
     /// "Work, Family" → their names, lowercased; empty for every one.
+    /// A Done key's lists to choose from, in the tree editor.
+    public func choices(for field: String, type: String, fields: [String: String]) async throws -> [FieldChoice] {
+        guard type == "reminders.complete", field == "list" else { return [] }
+        return try await access { try await self.calendarSource().allReminderLists() }.choices
+    }
+
     /// The person's calendars, or Reminders lists, to tick in Settings: one
     /// a name, since that's how they're kept and matched, with the accounts
     /// that have one by that name.

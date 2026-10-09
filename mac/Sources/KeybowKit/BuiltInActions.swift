@@ -164,7 +164,7 @@ public enum BuiltInActions {
                 ModuleField(key: "list", title: "List", help: """
                     The Reminders list, by name. Empty: the one chosen in Settings, else the default list.
                     Example: Errands
-                    """),
+                    """, offersChoices: true),
                 ModuleField(key: "notes", title: "Notes", help: notesHelp),
             ]),
         defaults: ["title": .string("{{leaf}}")])

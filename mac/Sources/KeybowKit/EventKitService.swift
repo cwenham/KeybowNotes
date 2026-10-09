@@ -315,6 +315,11 @@ extension EventKitService: CalendarSource {
         try lists(for: .event, writable: true)
     }
 
+    /// The Reminders lists a new reminder can go in, likewise.
+    public func listsForNewReminders() throws -> [CalendarList] {
+        try lists(for: .reminder, writable: true)
+    }
+
     /// Only with access already given: Settings and the editor mustn't raise
     /// a prompt.
     private func lists(for type: EKEntityType, writable: Bool = false) throws -> [CalendarList] {

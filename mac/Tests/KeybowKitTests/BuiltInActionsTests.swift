@@ -103,6 +103,17 @@ final class BuiltInActionsTests: XCTestCase {
                       == true, "so the editor offers them")
     }
 
+    func testAReminderKeyOffersTheListsRemindersCanGoIn() async throws {
+        let lists: @Sendable () async throws -> [CalendarList] = {
+            [CalendarList("Reminders", account: "iCloud"), CalendarList("Errands", account: "iCloud")]
+        }
+        let offered = try await BuiltInChoices.choices(for: "list", type: "reminders.create", fields: [:],
+                                                       reminderLists: lists)
+        XCTAssertEqual(offered, [FieldChoice("Errands", title: "iCloud"), FieldChoice("Reminders", title: "iCloud")])
+        XCTAssertTrue(vocabulary.describe("reminders.create")?.fields.first { $0.key == "list" }?.offersChoices
+                      == true, "so the editor offers them")
+    }
+
     func testWithoutEventKitTheCalendarsArentListed() async {
         guard !EventKitService.isAvailable else { return }
         do {

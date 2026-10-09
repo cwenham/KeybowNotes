@@ -595,6 +595,9 @@ says so, and asks nothing. A name can still be typed, or a placeholder.
 With no `list`: the default list chosen in Settings, else Reminders' own default.
 A list that doesn't exist falls back to the default, and the result says so.
 
+In the tree editor, *List* lists your Reminders lists, once Reminders is
+allowed in Settings → Privacy, as *Calendar* does for an event.
+
 ### `messages.compose` — a message, not sent
 
 | Field | |
@@ -1139,7 +1142,8 @@ A module. Marks a reminder done.
 ```
 
 A reminder without a date is never "due next": name it with `title` to tick it
-off. Keywords: `Done`, `Complete Reminder`, `Tick Off`.
+off. Keywords: `Done`, `Complete Reminder`, `Tick Off`. In the tree editor,
+*List* lists your Reminders lists, once Reminders is allowed.
 
 ---
 

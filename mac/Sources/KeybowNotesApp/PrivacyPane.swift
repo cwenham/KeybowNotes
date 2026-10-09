@@ -203,8 +203,10 @@ private struct PermissionRow: View {
             ProgressView().controlSize(.small)
         } else {
             switch state.kind {
-            case .askable, .unknown where canAsk:
-                Button(state.kind == .askable ? "Allow…" : "Ask Now", action: ask)
+            case .askable:
+                Button("Allow…", action: ask)
+            case .unknown where canAsk:
+                Button("Ask Now", action: ask)
             case .refused, .unknown:
                 Button("Open Settings…") { Self.open(anchor) }
             case .allowed, .checking, .unavailable:

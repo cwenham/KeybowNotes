@@ -115,6 +115,21 @@ public enum TemplateSyntax {
         return tags.sorted { $0.range.location < $1.range.location }
     }
 
+    /// The name being typed in a tag at the caret, if it's in one: after
+    /// `{{`, or after `{{#` for a block's. For offering what can go there.
+    public static func partialName(in text: String, at caret: Int) -> (range: NSRange, block: Bool)? {
+        let string = text as NSString
+        guard caret <= string.length else { return nil }
+        let before = string.substring(to: caret)
+        guard let open = before.range(of: "{{", options: .backwards) else { return nil }
+        var inside = before[open.upperBound...]
+        let block = inside.first == "#"
+        if block { inside = inside.dropFirst() }
+        guard inside.allSatisfy({ $0.isLetter || $0.isNumber || "._-".contains($0) }) else { return nil }
+        let length = inside.utf16.count
+        return (NSRange(location: caret - length, length: length), block)
+    }
+
     /// Why the text can't be read as a template, where: a block never closed,
     /// a closing tag that closes nothing, quotes left open.
     public static func problems(in text: String) -> [TemplateIssue] {
@@ -128,6 +143,19 @@ public enum TemplateSyntax {
 // MARK: - Checking
 
 extension ValueCatalog {
+    /// What `{{` offers for what's been typed, in the catalogue's order:
+    /// names whole, and families as far as their first part to fill in —
+    /// `home.`, `contact.` — or, for a block, the blocks.
+    public func completions(for partial: String, block: Bool) -> [String] {
+        var seen = Set<String>()
+        return entries.compactMap { entry -> String? in
+            guard (entry.kind == .block) == block else { return nil }
+            let name = entry.name.firstIndex(of: "<").map { String(entry.name[..<$0]) } ?? entry.name
+            guard !name.isEmpty, name.lowercased().hasPrefix(partial.lowercased()), seen.insert(name).inserted else { return nil }
+            return name
+        }
+    }
+
     /// What's wrong with a field's or a template's text, and where: what
     /// stops it running — a block where none may go, one nothing replies to,
     /// a call missing what it needs — and what's probably a mistake — a name
@@ -188,7 +216,7 @@ extension ValueCatalog {
         var issues: [TemplateIssue] = []
         let missing = entry.attributes.filter { $0.required && tag.attributes[$0.name] == nil }
         if !missing.isEmpty {
-            issues.append(TemplateIssue("\(written) needs " + missing.map { "\($0.name)=…" }.joined(separator: " and ") + ".",
+            issues.append(TemplateIssue("\(written) needs " + missing.map { "\($0.name)=" }.joined(separator: " and ") + " in it.",
                                         at: tag.range, .error))
         }
         // Any name goes where the entry takes values of its own: a source's URL's.

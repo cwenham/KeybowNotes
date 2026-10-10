@@ -53,6 +53,34 @@ final class TemplateSyntaxTests: XCTestCase {
                        ["{{quote file='q.md}} and on"], "quotes left open, to the end")
     }
 
+    // MARK: - Offering values
+
+    func testTheNameBeingTyped() {
+        func partial(_ text: String) -> String? {
+            TemplateSyntax.partialName(in: text, at: (text as NSString).length).map {
+                ($0.block ? "#" : "") + (text as NSString).substring(with: $0.range)
+            }
+        }
+        XCTAssertEqual(partial("Hi {{lea"), "lea")
+        XCTAssertEqual(partial("Hi {{"), "")
+        XCTAssertEqual(partial("🙂 {{home.sen"), "home.sen")
+        XCTAssertEqual(partial("{{#a"), "#a")
+        XCTAssertNil(partial("{{leaf}} and"), "after a tag's closed")
+        XCTAssertNil(partial("{{/a"), "a closing tag")
+        XCTAssertNil(partial("{{quote file="), "an attribute")
+        XCTAssertNil(partial("no braces"))
+        XCTAssertEqual(TemplateSyntax.partialName(in: "{{leaf}}", at: 4)?.range, NSRange(location: 2, length: 2), "mid-name")
+    }
+
+    func testWhatsOffered() {
+        XCTAssertEqual(Array(catalog.completions(for: "con", block: false)),
+                       ["contact.name", "contact.phone", "contact.email", "contact."], "a family as far as its part to fill in")
+        XCTAssertEqual(catalog.completions(for: "LEV", block: false), ["level1", "level2", "level3", "level4"])
+        XCTAssertEqual(catalog.completions(for: "", block: true), ["reply"])
+        XCTAssertEqual(catalog.completions(for: "test", block: false), ["test.", "test.weather"])
+        XCTAssertTrue(catalog.completions(for: "zz", block: false).isEmpty)
+    }
+
     // MARK: - Checking
 
     private func check(_ text: String, _ place: TemplatePlace = .field("title"), in catalog: ValueCatalog? = nil)
@@ -83,8 +111,8 @@ final class TemplateSyntaxTests: XCTestCase {
     }
 
     func testWhatACallTakes() {
-        XCTAssertEqual(check("{{lines order=random}}"), ["error: {{lines}} needs file=…."])
-        XCTAssertEqual(check("{{lines}}"), ["error: {{lines}} needs file=…."], "even written as a name")
+        XCTAssertEqual(check("{{lines order=random}}"), ["error: {{lines}} needs file= in it."])
+        XCTAssertEqual(check("{{lines}}"), ["error: {{lines}} needs file= in it."], "even written as a name")
         XCTAssertEqual(check("{{lines file=q.md colour=red}}"),
                        ["warning: {{lines}} doesn't take “colour”: it takes file and order."])
         XCTAssertEqual(check("{{#reply tone=dry}}x{{/reply}}"), ["warning: {{#reply}} doesn't take “tone”: it takes nothing."])

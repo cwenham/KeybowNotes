@@ -269,7 +269,7 @@ private struct NodeInspector: View {
             }
             let template = effectiveValue("template")
             if !template.isEmpty {
-                TemplateSection(model: model, name: template, source: source(of: "template"))
+                TemplateSection(model: model, name: template, source: source(of: "template"), context: valueContext(.file))
                     .padding(.top, 6)
             }
         }
@@ -440,15 +440,9 @@ private struct NodeInspector: View {
                 }
                 .disabled(unused != nil)
             } else {
-                let unused = unusedReason(spec.key, type: action?.type)
                 HStack(alignment: .firstTextBaseline) {
-                    DraftField(title: spec.title, value: own ?? "", placeholder: effectiveValue(spec.key),
-                               note: source(of: spec.key), hint: spec.hint,
-                               multiline: ["body", "entry", "notes", "text"].contains(spec.key), help: help,
-                               unused: unused) { value in
-                        setField(spec.key, value.isEmpty ? nil : value)
-                    }
-                    .disabled(unused != nil)
+                    textField(spec, key: spec.key, own: own, placeholder: effectiveValue(spec.key), note: source(of: spec.key),
+                              help: help, unused: unusedReason(spec.key, type: action?.type))
                     if spec.key == "open" {
                         Button("Choose…") { chooseFileToOpen() }
                             .controlSize(.small)
@@ -549,15 +543,49 @@ private struct NodeInspector: View {
                     }
                     .disabled(unused != nil)
                 } else {
-                    DraftField(title: spec.title, value: own ?? "", placeholder: "", note: "", hint: spec.hint,
-                               multiline: ["body", "entry", "notes", "text"].contains(spec.key), help: help,
-                               unused: unused) { value in
-                        setField(key, value.isEmpty ? nil : value)
-                    }
-                    .disabled(unused != nil)
+                    textField(spec, key: key, own: own, placeholder: "", note: "", help: help, unused: unused)
                 }
             }
         }
+    }
+
+    // MARK: - Text and {{values}}
+
+    /// Fields that hold several lines.
+    private static let longText: Set<String> = ["body", "entry", "notes", "text"]
+    /// Fields that name one thing exactly, where {{values}} have no place.
+    private static let exactText: Set<String> = ["bundleId", "calendarId"]
+
+    /// A text field: one that takes {{values}}, coloured, explained and
+    /// checked as it's typed, with ƒx for the list of them; or, for numbers
+    /// and exact names, a plain one.
+    @ViewBuilder
+    private func textField(_ spec: ModuleField, key: String, own: String?, placeholder: String, note: String,
+                           help: String?, unused: String?) -> some View {
+        if spec.kind == .text, !Self.exactText.contains(spec.key) {
+            TemplateField(title: spec.title, value: own ?? "", placeholder: placeholder, note: note, hint: spec.hint,
+                          multiline: Self.longText.contains(spec.key), help: help, unused: unused,
+                          context: valueContext(.field(key))) { value in
+                setField(key, value.isEmpty ? nil : value)
+            }
+            .disabled(unused != nil)
+        } else {
+            DraftField(title: spec.title, value: own ?? "", placeholder: placeholder, note: note, hint: spec.hint,
+                       multiline: Self.longText.contains(spec.key), help: help, unused: unused) { value in
+                setField(key, value.isEmpty ? nil : value)
+            }
+            .disabled(unused != nil)
+        }
+    }
+
+    /// What the {{values}} in this node's text are explained and checked
+    /// against: those for its key, with what the tree sets above and below it.
+    private func valueContext(_ place: TemplatePlace) -> ValueContext {
+        let catalog = ValueCatalog(registry: .shared)
+        guard let tree, let config, let selection = config.resolve(tree: tree, path: location.path) else {
+            return ValueContext(catalog: catalog, params: [:], place: place)
+        }
+        return ValueContext(catalog: catalog.atKey(selection, config: config), params: selection.params, place: place)
     }
 
     /// For a type that takes a template file or text — Copy's text, a note's
@@ -845,7 +873,8 @@ private struct NodeInspector: View {
             Text("Values").font(.subheadline.weight(.semibold))
             ForEach(ownParameters, id: \.0) { key, value in
                 HStack(alignment: .firstTextBaseline) {
-                    DraftField(title: key, value: value, note: "set here", help: FieldHelp.parameter(key)) { updated in
+                    TemplateField(title: key, value: value, note: "set here", help: FieldHelp.parameter(key),
+                                  context: valueContext(.value)) { updated in
                         model.edit("Set \(key)") { try $0.setPair(id, key: key, value: updated) }
                     }
                     Button {

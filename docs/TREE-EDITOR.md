@@ -1,6 +1,6 @@
 # The tree editor
 
-**Status:** phases 1–4 built; mirroring on the Keybow and completion are next (see the end). The outline
+**Status:** phases 1–5 built; mirroring on the Keybow and completion in the outline are next (see the end). The outline
 language it edits is described in [CONFIG-LANGUAGE.md](CONFIG-LANGUAGE.md).
 
 A guided outliner for the KeybowNotes outline, in the style of OmniOutliner:
@@ -226,8 +226,32 @@ For the selected node:
   it in the outline — *Reminder done  [Done]* — and choosing one writes that
   word. Under the menu, every word for the chosen type: `[Done]`,
   `[Complete Reminder]` or `[Tick Off]`; for one with no word, `[type: …]`.
-- **Values** — template values set here, editable as key and value; and those
-  inherited from above, read-only, with where each comes from.
+- **Fields that take {{values}}** — an action's text fields, a value's, and
+  OK's and Cancel's — are written in with the values coloured as they're
+  typed: values purple, blocks indigo, a fallback or a format quieter than the
+  name. Resting the pointer on one says what it is and what it comes to for
+  this key: *The key's label … Here: Standup*. Mistakes are underlined and
+  said beneath the field — red for what won't run (a block in a link, or one
+  nothing replies to; a `{{quote}}` with no `file=`), orange for what probably
+  isn't meant (a name nothing gives, a format on what isn't a date, an
+  attribute it doesn't take). What's known comes from the values for the key:
+  every one built in and from modules, the data sources by name, what the
+  tree sets on the way to it, and — on a branch — what the keys under it set,
+  so a Meeting's `{{when}}` is known from its Today and Tomorrow.
+  - **`{{` offers the values** there are, as a list to complete from, and
+    `{{#` the blocks; choosing one closes the tag — a block with its
+    `{{/ai}}`. A family goes as far as its part to fill in: `home.`,
+    `contact.`. Esc offers them anywhere in a tag.
+  - **ƒx** beside the field opens every value there is, in groups, with a
+    search: what each holds, an example, what it comes to here, a date's
+    formats to choose from and what each gives, and what a call or a block
+    takes. Below, the field's text, larger, with what it comes to and what's
+    wrong with it. Double-click a value, or **Insert**, to put it in at the
+    caret — a part to fill in, like `<entity>`, comes selected. **Done** writes
+    the field.
+- **Values** — template values set here, editable as key and value, as values
+  (above); and those inherited from above, read-only, with where each comes
+  from.
 - **Contact / project** — when the node's label names a contact or project, its
   fields, editable here; they're written to `# contacts` or `# projects`. For a
   contact, **Look Up in Contacts** searches the Contacts app for the name and
@@ -291,7 +315,8 @@ For the selected node:
   used when there is one, so whichever of the two is out of use is greyed, with
   a line saying why, and each one's tooltip names the other.
 - **Template** — when the action uses one, the file itself, editable in place
-  with `{{placeholders}}` and headings highlighted, with **Save Template**,
+  with headings in bold and its values coloured, explained and checked as in
+  a field — as this node would use it — with **Save Template**,
   **Revert** and **Open in TextEdit**. If the file doesn't exist yet, **Create
   It**. A template is shared by every node that uses it; saving writes the file
   straight away, outside the outline's undo.
@@ -385,6 +410,12 @@ tree then becomes something you can feel as well as see.
   highlighting as you type and for the keys above. `Highlighter` colours a
   line by the roles the compiler gives its annotations.
 - `InspectorPane` and `KeypadPane` — SwiftUI, bound to the model.
+- `ValueText` — text with {{values}}: `ValueTextEditor`, an `NSTextView` for a
+  field or a page, which colours, explains, checks and completes them;
+  `TemplateField`, the inspector's field built from it; and `ValueBrowser`,
+  what ƒx opens. What they know comes from KeybowKit: `ValueCatalog` (every
+  value, described, and those for a key: `atKey`) and `TemplateSyntax` (each
+  tag where it is, and `check`, what's wrong).
 
 **Adding to the inspector.** An action's fields come from its type's
 `ModuleField`s, built in (`BuiltInActions`) or a module's, and `fieldRow` in
@@ -394,7 +425,8 @@ key: `AppField`, `ShortcutField`, `TemplateFileField` (in `TemplateEditor`),
 and `ModuleChoiceField` for any field whose module lists choices. Such views
 are built from `InspectorRow` (the label column), `NameComboBox` (a list to
 pick from that still takes typing), `DraftField` (commits on Return or on
-leaving, so one edit is one undo step) and `FieldFooter` (why a field is
+leaving, so one edit is one undo step; `TemplateField` the same, for text
+that takes {{values}}) and `FieldFooter` (why a field is
 greyed, and where its value comes from). Tooltips are `FieldHelp`'s, starting
 from each field's own `help`. Writing goes through `setField`, which also
 replaces a word that set the field — `[worklog.md]` — with the pair.
@@ -407,5 +439,8 @@ replaces a word that set the field — `[worklog.md]` — with the pair.
    rules, highlighting, problem markers, undo, save and compile.
 3. ✅ **The inspector**, editing in both directions.
 4. ✅ **The keypad drawing**, with click to jump.
-5. **Mirroring on the Keybow**; completion inside brackets (keywords, installed
-   apps, templates, lists, field names); panes for lists, contacts and projects.
+5. ✅ **Values in fields**: coloured, explained, checked and completed, with
+   ƒx for the list of them all.
+6. **Mirroring on the Keybow**; completion inside the outline's brackets
+   (keywords, installed apps, templates, lists, field names, values); panes for
+   lists, contacts and projects.

@@ -96,10 +96,13 @@ struct TemplateSection: View {
     let name: String
     /// Who sets it: "set here" or "from Meeting".
     let source: String
+    /// Its {{values}}, as the node using it has them.
+    let context: ValueContext
 
     @State private var text = ""
     @State private var saved = ""
     @State private var exists = false
+    @State private var issues: [TemplateIssue] = []
 
     private var url: URL { model.templateURL(name) }
 
@@ -111,7 +114,8 @@ struct TemplateSection: View {
                 Text(source).font(.caption2).foregroundStyle(.secondary)
             }
             if exists {
-                TemplateTextView(text: $text)
+                ValueTextEditor(text: $text, context: context, kind: .page,
+                                font: .monospacedSystemFont(ofSize: 12, weight: .regular), issues: $issues)
                     .frame(minHeight: 140, maxHeight: 260)
                     .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary))
                 HStack {
@@ -126,7 +130,15 @@ struct TemplateSection: View {
                         .help("Edit the file in TextEdit instead, saving any changes here first.")
                 }
                 .controlSize(.small)
-                Text("Shared by every node that uses \(name). {{placeholders}} are filled in when the key is pressed.")
+                ForEach(Array(issues.prefix(4).enumerated()), id: \.offset) { _, issue in
+                    Label(issue.message, systemImage: issue.severity == .error ? "exclamationmark.octagon.fill"
+                          : "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(issue.severity == .error ? .red : .orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text("Shared by every node that uses \(name). {{ offers the values there are, each checked as it is here; "
+                     + "they're filled in when the key is pressed.")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 Text("There's no \(name) in the templates folder yet.")
@@ -173,68 +185,5 @@ struct TemplateSection: View {
             NSWorkspace.shared.open(url)
         }
         model.flash("Opened \(name) in TextEdit — come back and reselect the node to see changes")
-    }
-}
-
-/// A plain-text editor that highlights `{{placeholders}}` and `#` headings.
-struct TemplateTextView: NSViewRepresentable {
-    @Binding var text: String
-
-    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
-
-    func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSTextView.scrollableTextView()
-        guard let view = scroll.documentView as? NSTextView else { return scroll }
-        view.delegate = context.coordinator
-        view.isRichText = false
-        view.allowsUndo = true
-        view.isAutomaticQuoteSubstitutionEnabled = false
-        view.isAutomaticDashSubstitutionEnabled = false
-        view.font = Coordinator.font
-        view.textContainerInset = NSSize(width: 4, height: 6)
-        view.string = text
-        context.coordinator.highlight(view)
-        return scroll
-    }
-
-    func updateNSView(_ scroll: NSScrollView, context: Context) {
-        guard let view = scroll.documentView as? NSTextView, view.string != text else { return }
-        view.string = text
-        context.coordinator.highlight(view)
-    }
-
-    final class Coordinator: NSObject, NSTextViewDelegate {
-        static let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        private static let placeholder = try! NSRegularExpression(pattern: #"\{\{[^{}]*\}\}"#)
-        private static let heading = try! NSRegularExpression(pattern: #"(?m)^#{1,3} .*$"#)
-
-        private let text: Binding<String>
-
-        init(text: Binding<String>) {
-            self.text = text
-        }
-
-        func textDidChange(_ notification: Notification) {
-            guard let view = notification.object as? NSTextView else { return }
-            text.wrappedValue = view.string
-            highlight(view)
-        }
-
-        func highlight(_ view: NSTextView) {
-            guard let storage = view.textStorage else { return }
-            let whole = NSRange(location: 0, length: storage.length)
-            let selected = view.selectedRanges
-            storage.beginEditing()
-            storage.setAttributes([.font: Self.font, .foregroundColor: NSColor.labelColor], range: whole)
-            for match in Self.heading.matches(in: storage.string, range: whole) {
-                storage.addAttribute(.font, value: NSFont.monospacedSystemFont(ofSize: 12, weight: .bold), range: match.range)
-            }
-            for match in Self.placeholder.matches(in: storage.string, range: whole) {
-                storage.addAttributes([.foregroundColor: NSColor.systemPurple,
-                                       .backgroundColor: NSColor.systemPurple.withAlphaComponent(0.12)], range: match.range)
-            }
-            storage.endEditing()
-            view.selectedRanges = selected
-        }
     }
 }

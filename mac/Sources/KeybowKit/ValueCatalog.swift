@@ -118,7 +118,7 @@ public struct ValueFormat: Equatable, Sendable {
 
 /// Every value fields and templates can use here: those built in, and
 /// those of the modules in a registry, data sources by name.
-public struct ValueCatalog: Sendable {
+public struct ValueCatalog: Equatable, Sendable {
     public let entries: [ValueEntry]
 
     public init(entries: [ValueEntry]) {

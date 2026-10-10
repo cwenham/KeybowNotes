@@ -767,6 +767,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Starts a driver for each keypad not yet known. One that goes away keeps
     /// its driver, which reconnects when it's back.
     private func discoverKeypads() {
+        // A development build can leave the keypads to the installed app, for
+        // looking at its windows: KEYBOW_NO_KEYPADS=1.
+        if !isPackaged, ProcessInfo.processInfo.environment["KEYBOW_NO_KEYPADS"] == "1" { return }
         let present = USBSerialPorts.keypads()
         for device in present where keypads[device.serial] == nil {
             Log.info("keypad found: \(device.model.title) \(device.serial)")

@@ -21,10 +21,10 @@ public final class DataModule: KeybowModule, @unchecked Sendable {
             """, example: "{{api.weather}}", fetched: true, attributes: [
                 ValueAttribute("<name>", help: "A value for one of the source's URL's placeholders, for this use only.",
                                example: "term={{selection}}"),
-            ]),
+            ], membersListed: true),
         ValueEntry("api.<source>.raw", title: "Its whole response", help: """
             A source's whole response, for an {{#ai}} block to read. It needs no rule.
-            """, example: "{{api.news.raw}}", fetched: true),
+            """, example: "{{api.news.raw}}", fetched: true, membersListed: true),
     ])
 
     let fetcher: DataFetcher

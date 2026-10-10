@@ -151,7 +151,7 @@ final class ValueCatalogTests: XCTestCase {
         registry.register(Describing(), host: MemoryModuleHost())
         let params = try XCTUnwrap(config().resolve(path: [0, 0, 0])).params
         func preview(_ name: String) -> String {
-            ValueCatalog.preview(name, params: params, registry: registry, now: now, calendar: calendar)
+            ValueCatalog.preview(of: "{{\(name)}}", params: params, registry: registry, now: now, calendar: calendar).text
         }
         XCTAssertEqual(preview("leaf"), "Standup")
         XCTAssertEqual(preview("area"), "team")

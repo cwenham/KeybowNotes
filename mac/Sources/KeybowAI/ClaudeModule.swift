@@ -79,6 +79,8 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
                                    example: "model=\"sonnet-5\"", choices: models.map(\.alias)),
                     ValueAttribute("effort", help: "How hard it thinks before replying, else as Settings → Claude says.",
                                    example: "effort=\"high\"", choices: efforts),
+                    ValueAttribute("source", help: "Who's asked: Claude, the only one so far.", example: "source=claude",
+                                   choices: ["claude"]),
                 ]),
         ],
         symbol: "sparkles")

@@ -36,13 +36,16 @@ public struct ValueEntry: Equatable, Sendable {
     public let attributes: [ValueAttribute]
     /// For a date or a time: formats to choose from, with what each gives.
     public let formats: [ValueFormat]
+    /// For a family, `api.<source>`: its members are each listed by name, so
+    /// a name none of them starts is a mistake, not one yet to be found.
+    public let membersListed: Bool
     /// Where it's listed: "This key", "Date and time", the module's name.
     /// A module's are listed under its name.
     public internal(set) var group: String
 
     public init(_ name: String, title: String, help: String, example: String? = nil, sample: String = "",
                 kind: Kind = .value, fetched: Bool = false, attributes: [ValueAttribute] = [],
-                formats: [ValueFormat] = [], group: String = "") {
+                formats: [ValueFormat] = [], membersListed: Bool = false, group: String = "") {
         self.name = name
         self.title = title
         self.help = help
@@ -52,6 +55,7 @@ public struct ValueEntry: Equatable, Sendable {
         self.fetched = fetched
         self.attributes = attributes
         self.formats = formats
+        self.membersListed = membersListed
         self.group = group
     }
 
@@ -185,6 +189,21 @@ extension ValueCatalog {
             own.append(ValueEntry(name, title: name, help: "Set on \(label), for it and every key under it.",
                                   sample: selection.params[name] ?? "", group: "Set in the tree"))
         }
+        // What the keys under a branch set: `when` on Today and Tomorrow, for
+        // the branch's {{when}}.
+        var below: [String: [(label: String, value: String)]] = [:]
+        var pending = selection.node.children.compactMap { $0 }
+        while let node = pending.popLast() {
+            for (name, value) in node.params where setOn[name] == nil { below[name, default: []].append((node.label, value)) }
+            pending += node.children.compactMap { $0 }
+        }
+        for (name, setters) in below.sorted(by: { $0.key < $1.key }) {
+            let labels = setters.map(\.label)
+            let which = labels.count <= 3 ? labels.joined(separator: ", ") : labels.prefix(2).joined(separator: ", ")
+                + " and \(labels.count - 2) more"
+            own.append(ValueEntry(name, title: name, help: "Set on keys under it: \(which). Each key has its own.",
+                                  sample: setters.first?.value ?? "", group: "Set below"))
+        }
         for (prefix, group) in [("contact.", "Contact"), ("project.", "Project")] {
             let fields = selection.params.keys.filter { $0.hasPrefix(prefix) && setOn[$0] == nil }
             for name in fields.sorted() where !entries.contains(where: { $0.holes == 0 && $0.name == name }) {
@@ -197,13 +216,13 @@ extension ValueCatalog {
         return ValueCatalog(entries: own + entries)
     }
 
-    /// What a value comes to for a key now, as previews show it: from the
-    /// tree, the clock and the modules' values, with stand-ins for what's
+    /// What text comes to for a key now, as previews show it: filled in from
+    /// the tree, the clock and the modules' values, with stand-ins for what's
     /// only known when the key is pressed. Nothing is read, fetched or asked.
-    public static func preview(_ name: String, params: [String: String], registry: ModuleRegistry = .shared,
-                               now: Date = Date(), calendar: Calendar = .current) -> String {
-        ActionSummary.preview("{{\(name)}}", params: ActionSummary.previewParams(params, registry: registry, now: now),
-                              registry: registry, now: now, calendar: calendar).text
+    public static func preview(of text: String, params: [String: String], registry: ModuleRegistry = .shared,
+                               now: Date = Date(), calendar: Calendar = .current) -> Template.Result {
+        ActionSummary.preview(text, params: ActionSummary.previewParams(params, registry: registry, now: now),
+                              registry: registry, now: now, calendar: calendar)
     }
 }
 

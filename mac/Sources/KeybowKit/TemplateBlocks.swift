@@ -41,6 +41,10 @@ struct TemplateDocument {
     struct Node {
         var kind: Kind
         var children: [Int] = []
+        /// Where its tag is in the text: a block's opening tag.
+        var tag: Range<String.Index>?
+        /// A block's closing tag.
+        var closing: Range<String.Index>?
     }
 
     /// Node 0 is the whole template. A node's children always come after it.
@@ -48,16 +52,22 @@ struct TemplateDocument {
     /// Blocks never closed, closing tags that close nothing, unreadable
     /// attributes. Shown to the person; a template with any isn't run.
     private(set) var problems: [String] = []
+    /// Where each of the problems is, in the same order.
+    private(set) var problemPlaces: [Range<String.Index>] = []
 
     init(_ text: String) {
         var open = [0]                                  // blocks not yet closed, innermost last
         var rest = Substring(text)
 
-        func add(_ kind: Kind) -> Int {
-            nodes.append(Node(kind: kind))
+        func add(_ kind: Kind, at tag: Range<String.Index>? = nil) -> Int {
+            nodes.append(Node(kind: kind, tag: tag))
             let index = nodes.count - 1
             nodes[open[open.count - 1]].children.append(index)
             return index
+        }
+        func problem(_ message: String, at place: Range<String.Index>) {
+            problems.append(message)
+            problemPlaces.append(place)
         }
 
         while let start = rest.range(of: "{{") {
@@ -70,10 +80,10 @@ struct TemplateDocument {
                 // attributes that never ends is surely a mistake, like a stray quote.
                 if opensBlock {
                     let name = inside.dropFirst().prefix { !$0.isWhitespace && $0 != "}" }
-                    problems.append("“{{#\(name)” has no closing }} — check its quotes.")
+                    problem("“{{#\(name)” has no closing }} — check its quotes.", at: start.lowerBound..<rest.endIndex)
                 } else if isOperator {
                     let name = inside.drop { $0 == " " }.prefix { !$0.isWhitespace }
-                    problems.append("“{{\(name)” has no closing }} — check its quotes.")
+                    problem("“{{\(name)” has no closing }} — check its quotes.", at: start.lowerBound..<rest.endIndex)
                 }
                 _ = add(.text(rest[start.lowerBound...]))
                 rest = ""
@@ -83,34 +93,35 @@ struct TemplateDocument {
             let body = inside[..<end.lowerBound]
             rest = inside[end.upperBound...]
 
+            let place = tag.startIndex..<tag.endIndex
             if opensBlock {
                 switch Self.opening(body.dropFirst()) {
                 case .success(let (name, attributes)):
-                    open.append(add(.block(name: name, attributes: attributes)))
-                case .failure(let problem):
-                    problems.append(problem.message)
+                    open.append(add(.block(name: name, attributes: attributes), at: place))
+                case .failure(let failure):
+                    problem(failure.message, at: place)
                     _ = add(.text(tag))
                 }
             } else if body.first == "/" {
                 let name = body.dropFirst().trimmingCharacters(in: .whitespaces)
                 if open.count > 1, case .block(let innermost, _) = nodes[open[open.count - 1]].kind, innermost == name {
-                    open.removeLast()
+                    nodes[open.removeLast()].closing = place
                 } else {
                     if open.count > 1, case .block(let innermost, _) = nodes[open[open.count - 1]].kind {
-                        problems.append("“{{/\(name)}}” comes where “{{/\(innermost)}}” was expected.")
+                        problem("“{{/\(name)}}” comes where “{{/\(innermost)}}” was expected.", at: place)
                     } else {
-                        problems.append("“{{/\(name)}}” doesn't close anything.")
+                        problem("“{{/\(name)}}” doesn't close anything.", at: place)
                     }
                     _ = add(.text(tag))
                 }
             } else {
-                _ = add(.placeholder(String(body)))
+                _ = add(.placeholder(String(body)), at: place)
             }
         }
         if !rest.isEmpty { _ = add(.text(rest)) }
         for index in open.dropFirst() {
-            if case .block(let name, _) = nodes[index].kind {
-                problems.append("“{{#\(name)}}” is never closed with {{/\(name)}}.")
+            if case .block(let name, _) = nodes[index].kind, let place = nodes[index].tag {
+                problem("“{{#\(name)}}” is never closed with {{/\(name)}}.", at: place)
             }
         }
     }

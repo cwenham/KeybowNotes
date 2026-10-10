@@ -131,33 +131,37 @@ final class TreeEditorViewController: NSViewController {
     /// KEYBOW_EDITOR_SCRIPT="wait:1;type:Bob;key:return;key:ctrl+cmd+up;dump:/tmp/out.md"
     /// replays keystrokes through the normal event path, then writes the outline
     /// and selection to a file — for reproducing keyboard behaviour without a
-    /// person at the keyboard.
+    /// person at the keyboard. It runs on a thread of its own, posting keys from
+    /// there: while a completion list is open, AppKit keeps the main thread in
+    /// a loop of its own, waiting for keys.
     private func runDebugScript() {
         guard let script = ProcessInfo.processInfo.environment["KEYBOW_EDITOR_SCRIPT"], let window = view.window else { return }
         let codes: [String: UInt16] = ["return": 36, "tab": 48, "esc": 53, "delete": 51,
                                        "up": 126, "down": 125, "left": 123, "right": 124]
+        let windowNumber = window.windowNumber
+        let app = NSApp!
         func post(_ characters: String, code: UInt16, flags: NSEvent.ModifierFlags) {
             for type in [NSEvent.EventType.keyDown, .keyUp] {
                 if let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: flags,
                                                 timestamp: ProcessInfo.processInfo.systemUptime,
-                                                windowNumber: window.windowNumber, context: nil,
+                                                windowNumber: windowNumber, context: nil,
                                                 characters: characters, charactersIgnoringModifiers: characters,
                                                 isARepeat: false, keyCode: code) {
-                    NSApp.postEvent(event, atStart: false)
+                    app.postEvent(event, atStart: false)
                 }
             }
         }
-        Task { @MainActor in
+        Thread.detachNewThread { [weak self] in
             for step in script.split(separator: ";").map(String.init) {
                 let parts = step.split(separator: ":", maxSplits: 1).map(String.init)
                 let argument = parts.count > 1 ? parts[1] : ""
                 switch parts[0] {
                 case "wait":
-                    try? await Task.sleep(for: .seconds(Double(argument) ?? 0.5))
+                    Thread.sleep(forTimeInterval: Double(argument) ?? 0.5)
                 case "type":
                     for character in argument {
                         post(String(character), code: 0, flags: [])
-                        try? await Task.sleep(for: .milliseconds(60))
+                        Thread.sleep(forTimeInterval: 0.06)
                     }
                 case "key":
                     var flags: NSEvent.ModifierFlags = []
@@ -181,38 +185,47 @@ final class TreeEditorViewController: NSViewController {
                     default: characters = name
                     }
                     post(characters, code: code, flags: flags)
-                    try? await Task.sleep(for: .milliseconds(300))
-                case "save":
-                    // As the Save button does; a menu shortcut needs the app in front.
-                    saveDocument(nil)
-                case "menu":
-                    // The right-click menu for a row, as "row:file".
-                    let bits = argument.split(separator: ":", maxSplits: 1).map(String.init)
-                    let items = coordinator.menuItems(clickedRow: Int(bits[0]) ?? -1)
-                    let text = items.map { $0.isSeparatorItem ? "—" : $0.title + ($0.isEnabled ? "" : " (off)") }
-                    try? text.joined(separator: "\n").write(toFile: bits.count > 1 ? bits[1] : "/dev/null",
-                                                             atomically: true, encoding: .utf8)
-                case "send":
-                    // An Edit menu command — copy, cut, paste — the way the
-                    // menu sends it: along the responder chain.
-                    if window.firstResponder?.tryToPerform(Selector(argument + ":"), with: nil) != true {
-                        model.flash("Nothing took \(argument).")
-                    }
-                case "dump":
-                    var text = OutlineWriter.text(model.document)
-                    if case .node(let id)? = model.selection, let node = model.node(id) {
-                        text += "\nSELECTED: \(node.label)"
-                    }
-                    if model.selectedIDs.count > 1 {
-                        text += "\nALL SELECTED: " + model.selectedIDs.compactMap { model.node($0)?.label }.joined(separator: ", ")
-                    }
-                    if let message = model.message { text += "\nMESSAGE: \(message)" }
-                    text += "\nSHOWING: keypad \(model.keypad), \(model.tab.name)"
-                    try? text.write(toFile: argument, atomically: true, encoding: .utf8)
+                    Thread.sleep(forTimeInterval: 0.3)
                 default:
-                    break
+                    DispatchQueue.main.sync { MainActor.assumeIsolated { self?.runDebugStep(parts[0], argument) } }
                 }
             }
+        }
+    }
+
+    /// A script's step that works on the editor, on the main thread.
+    private func runDebugStep(_ command: String, _ argument: String) {
+        guard let window = view.window else { return }
+        switch command {
+        case "save":
+            // As the Save button does; a menu shortcut needs the app in front.
+            saveDocument(nil)
+        case "menu":
+            // The right-click menu for a row, as "row:file".
+            let bits = argument.split(separator: ":", maxSplits: 1).map(String.init)
+            let items = coordinator.menuItems(clickedRow: Int(bits[0]) ?? -1)
+            let text = items.map { $0.isSeparatorItem ? "—" : $0.title + ($0.isEnabled ? "" : " (off)") }
+            try? text.joined(separator: "\n").write(toFile: bits.count > 1 ? bits[1] : "/dev/null",
+                                                     atomically: true, encoding: .utf8)
+        case "send":
+            // An Edit menu command — copy, cut, paste — the way the
+            // menu sends it: along the responder chain.
+            if window.firstResponder?.tryToPerform(Selector(argument + ":"), with: nil) != true {
+                model.flash("Nothing took \(argument).")
+            }
+        case "dump":
+            var text = OutlineWriter.text(model.document)
+            if case .node(let id)? = model.selection, let node = model.node(id) {
+                text += "\nSELECTED: \(node.label)"
+            }
+            if model.selectedIDs.count > 1 {
+                text += "\nALL SELECTED: " + model.selectedIDs.compactMap { model.node($0)?.label }.joined(separator: ", ")
+            }
+            if let message = model.message { text += "\nMESSAGE: \(message)" }
+            text += "\nSHOWING: keypad \(model.keypad), \(model.tab.name)"
+            try? text.write(toFile: argument, atomically: true, encoding: .utf8)
+        default:
+            break
         }
     }
 }

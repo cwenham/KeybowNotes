@@ -70,6 +70,17 @@ public final class ClaudeModule: KeybowModule, @unchecked Sendable {
                 Example: {{#ai effort="high"}}…{{/ai}} sets its own.
                 """),
         ],
+        values: [
+            ValueEntry("ai", title: "Ask Claude", help: """
+                Its contents are filled in and sent to Claude, and the reply takes the block's place. Not in a link, \
+                a number or an app's name. Settings → Privacy says what it may be sent.
+                """, example: "{{#ai}}Summarise in one line: {{selection}}{{/ai}}", kind: .block, attributes: [
+                    ValueAttribute("model", help: "The model to ask, else the one in Settings → Claude.",
+                                   example: "model=\"sonnet-5\"", choices: models.map(\.alias)),
+                    ValueAttribute("effort", help: "How hard it thinks before replying, else as Settings → Claude says.",
+                                   example: "effort=\"high\"", choices: efforts),
+                ]),
+        ],
         symbol: "sparkles")
 
     private let transport: HTTPTransport

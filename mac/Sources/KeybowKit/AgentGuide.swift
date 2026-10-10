@@ -75,10 +75,30 @@ public enum AgentGuide {
                 lines.append("")
             }
         }
-        let values = registry.all.flatMap(\.manifest.fetches)
-        if !values.isEmpty {
-            lines.append("Values modules fetch here: " + values.map { "`{{\($0)…}}`" }.joined(separator: ", ") + ".")
-        }
+        lines += values(registry: registry)
         return lines.joined(separator: "\n")
+    }
+
+    /// The values each module here gives, and the data sources set up, by
+    /// name: what's here to use, beyond what the reference describes.
+    static func values(registry: ModuleRegistry) -> [String] {
+        func written(_ entry: ValueEntry) -> String {
+            "`" + (entry.kind == .block ? "{{#\(entry.name)}}…{{/\(entry.name)}}" : entry.insertion) + "`"
+        }
+        var lines: [String] = []
+        for module in registry.all {
+            let described = module.manifest.values
+            let named = module.namedValues()
+            guard !described.isEmpty || !named.isEmpty else { continue }
+            lines.append("- \(module.manifest.name): " + described.map(written).joined(separator: ", ")
+                         + (named.isEmpty ? "" : ", and here:"))
+            for entry in named {
+                let takes = entry.attributes.map { "`\($0.name)=…`" }.joined(separator: ", ")
+                lines.append("  - \(written(entry)) — \(entry.help)" + (takes.isEmpty ? "" : " Takes \(takes)."))
+            }
+        }
+        guard !lines.isEmpty else { return [] }
+        return ["## Values from modules", "",
+                "What each module here gives, for any field or template. `<…>` is a part to fill in.", ""] + lines
     }
 }

@@ -56,6 +56,11 @@ public final class DisplayModule: KeybowModule, @unchecked Sendable {
                         """),
                 ],
                 takesText: true),
+        ],
+        values: [
+            ValueEntry("displayed", title: "The text shown", help: """
+                In the action OK or Cancel runs, after a display: the text it showed, as plain text.
+                """, example: "{{displayed}}"),
         ])
 
     private var host: ModuleHost?

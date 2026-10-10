@@ -55,6 +55,11 @@ public final class AskModule: KeybowModule, @unchecked Sendable {
                         """),
                 ],
                 takesText: true),
+        ],
+        values: [
+            ValueEntry("answer", title: "What was typed", help: """
+                In the action OK runs, after an Ask: what was typed. Empty after Cancel.
+                """, example: "{{answer}}"),
         ])
 
     private var host: ModuleHost?

@@ -39,6 +39,48 @@ public final class AgendaModule: KeybowModule, @unchecked Sendable {
         return names
     }()
 
+    /// What each of its values is, described.
+    static let values: [ValueEntry] = {
+        func value(_ name: String, _ title: String, _ help: String, _ sample: String, example: String? = nil) -> ValueEntry {
+            ValueEntry(name, title: title, help: help, example: example, sample: sample, fetched: true)
+        }
+        return [
+            value("event", "The meeting", """
+                The meeting under way — in its last five minutes, one starting within ten instead — else the next \
+                today: its title. Empty when there's none.
+                """, "Design review", example: "{{event|Meeting}}"),
+            value("event.title", "Its title", "The meeting's title.", "Design review"),
+            value("event.start", "When it starts", "The meeting's start time.", "14:00"),
+            value("event.end", "When it ends", "The meeting's end time.", "14:45"),
+            value("event.time", "Its times", "When the meeting starts and ends.", "14:00–14:45"),
+            value("event.date", "Its date", "The day of the meeting.", "26 Sep 2026"),
+            value("event.location", "Where it is", "The meeting's location.", "Room 4"),
+            value("event.link", "Its video call", "The link to join it, as Join meeting finds it.",
+                  "https://meet.example.com/abc-defg"),
+            value("event.attendees", "Who's invited", "Everyone invited but you, rooms left out.", "Alex Example, Sam Sample"),
+            value("event.organizer", "Who organised it", "Empty when it's you.", "Alex Example"),
+            value("event.notes", "Its notes", "The meeting's notes.", ""),
+            value("event.calendar", "Its calendar", "The calendar it's on.", "Work"),
+            value("event.next", "The next meeting", "The next meeting to start, today or tomorrow: its title.", "Planning",
+                  example: "{{event.next|nothing}}"),
+            value("event.next.<part>", "The next meeting's details", """
+                Any part of the next meeting, as for the meeting: start, end, time, date, location, link, \
+                attendees, organizer, notes or calendar.
+                """, "15:30", example: "{{event.next.start}}"),
+            value("agenda", "The rest of today", """
+                Today's events still to come, and reminders due or overdue, as a Markdown list. Empty when there's nothing.
+                """, "", example: "{{agenda|Nothing more today.}}"),
+            value("agenda.today", "All of today", "All of today's events, and reminders due or overdue, as a Markdown list.", ""),
+            value("agenda.tomorrow", "Tomorrow", "Tomorrow's events and reminders, as a Markdown list.", ""),
+            value("reminder", "The reminder due next", "The reminder due next, overdue first. Empty when there's none.",
+                  "Call the bank"),
+            value("reminder.title", "Its title", "The reminder's title.", "Call the bank"),
+            value("reminder.due", "When it's due", "When the reminder is due.", "26 Sep 2026, 17:00"),
+            value("reminder.list", "Its list", "The list it's on.", "Errands"),
+            value("reminder.notes", "Its notes", "The reminder's notes.", ""),
+        ]
+    }()
+
     private static let which = ModuleField(
         key: "which", title: "Which meeting", kind: .choice(["now", "next"]),
         hint: "now: the one under way, else the next today", help: """
@@ -94,6 +136,7 @@ public final class AgendaModule: KeybowModule, @unchecked Sendable {
                 """),
         ],
         fetches: ["event", "agenda", "reminder"],
+        values: values,
         symbol: "calendar.badge.clock")
 
     private let source: CalendarSource?

@@ -337,3 +337,21 @@ final class HomeAssistantTests: XCTestCase {
                        ModuleSummary(verb: "Run", subject: "evening"))
     }
 }
+
+extension HomeAssistantTests {
+    func testItsValuesAreDescribed() {
+        let catalog = ValueCatalog(modules: [HomeAssistantModule()])
+        let described: [String: String] = [
+            "home.sensor.outdoor_temperature": "An entity's state",
+            "home.sensor.outdoor_temperature.text": "Its state and unit",
+            "home.sensor.outdoor_temperature.unit": "Its unit",
+            "home.sensor.outdoor_temperature.name": "Its name",
+            "home.sensor.outdoor_temperature.changed": "When it last changed",
+            "home.climate.study.current_temperature": "One of its attributes",
+        ]
+        for (name, title) in described {
+            XCTAssertNotNil(HomeAssistantModule.parse(name), "a name the module reads: \(name)")
+            XCTAssertEqual(catalog.entry(named: name)?.title, title, name)
+        }
+    }
+}

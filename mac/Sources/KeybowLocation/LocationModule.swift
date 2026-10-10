@@ -36,6 +36,21 @@ public final class LocationModule: KeybowModule, @unchecked Sendable {
                 """),
         ],
         fetches: [id],
+        values: [
+            ValueEntry("location", title: "Where this Mac is", help: """
+                Its latitude and longitude, from Location Services, rounded as Settings → Location says. Found when \
+                a key uses it, and kept five minutes. A node's own location values are used instead.
+                """, example: "https://maps.apple.com/?ll={{location}}", sample: "51.50722,-0.1275", fetched: true),
+            ValueEntry("location.latitude", title: "Its latitude", help: "Degrees north; south is negative.",
+                       sample: "51.50722", fetched: true),
+            ValueEntry("location.longitude", title: "Its longitude", help: "Degrees east; west is negative.",
+                       sample: "-0.1275", fetched: true),
+            ValueEntry("location.altitude", title: "Its height", help: """
+                Metres above sea level. Usually empty: Macs find their place from Wi-Fi, not GPS.
+                """, example: "{{location.altitude|unknown}}", fetched: true),
+            ValueEntry("location.accuracy", title: "How exact it is", help: "How far off the place may be, in metres.",
+                       sample: "35", fetched: true),
+        ],
         symbol: "location.fill")
 
     private let provider: LocationProvider

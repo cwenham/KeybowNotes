@@ -87,6 +87,23 @@ public final class HomeAssistantModule: KeybowModule, @unchecked Sendable {
                 """),
         ],
         fetches: [id],
+        values: [
+            ValueEntry("home.<domain>.<entity>", title: "An entity's state", help: """
+                Any entity in Home Assistant, by its ID, read fresh when a key uses it. One it doesn't have stops the action.
+                """, example: "{{home.sensor.outdoor_temperature}}", sample: "14.2", fetched: true),
+            ValueEntry("home.<domain>.<entity>.text", title: "Its state and unit", help: "Its state, with its unit after it.",
+                       example: "{{home.sensor.outdoor_temperature.text}}", sample: "14.2 °C", fetched: true),
+            ValueEntry("home.<domain>.<entity>.unit", title: "Its unit", help: "The unit its state is in.",
+                       example: "{{home.sensor.outdoor_temperature.unit}}", sample: "°C", fetched: true),
+            ValueEntry("home.<domain>.<entity>.name", title: "Its name", help: "Its friendly name in Home Assistant.",
+                       example: "{{home.sensor.outdoor_temperature.name}}", sample: "Outdoor temperature", fetched: true),
+            ValueEntry("home.<domain>.<entity>.changed", title: "When it last changed",
+                       help: "The time its state last changed.", example: "{{home.sensor.outdoor_temperature.changed}}",
+                       sample: "09:15", fetched: true),
+            ValueEntry("home.<domain>.<entity>.<attribute>", title: "One of its attributes",
+                       help: "Any of its attributes, by name. Empty when it hasn't that one.",
+                       example: "{{home.climate.study.current_temperature}}", sample: "19.5", fetched: true),
+        ],
         symbol: "house.fill")
 
     private let transport: HTTPTransport

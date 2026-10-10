@@ -21,21 +21,12 @@ public struct ActionSummary: Equatable, Sendable {
                 calendar: Calendar = .current, environment: [String: String] = [:], registry: ModuleRegistry = .shared) {
         let action = selection.action ?? ActionSpec(type: "none", fields: [:])
         var missing: [String] = []
-        let params = Self.standIns
-            .merging(registry.values(now: now)) { _, live in live }
-            .merging(environment) { _, fetched in fetched }
-            .merging(selection.params) { _, fromTree in fromTree }
+        let params = Self.previewParams(environment.merging(selection.params) { _, fromTree in fromTree },
+                                        registry: registry, now: now)
 
         func expand(_ text: String?) -> String {
             guard let text else { return "" }
-            // Fetched values show a stand-in: a preview mustn't fetch anything.
-            var params = params
-            for name in registry.fetchedNames(in: Template.names(in: text)) where params[name] == nil {
-                params[name] = registry.standIn(forValue: name)
-            }
-            // Blocks show a stand-in: a preview mustn't spend anything.
-            let result = Template.expand(text, params: params, now: now, calendar: calendar,
-                                         standIn: registry.standIn(for:))
+            let result = Self.preview(text, params: params, registry: registry, now: now, calendar: calendar)
             for name in result.missing where !missing.contains(name) { missing.append(name) }
             return result.text
         }
@@ -186,6 +177,23 @@ public struct ActionSummary: Equatable, Sendable {
     private static let standIns = [
         "selection": "‹selected text›", "clipboard": "‹clipboard›", "frontApp": "‹front app›",
     ]
+
+    /// Values for a preview: stand-ins for what's read when a key is
+    /// pressed, the modules' values as they are now, and `given` over them.
+    static func previewParams(_ given: [String: String], registry: ModuleRegistry, now: Date) -> [String: String] {
+        standIns.merging(registry.values(now: now)) { _, live in live }.merging(given) { _, given in given }
+    }
+
+    /// Text filled in for a preview. Fetched values and blocks show stand-ins:
+    /// a preview mustn't fetch or spend anything.
+    static func preview(_ text: String, params: [String: String], registry: ModuleRegistry, now: Date,
+                        calendar: Calendar) -> Template.Result {
+        var params = params
+        for name in registry.fetchedNames(in: Template.names(in: text)) where params[name] == nil {
+            params[name] = registry.standIn(forValue: name)
+        }
+        return Template.expand(text, params: params, now: now, calendar: calendar, standIn: registry.standIn(for:))
+    }
 
     private static func dateFormatter(_ calendar: Calendar) -> DateFormatter {
         let formatter = DateFormatter()

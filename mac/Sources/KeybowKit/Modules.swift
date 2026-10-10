@@ -9,7 +9,8 @@ import Foundation
 // What a module can do:
 //   - add action types, with keywords and fields, to the outline and editor
 //   - run those actions when their keys are pressed
-//   - offer {{placeholder}} values to every action — "{{stopwatch}}"
+//   - offer {{placeholder}} values to every action — "{{stopwatch}}" — and
+//     describe them, for the editor's list of values and for agents
 //   - report a status, shown on the overlay and in the menu bar, and light the
 //     keys that lead to its actions while it's busy
 //   - keep state between runs of the app, through its host
@@ -89,6 +90,11 @@ public protocol KeybowModule: AnyObject, Sendable {
     /// What a fetched value shows in previews: "‹weather›".
     func standIn(forValue name: String) -> String
 
+    /// Values it gives under names chosen in the app — each data source, by
+    /// its name — described like those in its manifest, which describe the
+    /// family: `api.<source>`.
+    func namedValues() -> [ValueEntry]
+
     /// What's being fetched, for the overlay's "Fetching …": "weather",
     /// "your location".
     func fetchSubject(for names: [String]) -> String
@@ -154,6 +160,7 @@ extension KeybowModule {
     }
     public func valuesNeeded(toFetch names: [String]) -> Set<String> { [] }
     public func standIn(forValue name: String) -> String { "‹\(name)›" }
+    public func namedValues() -> [ValueEntry] { [] }
     public func fetchSubject(for names: [String]) -> String { manifest.name }
     public func choices(for field: String, type: String, fields: [String: String]) async throws -> [FieldChoice] { [] }
     public func choices(forSetting key: String) async throws -> [FieldChoice] { [] }
@@ -197,17 +204,22 @@ public struct ModuleManifest: Sendable {
     public let settings: [ModuleSetting]
     /// Value prefixes it fetches: "api" for `{{api.weather}}`.
     public let fetches: [String]
+    /// Every value it gives, fetches or replies to, described — what the
+    /// editor lists, and agents are told.
+    public let values: [ValueEntry]
     /// An SF Symbol for it, beside its name in the Settings window's sidebar.
     public let symbol: String
 
     public init(id: String, name: String, actionTypes: [ModuleActionType] = [], blocks: [ModuleBlockType] = [],
-                settings: [ModuleSetting] = [], fetches: [String] = [], symbol: String = "puzzlepiece.extension") {
+                settings: [ModuleSetting] = [], fetches: [String] = [], values: [ValueEntry] = [],
+                symbol: String = "puzzlepiece.extension") {
         self.id = id
         self.name = name
         self.actionTypes = actionTypes
         self.blocks = blocks
         self.settings = settings
         self.fetches = fetches
+        self.values = values
         self.symbol = symbol
     }
 }

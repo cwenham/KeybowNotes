@@ -136,3 +136,11 @@ private enum CLErrorStub {
     static let denied = CLError(.denied)
     static let unknown = CLError(.locationUnknown)
 }
+
+extension LocationModuleTests {
+    func testItsValuesAreDescribed() {
+        let catalog = ValueCatalog(modules: [LocationModule(provider: StubLocation())])
+        XCTAssertEqual(catalog.undescribed(LocationModule.names), [])
+        XCTAssertTrue(LocationModule.names.allSatisfy { catalog.entry(named: $0)?.fetched == true })
+    }
+}

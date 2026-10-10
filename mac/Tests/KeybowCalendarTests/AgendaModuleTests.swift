@@ -309,3 +309,12 @@ final class AgendaModuleTests: XCTestCase {
                        "“later” isn't a meeting to choose: now or next.")
     }
 }
+
+extension AgendaModuleTests {
+    func testItsValuesAreDescribed() {
+        let catalog = ValueCatalog(modules: [AgendaModule(source: nil)])
+        XCTAssertEqual(catalog.undescribed(AgendaModule.names), [])
+        XCTAssertEqual(catalog.entry(named: "event.next.link")?.name, "event.next.<part>")
+        XCTAssertNil(catalog.entry(named: "event.colour"), "a part of the meeting it doesn't give")
+    }
+}

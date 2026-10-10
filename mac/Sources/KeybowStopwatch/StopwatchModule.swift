@@ -52,6 +52,14 @@ public final class StopwatchModule: KeybowModule, @unchecked Sendable {
                                      Example: do: lap
                                      """)]
         ),
+    ], values: [
+        ValueEntry("stopwatch", title: "Its time", help: "The stopwatch's time, running or stopped.", sample: "3:12"),
+        ValueEntry("stopwatch.seconds", title: "Its time in seconds", help: "The stopwatch's time, in whole seconds.",
+                   sample: "192"),
+        ValueEntry("stopwatch.laps", title: "Each lap's length",
+                   help: "How long each lap took, in order. Empty before the first lap.", sample: "1:05, 1:02"),
+        ValueEntry("stopwatch.splits", title: "The time at each lap",
+                   help: "The time since the start at each lap, in order.", sample: "1:05, 2:07"),
     ])
 
     private struct State: Codable, Equatable {

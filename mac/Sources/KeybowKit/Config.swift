@@ -315,7 +315,8 @@ public struct KeybowConfig: Sendable {
         return node(in: tree, at: path)?.children ?? Self.emptyRow
     }
 
-    private func nodes(in tree: TreeKind, along path: [Int]) -> [TreeNode]? {
+    /// The nodes from the top of the tree down to the one at `path`.
+    func nodes(in tree: TreeKind, along path: [Int]) -> [TreeNode]? {
         var level = roots(tree)
         var found: [TreeNode] = []
         for column in path {

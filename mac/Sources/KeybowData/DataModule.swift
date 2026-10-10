@@ -14,7 +14,18 @@ public final class DataModule: KeybowModule, @unchecked Sendable {
     /// Posted, with the module as its object, when a source changes.
     public static let changed = Notification.Name("KeybowData.DataModule.changed")
 
-    public let manifest = ModuleManifest(id: id, name: "Data Sources", fetches: [id])
+    public let manifest = ModuleManifest(id: id, name: "Data Sources", fetches: [id], values: [
+        ValueEntry("api.<source>", title: "A data source's value", help: """
+            What a source's rule finds in its response, fetched when a key uses it. Sources are set up with \
+            Edit Data Sources… in the menu bar.
+            """, example: "{{api.weather}}", fetched: true, attributes: [
+                ValueAttribute("<name>", help: "A value for one of the source's URL's placeholders, for this use only.",
+                               example: "term={{selection}}"),
+            ]),
+        ValueEntry("api.<source>.raw", title: "Its whole response", help: """
+            A source's whole response, for an {{#ai}} block to read. It needs no rule.
+            """, example: "{{api.news.raw}}", fetched: true),
+    ])
 
     let fetcher: DataFetcher
     private let lock = NSLock()
@@ -41,6 +52,22 @@ public final class DataModule: KeybowModule, @unchecked Sendable {
 
     public func source(named name: String) -> DataSource? {
         sources.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+    }
+
+    /// Each source, by name, described by what it was set up to find: never
+    /// by a value it found, which isn't the tree's to show.
+    public func namedValues() -> [ValueEntry] {
+        sources.map { source in
+            let wanted = source.wanted.trimmingCharacters(in: .whitespacesAndNewlines)
+            var help = wanted.isEmpty ? "A data source." : wanted.prefix(1).uppercased() + wanted.dropFirst()
+            if !help.hasSuffix(".") { help += "." }
+            if source.broken != nil { help += " Its rule needs fixing: see Edit Data Sources…" }
+            return ValueEntry("\(Self.id).\(source.name)", title: source.name, help: help, fetched: true,
+                              attributes: source.urlNames.sorted().map { name in
+                                  ValueAttribute(name, help: "For {{\(name)}} in its URL, in place of the key's own.",
+                                                 example: "\(name)={{selection}}")
+                              })
+        }
     }
 
     /// Adds it, or replaces the one with its id.

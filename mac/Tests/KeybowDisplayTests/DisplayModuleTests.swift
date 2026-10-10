@@ -101,3 +101,11 @@ final class DisplayModuleTests: XCTestCase {
             """), "Title\nOne & two\nthree")
     }
 }
+
+extension DisplayModuleTests {
+    func testWhatsHandedOnIsDescribed() {
+        let catalog = ValueCatalog(modules: [DisplayModule(), AskModule()])
+        XCTAssertEqual(catalog.entry(named: "displayed")?.group, "Display")
+        XCTAssertEqual(catalog.entry(named: "answer")?.group, "Ask")
+    }
+}

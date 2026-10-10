@@ -152,7 +152,8 @@ public final class MCPServer {
              "How to design KeybowNotes trees, then the whole configuration language. Read it before designing or "
              + "changing a tree.", readOnly: true),
         tool("list_action_types", "List the action types",
-             "The action types this copy of KeybowNotes has, with their keywords — and for modules, every field.",
+             "The action types this copy of KeybowNotes has, with their keywords — and for modules, every field, "
+             + "and the values each gives, data sources by name.",
              readOnly: true),
         tool("check_outline", "Check outline text",
              "What KeybowNotes would make of outline text: mistakes by line, and what's still to fill in. Changes nothing.",

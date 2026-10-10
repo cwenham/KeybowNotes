@@ -184,3 +184,13 @@ final class QuoteModuleTests: XCTestCase {
         }
     }
 }
+
+extension QuoteModuleTests {
+    func testItsValuesAreDescribed() {
+        let catalog = ValueCatalog(modules: [QuoteModule()])
+        let entry = catalog.entry(named: "quote file='quotes.md' heading='Stoics'")
+        XCTAssertEqual(entry?.kind, .call)
+        XCTAssertEqual(entry?.insertion, "{{quote file=''}}")
+        XCTAssertEqual(entry?.attributes.map(\.name), ["file", "heading", "order"])
+    }
+}

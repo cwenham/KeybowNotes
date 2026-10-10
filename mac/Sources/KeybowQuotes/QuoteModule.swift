@@ -20,7 +20,21 @@ public final class QuoteModule: KeybowModule, @unchecked Sendable {
     /// The most of a file that's read: a list of quotes, not a book.
     static let maximumSize = 5_000_000
 
-    public let manifest = ModuleManifest(id: id, name: "Quotes", fetches: [id])
+    public let manifest = ModuleManifest(id: id, name: "Quotes", fetches: [id], values: [
+        ValueEntry("quote", title: "A quote from a file", help: """
+            A paragraph or list item from a file, each time a key uses it: a quote of the day, a writing prompt, \
+            the next on a reading list.
+            """, example: "{{quote file='quotes.md' heading='Stoics'}}", sample: "The obstacle is the way.", kind: .call,
+            fetched: true, attributes: [
+                ValueAttribute("file", help: "The file: in the templates folder, or a full or ~/ path.",
+                               example: "file='quotes.md'", required: true),
+                ValueAttribute("heading", help: "Markdown and HTML only: just the items under this heading.",
+                               example: "heading='Stoics'"),
+                ValueAttribute("order", help: """
+                    random — the default, never the same twice running — or sequential: each in turn, from the top again at the end.
+                    """, example: "order=sequential", choices: ["random", "sequential"]),
+            ]),
+    ])
 
     /// What's kept between runs, per list: `<path>#<heading>`.
     struct Saved: Codable, Equatable {

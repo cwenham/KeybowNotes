@@ -19,6 +19,7 @@ bar or the outline directly.
 | Say what a key will do, for the overlay and the tree editor | `summary(of:now:)` |
 | **Run** its actions | `run(_:now:)` |
 | Offer **{{placeholder}} values** to every action | `values(now:)` |
+| **Describe its values** — what each holds, an example, its attributes — for the editor's list of values and the agents' catalog; and values named in the app, like each data source | `manifest.values`, `namedValues()` |
 | Show what it's doing — on the overlay, in the menu bar, by pulsing keys | `status(now:)` |
 | Offer **commands in the menu bar's menu**, for things no key has been set up to do | `menuItems(now:)` / `performMenuItem(_:now:)` |
 | Keep **state** between runs of the app | `ModuleHost.load` / `save` |
@@ -92,6 +93,15 @@ own, with only the modules it needs.
 - **Values.** `values(now:)` is asked whenever an action runs or is described,
   so any action can use them: `[Notes, title: "Worked {{stopwatch}}"]`. A
   module's names start with its id. The tree's own values win over a module's.
+- **Describing values.** Every value a module gives, fetches or replies to is
+  described in `manifest.values` as a `ValueEntry`: a title, what it holds, an
+  example, a made-up sample, and a call's or a block's attributes. A part of a
+  name to fill in goes in angle brackets and stands for one dotted part —
+  `home.<domain>.<entity>.unit`, `api.<source>`. Values named in the app come
+  from `namedValues()`: each data source, described by what it was set up to
+  find. `ValueCatalog` gathers them with those built in, under the module's
+  name, for the tree editor and the agents' catalog; each module's tests check
+  that every name it gives is described.
 - **Status.** `status(now:)` is asked when the module calls `statusChanged()`,
   when the config changes, and at launch. A status shows as a row at the foot
   of the overlay whenever the overlay is up, and in the menu bar beside the

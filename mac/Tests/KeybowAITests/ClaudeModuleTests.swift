@@ -326,3 +326,14 @@ final class ClaudeModuleTests: XCTestCase {
 private final class Heard: @unchecked Sendable {
     var list: String?
 }
+
+extension ClaudeModuleTests {
+    func testItsBlockIsDescribed() {
+        let module = ClaudeModule(transport: StubTransport())
+        let catalog = ValueCatalog(modules: [module])
+        XCTAssertEqual(catalog.undescribed(module.manifest.blocks.map(\.name), blocks: true), [])
+        let attributes = catalog.entry(named: "ai", block: true)?.attributes ?? []
+        XCTAssertEqual(attributes.first { $0.name == "model" }?.choices, ClaudeModule.models.map(\.alias))
+        XCTAssertEqual(attributes.first { $0.name == "effort" }?.choices, ClaudeModule.efforts)
+    }
+}

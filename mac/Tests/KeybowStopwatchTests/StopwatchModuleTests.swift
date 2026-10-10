@@ -282,3 +282,12 @@ private final class StateFileHost: ModuleHost, @unchecked Sendable {
     func statusChanged() {}
     func copy(_ text: String) {}
 }
+
+extension StopwatchModuleTests {
+    func testItsValuesAreDescribed() {
+        let stopwatch = StopwatchModule()
+        let catalog = ValueCatalog(modules: [stopwatch])
+        XCTAssertEqual(catalog.undescribed(Array(stopwatch.values(now: Date()).keys)), [])
+        XCTAssertEqual(catalog.groups.last, "Stopwatch")
+    }
+}

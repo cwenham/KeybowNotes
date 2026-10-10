@@ -346,3 +346,23 @@ private final class StateFileHost: ModuleHost, @unchecked Sendable {
     func statusChanged() {}
     func copy(_ text: String) {}
 }
+
+extension DataModuleTests {
+    func testEachSourceIsDescribedByName() {
+        var source = weather()
+        source.lastValue = "14.2"
+        let data = module([source])
+        let catalog = ValueCatalog(modules: [data])
+        let entry = catalog.entry(named: "api.weather")
+        XCTAssertEqual(entry?.title, "weather")
+        XCTAssertEqual(entry?.help, "The temperature.")
+        XCTAssertEqual(entry?.sample, "", "never a value it found")
+        XCTAssertEqual(entry?.attributes.map(\.name), ["city"], "its URL's placeholders")
+        XCTAssertEqual(catalog.entry(named: "api.weather.raw")?.name, "api.<source>.raw")
+        XCTAssertEqual(catalog.entry(named: "api.news")?.name, "api.<source>", "one not set up yet")
+
+        source.broken = "Found nothing"
+        data.save(source)
+        XCTAssertTrue(ValueCatalog(modules: [data]).entry(named: "api.weather")?.help.contains("needs fixing") == true)
+    }
+}

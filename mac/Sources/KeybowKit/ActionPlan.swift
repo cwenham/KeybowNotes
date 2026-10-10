@@ -196,7 +196,7 @@ public enum ActionPlanner {
             texts.append(text)
         }
         if let name = action.string("template"), !name.isEmpty,
-           let url = Planner.templateURL(name, in: context.templatesDirectory),
+           let url = Template.fileURL(name, in: context.templatesDirectory),
            let text = try? String(contentsOf: url, encoding: .utf8), TemplateBlocks.contains(text) {
             if let problem = TemplateBlocks.problems(in: text).first {
                 throw ActionPlanError.templateProblem("\(name): \(problem)")
@@ -247,7 +247,7 @@ public enum ActionPlanner {
         }
         ownFields(action, vocabulary).values.forEach(collect)
         if let name = action.string("template"), !name.isEmpty,
-           let url = Planner.templateURL(name, in: context.templatesDirectory),
+           let url = Template.fileURL(name, in: context.templatesDirectory),
            let text = try? String(contentsOf: url, encoding: .utf8) {
             names.formUnion(Template.names(in: text))
         }
@@ -445,7 +445,7 @@ private struct Planner {
     private mutating func wholeText() throws -> String {
         var raw = selection.labels.last ?? ""
         if let name = action.string("template"), !name.isEmpty {
-            guard let url = Self.templateURL(name, in: context.templatesDirectory) else {
+            guard let url = Template.fileURL(name, in: context.templatesDirectory) else {
                 throw ActionPlanError.templateNotFound(name)
             }
             guard let text = try? String(contentsOf: url, encoding: .utf8) else {
@@ -605,21 +605,13 @@ private struct Planner {
         let name = action.string("template") ?? ""
         guard !name.isEmpty else { return nil }
 
-        guard let url = Self.templateURL(name, in: context.templatesDirectory) else {
+        guard let url = Template.fileURL(name, in: context.templatesDirectory) else {
             throw ActionPlanError.templateNotFound(name)
         }
         guard let text = try? String(contentsOf: url, encoding: .utf8) else {
             throw ActionPlanError.templateNotFound(url.path)
         }
         return expanded(text)
-    }
-
-    /// Relative names are found in the templates folder; nil without one.
-    static func templateURL(_ name: String, in directory: URL?) -> URL? {
-        if name.hasPrefix("/") || name.hasPrefix("~") {
-            return URL(fileURLWithPath: (name as NSString).expandingTildeInPath)
-        }
-        return directory?.appendingPathComponent(name)
     }
 
     /// Splits a template into a title — its first line, if a heading — and the rest.

@@ -147,4 +147,12 @@ final class BuiltInActionsTests: XCTestCase {
         XCTAssertEqual(vocabulary.heldField("ok.text")?.field, "text")
         XCTAssertFalse(ActionVocabulary().isActionField("level"), "only where the module is")
     }
+
+    func testWhatATemplateTakesThePlaceOf() {
+        let replaced = ["clipboard.copy": "text", "text.insert": "text", "text.insertDirect": "text",
+                        "notes.append": "entry", "messages.compose": "body", "mail.compose": "body"]
+        for type in BuiltInActions.types {
+            XCTAssertEqual(type.templateReplaces?.key, replaced[type.type], type.type)
+        }
+    }
 }

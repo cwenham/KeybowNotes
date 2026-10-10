@@ -96,4 +96,32 @@ final class TemplateTests: XCTestCase {
         XCTAssertEqual(result.verb, "Run shortcut")
         XCTAssertEqual(result.subject, "Lights Kitchen Off")
     }
+
+    // MARK: - Template files
+
+    func testFileNamedInTheFolderOrByPath() {
+        let folder = URL(fileURLWithPath: "/Users/example/KeybowNotes/templates")
+        XCTAssertEqual(Template.fileURL("standup.md", in: folder)?.path, "/Users/example/KeybowNotes/templates/standup.md")
+        XCTAssertEqual(Template.fileURL("/tmp/a.md", in: folder)?.path, "/tmp/a.md")
+        XCTAssertEqual(Template.fileURL("~/a.md", in: folder)?.path, NSHomeDirectory() + "/a.md")
+        XCTAssertNil(Template.fileURL("standup.md", in: nil), "a name, with no folder to look in")
+    }
+
+    func testFileNamedFromWhereItIs() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("templates-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("work"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        XCTAssertEqual(Template.fileName(for: folder.appendingPathComponent("standup.md"), in: folder), "standup.md")
+        XCTAssertEqual(Template.fileName(for: folder.appendingPathComponent("work/standup.md"), in: folder), "work/standup.md")
+        XCTAssertEqual(Template.fileName(for: URL(fileURLWithPath: NSHomeDirectory() + "/Documents/a.md"), in: folder),
+                       "~/Documents/a.md", "outside the folder: its path, from home")
+        XCTAssertEqual(Template.fileName(for: URL(fileURLWithPath: folder.path + "-other/a.md"), in: folder),
+                       Template.fileName(for: URL(fileURLWithPath: folder.path + "-other/a.md"), in: nil),
+                       "a folder whose name only starts the same isn't inside it")
+        for name in ["standup.md", "work/standup.md", "~/Documents/a.md"] {
+            let url = try XCTUnwrap(Template.fileURL(name, in: folder))
+            XCTAssertEqual(Template.fileName(for: url, in: folder), name, "there and back")
+        }
+    }
 }

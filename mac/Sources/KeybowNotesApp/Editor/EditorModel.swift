@@ -129,11 +129,27 @@ final class EditorModel {
                              listNames: listNames(), locateApp: locateApp)
     }
 
+    /// The file a template name refers to: in the templates folder, or by its path.
+    func templateURL(_ name: String) -> URL {
+        Template.fileURL(name, in: templatesDirectory) ?? templatesDirectory.appendingPathComponent(name)
+    }
+
     func templateExists(_ name: String) -> Bool {
-        let url = name.hasPrefix("/") || name.hasPrefix("~")
-            ? URL(fileURLWithPath: (name as NSString).expandingTildeInPath)
-            : templatesDirectory.appendingPathComponent(name)
-        return FileManager.default.fileExists(atPath: url.path)
+        FileManager.default.fileExists(atPath: templateURL(name).path)
+    }
+
+    /// The files in the templates folder, and in folders inside it, by the
+    /// names an action gives them: `standup.md`, `work/review.md`.
+    func templateFiles() -> [String] {
+        guard let files = FileManager.default.enumerator(
+            at: templatesDirectory, includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return [] }
+        return files.compactMap { item -> String? in
+            guard let url = item as? URL,
+                  (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { return nil }
+            return Template.fileName(for: url, in: templatesDirectory)
+        }
+        .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
     // MARK: - Changing

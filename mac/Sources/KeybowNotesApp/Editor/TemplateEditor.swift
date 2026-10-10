@@ -1,6 +1,91 @@
 import AppKit
 import KeybowKit
 import SwiftUI
+import UniformTypeIdentifiers
+
+/// Which template file an action uses: one in the templates folder, picked
+/// from the list or typed; one anywhere, with Choose…; or one dragged in from
+/// the Finder. A file in the templates folder is written as it's named there —
+/// `standup.md` — and any other by its path.
+struct TemplateFileField: View {
+    let model: EditorModel
+    var title = "Template file"
+    let own: String?
+    let placeholder: String
+    var note = ""
+    let help: String?
+    /// Why it's out of use — text is set instead — shown under it, greyed.
+    var unused: String?
+    let set: (String?) -> Void
+
+    @State private var files: [String] = []
+    @State private var targeted = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        InspectorRow(title, help: help) {
+            VStack(alignment: .trailing, spacing: 2) {
+                HStack(alignment: .firstTextBaseline) {
+                    NameComboBox(items: files, value: own ?? "",
+                                 placeholder: placeholder.isEmpty ? "Choose, or drop a file here" : placeholder,
+                                 toolTip: help) { name in
+                        let trimmed = name.trimmingCharacters(in: .whitespaces)
+                        set(trimmed.isEmpty ? nil : trimmed)
+                    }
+                    .overlay {
+                        if targeted {
+                            RoundedRectangle(cornerRadius: 5).strokeBorder(Color.accentColor, lineWidth: 2)
+                        }
+                    }
+                    Button("Choose…", action: choose)
+                        .controlSize(.small)
+                        .help("Choose a file in the Finder — in the templates folder, or anywhere else.")
+                }
+                FieldFooter(unused: unused, note: note)
+            }
+        }
+        .dropDestination(for: URL.self) { urls, _ in
+            guard isEnabled, let url = urls.first(where: \.isFileURL) else { return false }
+            return use(url)
+        } isTargeted: { over in
+            targeted = over && isEnabled
+        }
+        .onAppear(perform: reload)
+        // Back from the Finder, perhaps with a new file in the folder.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            reload()
+        }
+    }
+
+    private func reload() {
+        files = model.templateFiles()
+    }
+
+    private func choose() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.text] + [UTType(filenameExtension: "md")].compactMap { $0 }
+        let current = own ?? placeholder
+        panel.directoryURL = current.isEmpty ? model.templatesDirectory
+            : model.templateURL(current).deletingLastPathComponent()
+        panel.message = "Choose a template file: its text is filled in and used when the key is pressed."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        _ = use(url)
+    }
+
+    /// Names the file as the action will: by its place in the templates
+    /// folder, else by its path.
+    private func use(_ url: URL) -> Bool {
+        var isFolder: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isFolder), !isFolder.boolValue else {
+            model.flash("A template is a file, not a folder")
+            return false
+        }
+        set(Template.fileName(for: url, in: model.templatesDirectory))
+        return true
+    }
+}
 
 /// The template a node's action uses: edited in place, with its placeholders
 /// highlighted, or opened in TextEdit. Templates are files beside the outline,
@@ -16,11 +101,7 @@ struct TemplateSection: View {
     @State private var saved = ""
     @State private var exists = false
 
-    private var url: URL {
-        name.hasPrefix("/") || name.hasPrefix("~")
-            ? URL(fileURLWithPath: (name as NSString).expandingTildeInPath)
-            : model.templatesDirectory.appendingPathComponent(name)
-    }
+    private var url: URL { model.templateURL(name) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {

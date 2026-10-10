@@ -295,6 +295,14 @@ public struct ModuleActionType: Sendable {
         self.fields = fields
         self.takesText = takesText
     }
+
+    /// The field a template file takes the place of — `text`, a note's
+    /// `entry`, a message's `body` — for a type with both. When both are set,
+    /// the planner uses the file.
+    public var templateReplaces: ModuleField? {
+        guard fields.contains(where: { $0.key == "template" }) else { return nil }
+        return ["text", "entry", "body"].lazy.compactMap { key in self.fields.first { $0.key == key } }.first
+    }
 }
 
 public struct ModuleField: Sendable {

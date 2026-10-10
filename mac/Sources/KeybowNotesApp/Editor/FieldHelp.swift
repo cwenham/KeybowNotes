@@ -34,17 +34,31 @@ enum FieldHelp {
 
     // MARK: - Action fields
 
-    /// For a field of an action type, or nil if there's nothing to say. A
-    /// built-in type's fields say for themselves, in BuiltInActions; a
-    /// module's, in its manifest, when there's nothing here.
+    /// For a field of an action type, or nil if there's nothing to say. Each
+    /// type's fields say for themselves — a built-in type's in BuiltInActions,
+    /// a module's in its manifest — and `byKey` speaks for one that doesn't.
     static func field(_ key: String, type: String?) -> String? {
-        let own = type.flatMap(BuiltInActions.type)?.fields.first { $0.key == key }?.help
+        let described = type.flatMap(ModuleRegistry.shared.vocabulary.describe)
+        let own = described?.fields.first { $0.key == key }?.help
         guard let text = own.flatMap({ $0.isEmpty ? nil : $0 }) ?? byKey[key] else { return nil }
         var lines = [text]
+        if key == "template" { lines.append(templateLine) }
+        // A file or text: say each is the other's alternative.
+        if let replaced = described?.templateReplaces {
+            if key == "template" {
+                lines.append("Use this or \(replaced.title), not both: with a file chosen, \(replaced.title) isn't used.")
+            } else if key == replaced.key {
+                lines.append("Or choose a Template file instead: with a file chosen, this isn't used.")
+            }
+        }
         if blockKeys.contains(key) || dataKeys.contains(key) { lines.append(dataLine) }
         if blockKeys.contains(key) { lines.append(blockLine) }
         return lines.joined(separator: "\n")
     }
+
+    private static let templateLine = """
+        Pick a file from the templates folder in the list, Choose… one anywhere, or drag one here from the Finder.
+        """
 
     /// Text fields where a block's reply may go — not links, numbers or apps.
     private static let blockKeys: Set<String> = ["template", "entry", "text", "body", "title", "subject", "notes"]

@@ -143,6 +143,39 @@ public enum Template {
         return ""
     }
 
+    // MARK: - Template files
+
+    /// A template file, by the name an action gives it: a full or `~/` path as
+    /// it is, else a name in the templates folder. Nil for a name with no
+    /// folder to look in.
+    public static func fileURL(_ name: String, in folder: URL?) -> URL? {
+        if name.hasPrefix("/") || name.hasPrefix("~") {
+            return URL(fileURLWithPath: (name as NSString).expandingTildeInPath)
+        }
+        return folder?.appendingPathComponent(name)
+    }
+
+    /// How an action names a file: by its place in the templates folder when
+    /// it's there — `standup.md`, `work/standup.md` — else by its path, with
+    /// `~` for the home folder. The way back from `fileURL`.
+    public static func fileName(for file: URL, in folder: URL?) -> String {
+        // As written and with links followed, either way round: a folder
+        // reached through a link holds files the Finder names by the real path.
+        func forms(_ url: URL) -> [String] {
+            let plain = url.standardizedFileURL
+            return [plain.path, plain.resolvingSymlinksInPath().path]
+        }
+        if let folder {
+            for path in forms(file) {
+                for base in forms(folder) {
+                    let prefix = base.hasSuffix("/") ? base : base + "/"
+                    if path.hasPrefix(prefix) { return String(path.dropFirst(prefix.count)) }
+                }
+            }
+        }
+        return (file.standardizedFileURL.path as NSString).abbreviatingWithTildeInPath
+    }
+
     /// The names filled in from the clock, never needing a value.
     public static let builtInNames: Set<String> = ["date", "time", "datetime", "weekday", "isoWeek"]
 

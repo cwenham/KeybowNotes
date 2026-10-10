@@ -282,6 +282,14 @@ For the selected node:
   chosen type doesn't use are listed under *Not used here*.
 - **Clock timer setup** — for *Clock timer*, if the helper shortcut doesn't
   exist yet, the steps to make it, with **Open Shortcuts**.
+- **Template file** — which file the action uses: a combo box of the files in
+  the templates folder, and in folders inside it, completing as you type;
+  **Choose…** for one anywhere; or drag one in from the Finder. A file in the
+  templates folder is written by its name there, `standup.md`; any other by its
+  path, `~/Documents/reply.md`. Where an action takes a file *or* text — Copy's
+  and Insert's *Text*, a note's *Entry*, a message's *Message* — the file is
+  used when there is one, so whichever of the two is out of use is greyed, with
+  a line saying why, and each one's tooltip names the other.
 - **Template** — when the action uses one, the file itself, editable in place
   with `{{placeholders}}` and headings highlighted, with **Save Template**,
   **Revert** and **Open in TextEdit**. If the file doesn't exist yet, **Create
@@ -369,10 +377,27 @@ tree then becomes something you can feel as well as see.
 - `EditorModel` — the document, the selection, the latest compilation, undo.
   Every edit replaces the document through an operation, registers the previous
   one for undo, and recompiles (a few milliseconds for hundreds of nodes).
-- `EditorWindowController` — the window, the tabs in its toolbar, save and close.
-- `OutlineController` — an `NSOutlineView`, with its own field editor for
-  highlighting as you type and for the keys above.
-- `InspectorView` and `KeypadView` — SwiftUI, bound to the model.
+- `TreeEditorViewController` — the editor as one component: the tabs, the
+  outline, the inspector and the keypad, for any window to hold — the editor's
+  own, or *Design with Claude*'s.
+- `EditorWindowController` — the editor's window, save and close.
+- `OutlinePane` — an `NSOutlineView`, with its own field editor for
+  highlighting as you type and for the keys above. `Highlighter` colours a
+  line by the roles the compiler gives its annotations.
+- `InspectorPane` and `KeypadPane` — SwiftUI, bound to the model.
+
+**Adding to the inspector.** An action's fields come from its type's
+`ModuleField`s, built in (`BuiltInActions`) or a module's, and `fieldRow` in
+`InspectorPane` draws each by its kind — flag, choice, colour, text. A field
+that needs more than a text field gets a view of its own, chosen there by its
+key: `AppField`, `ShortcutField`, `TemplateFileField` (in `TemplateEditor`),
+and `ModuleChoiceField` for any field whose module lists choices. Such views
+are built from `InspectorRow` (the label column), `NameComboBox` (a list to
+pick from that still takes typing), `DraftField` (commits on Return or on
+leaving, so one edit is one undo step) and `FieldFooter` (why a field is
+greyed, and where its value comes from). Tooltips are `FieldHelp`'s, starting
+from each field's own `help`. Writing goes through `setField`, which also
+replaces a word that set the field — `[worklog.md]` — with the pair.
 
 ## Phases
 

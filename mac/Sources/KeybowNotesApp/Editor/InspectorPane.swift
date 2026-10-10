@@ -432,13 +432,23 @@ private struct NodeInspector: View {
                 ShortcutField(own: own, placeholder: effectiveValue("name"), note: source(of: "name"), help: help) { name in
                     setField("name", name)
                 }
+            } else if spec.key == "template" {
+                let unused = unusedReason("template", type: action?.type)
+                TemplateFileField(model: model, own: own, placeholder: effectiveValue("template"),
+                                  note: source(of: "template"), help: help, unused: unused) { name in
+                    setField("template", name)
+                }
+                .disabled(unused != nil)
             } else {
+                let unused = unusedReason(spec.key, type: action?.type)
                 HStack(alignment: .firstTextBaseline) {
                     DraftField(title: spec.title, value: own ?? "", placeholder: effectiveValue(spec.key),
                                note: source(of: spec.key), hint: spec.hint,
-                               multiline: ["body", "entry", "notes", "text"].contains(spec.key), help: help) { value in
+                               multiline: ["body", "entry", "notes", "text"].contains(spec.key), help: help,
+                               unused: unused) { value in
                         setField(spec.key, value.isEmpty ? nil : value)
                     }
+                    .disabled(unused != nil)
                     if spec.key == "open" {
                         Button("Choose…") { chooseFileToOpen() }
                             .controlSize(.small)
@@ -532,12 +542,46 @@ private struct NodeInspector: View {
                     .fixedSize()
                 }
             default:
-                DraftField(title: spec.title, value: own ?? "", placeholder: "", note: "", hint: spec.hint,
-                           multiline: ["body", "entry", "notes", "text"].contains(spec.key), help: help) { value in
-                    setField(key, value.isEmpty ? nil : value)
+                let unused = unusedReason(spec.key, type: type, holder: holder)
+                if spec.key == "template" {
+                    TemplateFileField(model: model, own: own, placeholder: "", help: help, unused: unused) { name in
+                        setField(key, name)
+                    }
+                    .disabled(unused != nil)
+                } else {
+                    DraftField(title: spec.title, value: own ?? "", placeholder: "", note: "", hint: spec.hint,
+                               multiline: ["body", "entry", "notes", "text"].contains(spec.key), help: help,
+                               unused: unused) { value in
+                        setField(key, value.isEmpty ? nil : value)
+                    }
+                    .disabled(unused != nil)
                 }
             }
         }
+    }
+
+    /// For a type that takes a template file or text — Copy's text, a note's
+    /// entry, a message's body — why one of the pair is out of use, to grey
+    /// it: the file, when there is one, is used in place of the text. For an
+    /// outcome's fields, `holder` is where they're held: `ok`.
+    private func unusedReason(_ key: String, type: String?, holder: String? = nil) -> String? {
+        guard let type, let replaced = ModuleRegistry.shared.vocabulary.describe(type)?.templateReplaces,
+              key == "template" || key == replaced.key else { return nil }
+        let prefix = holder.map { $0 + "." } ?? ""
+        // An outcome's fields are only ever set here; an action's may come from above.
+        let template = holder == nil ? effectiveValue("template") : ownValue(prefix + "template") ?? ""
+        if key == replaced.key, !template.isEmpty {
+            let from = holder == nil ? source(of: "template") : "set here"
+            switch from {
+            case "set here": return "Not used while there's a template file. Empty Template file to use this instead."
+            case "default": return "Not used: the default template file is used instead."
+            default: return "Not used: the template file set on \(from.dropFirst("from ".count)) is used instead."
+            }
+        }
+        if key == "template", template.isEmpty, ownValue(prefix + replaced.key) != nil {
+            return "Not used while “\(replaced.title)” is set here. Empty it to choose a file instead."
+        }
+        return nil
     }
 
     /// Names the outcome's type by its keyword, `ok: Copy`; nothing removes it.
@@ -773,8 +817,7 @@ private struct NodeInspector: View {
                         .controlSize(.small)
                         .help("Remove this node's own colour, so it takes the one from above.")
                     }
-                    Text(colourSource).font(.caption2)
-                        .foregroundStyle(colourSource == "set here" ? Color.accentColor : .secondary)
+                    SourceNote(note: colourSource)
                 }
             }
         }
@@ -941,6 +984,35 @@ struct OptionalHelp: ViewModifier {
     }
 }
 
+/// Where a field's value comes from — "set here", "from Meeting", "default" —
+/// under the field, in the accent colour when it's the node's own.
+struct SourceNote: View {
+    let note: String
+
+    var body: some View {
+        Text(note).font(.caption2).foregroundStyle(note == "set here" ? Color.accentColor : .secondary)
+    }
+}
+
+/// Under a field: why it's out of use, when it is, and where its value comes from.
+struct FieldFooter: View {
+    let unused: String?
+    let note: String
+
+    var body: some View {
+        if unused != nil || !note.isEmpty {
+            HStack(alignment: .firstTextBaseline) {
+                if let unused {
+                    Text(unused).font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                if !note.isEmpty { SourceNote(note: note) }
+            }
+        }
+    }
+}
+
 /// A text field that commits on Return or on leaving it, rather than on every
 /// keystroke — one edit, one undo step.
 struct DraftField: View {
@@ -952,6 +1024,8 @@ struct DraftField: View {
     /// Grows to several lines; ⌥Return starts a new line.
     var multiline = false
     var help: String?
+    /// Why it's out of use — a template file is used instead — under it, greyed.
+    var unused: String?
     var labelWidth = InspectorLayout.labelWidth
     let commit: (String) -> Void
 
@@ -971,11 +1045,7 @@ struct DraftField: View {
                     .textFieldStyle(.roundedBorder)
                     .focused($focused)
                     .onSubmit(save)
-                if !note.isEmpty {
-                    Text(note)
-                        .font(.caption2)
-                        .foregroundStyle(note == "set here" ? Color.accentColor : .secondary)
-                }
+                FieldFooter(unused: unused, note: note)
             }
         }
         .onAppear { draft = value; original = value }
@@ -1020,7 +1090,7 @@ private struct AppField: View {
                         .help("Choose the app in the Finder.")
                 }
                 if !note.isEmpty {
-                    Text(note).font(.caption2).foregroundStyle(note == "set here" ? Color.accentColor : .secondary)
+                    SourceNote(note: note)
                 }
             }
         }
@@ -1115,7 +1185,7 @@ private struct ShortcutField: View {
                     }
                     Spacer(minLength: 0)
                     if !note.isEmpty {
-                        Text(note).font(.caption2).foregroundStyle(note == "set here" ? Color.accentColor : .secondary)
+                        SourceNote(note: note)
                     }
                 }
             }
@@ -1143,8 +1213,8 @@ private struct ShortcutField: View {
 }
 
 /// A text field with a list to choose from, completing as you type: apps,
-/// shortcuts. Commits on choosing or on leaving the field.
-private struct NameComboBox: NSViewRepresentable {
+/// shortcuts, templates. Commits on choosing or on leaving the field.
+struct NameComboBox: NSViewRepresentable {
     let items: [String]
     let value: String
     let placeholder: String
@@ -1163,6 +1233,7 @@ private struct NameComboBox: NSViewRepresentable {
         box.stringValue = value
         box.placeholderString = placeholder
         box.toolTip = toolTip
+        box.isEnabled = context.environment.isEnabled
         return box
     }
 
@@ -1176,6 +1247,8 @@ private struct NameComboBox: NSViewRepresentable {
         if box.currentEditor() == nil, box.stringValue != value { box.stringValue = value }
         box.placeholderString = placeholder
         box.toolTip = toolTip
+        // SwiftUI's disabled() doesn't reach an AppKit view by itself.
+        box.isEnabled = context.environment.isEnabled
     }
 
     final class Coordinator: NSObject, NSComboBoxDelegate {
@@ -1234,7 +1307,7 @@ private struct ModuleChoiceField: View {
                     }
                     Spacer(minLength: 0)
                     if !note.isEmpty {
-                        Text(note).font(.caption2).foregroundStyle(note == "set here" ? Color.accentColor : .secondary)
+                        SourceNote(note: note)
                     }
                 }
             }
@@ -1300,7 +1373,7 @@ private struct ColourField: View {
                     }
                 }
                 if !note.isEmpty {
-                    Text(note).font(.caption2).foregroundStyle(note == "set here" ? Color.accentColor : .secondary)
+                    SourceNote(note: note)
                 }
             }
         }

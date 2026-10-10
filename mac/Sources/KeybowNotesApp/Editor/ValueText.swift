@@ -116,15 +116,15 @@ final class ValueTextView: NSTextView {
 
     override func insertCompletion(_ word: String, forPartialWordRange charRange: NSRange, movement: Int, isFinal flag: Bool) {
         let block = partialTag()?.block ?? false
-        // Chosen from the list — with Return or Tab, or a click on another
-        // than what was typed; not given up with Esc, nor ended by typing on —
-        // and not a family still to finish, `home.`: the tag's closed, a
-        // block's with its `{{/ai}}`.
+        // Chosen with Return or Tab, and not a family still to finish, `home.`:
+        // the tag's closed, a block's with its `{{/ai}}`. Ended any other way
+        // — Esc, or typing on, where punctuation would take what the list put
+        // in — it's what was typed that stays.
         let chosen = movement == NSTextMovement.return.rawValue || movement == NSTextMovement.tab.rawValue
-            || (movement != NSTextMovement.cancel.rawValue && word != typed)
         guard flag, chosen, offered.contains(word), !word.hasSuffix(".") else {
-            super.insertCompletion(word, forPartialWordRange: charRange, movement: movement, isFinal: flag)
-            if flag, word.hasSuffix(".") { offerValues() }
+            super.insertCompletion(flag && !chosen ? typed : word, forPartialWordRange: charRange, movement: movement,
+                                   isFinal: flag)
+            if flag, chosen, word.hasSuffix(".") { offerValues() }
             return
         }
         let after = (string as NSString).substring(from: NSMaxRange(charRange))
@@ -137,10 +137,14 @@ final class ValueTextView: NSTextView {
 
     override func insertText(_ text: Any, replacementRange: NSRange) {
         super.insertText(text, replacementRange: replacementRange)
-        let typed = (text as? String) ?? (text as? NSAttributedString)?.string ?? ""
-        let caret = selectedRange().location
-        let before = (string as NSString).substring(to: caret)
-        if typed == "{" && before.hasSuffix("{{") || typed == "#" && before.hasSuffix("{{#") { offerValues() }
+        let entered = (text as? String) ?? (text as? NSAttributedString)?.string ?? ""
+        guard entered.count == 1, let character = entered.first else { return }
+        let before = (string as NSString).substring(to: selectedRange().location)
+        if entered == "{" && before.hasSuffix("{{") || entered == "#" && before.hasSuffix("{{#")
+            // Typing closes the list: offer it again, narrowed, as a name goes on.
+            || character.isLetter || character.isNumber || "._-".contains(character) {
+            offerValues()
+        }
     }
 
     /// Shows what can go here, when there's more than what's typed.

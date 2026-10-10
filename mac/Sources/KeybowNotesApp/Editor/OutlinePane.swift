@@ -70,6 +70,11 @@ final class OutlineCell: NSTableCellView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         let text = NSTextField()
+        // Its own cell, for the outline's own field editor.
+        let cell = OutlineTextCell(textCell: "")
+        cell.isEditable = true
+        cell.isScrollable = true
+        text.cell = cell
         text.isBordered = false
         text.drawsBackground = false
         text.isEditable = true
@@ -347,6 +352,7 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     private func configure(_ cell: OutlineCell, for row: OutlineRow) {
         guard let text = cell.textField else { return }
         text.delegate = self
+        (text.cell as? OutlineTextCell)?.fieldEditorProvider = { [weak self] in self?.fieldEditor }
         switch row.kind {
         case .node(let id):
             guard let location = model.document.location(of: id), let node = model.document.node(at: location) else { return }
@@ -685,8 +691,47 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
 
     // MARK: - Editing a row
 
+    /// The rows' field editor, which offers what can go in the brackets.
+    private lazy var fieldEditor: OutlineFieldEditor = {
+        let editor = OutlineFieldEditor()
+        editor.completer = { [weak self] text, caret in self?.completion(in: text, at: caret) }
+        return editor
+    }()
+
+    /// What completion offers from, for the row being edited: gathered once
+    /// an edit, since the tree doesn't change during one.
+    private var completionSources: OutlineCompletionSources?
+
+    private func completion(in text: String, at caret: Int) -> (OutlineCompletion, [String])? {
+        guard let completion = OutlineCompletion.at(caret, in: text) else { return nil }
+        let sources = completionSources ?? makeCompletionSources()
+        completionSources = sources
+        return (completion, completion.candidates(sources))
+    }
+
+    private func makeCompletionSources() -> OutlineCompletionSources {
+        let vocabulary = ModuleRegistry.shared.vocabulary
+        var location: OutlineLocation?
+        switch editingRow?.kind {
+        case .node(let id)?: location = model.document.location(of: id)
+        case .empty(let empty)?: location = empty
+        case nil: location = nil
+        }
+        // The {{values}} for its key, when it has one in the tree as it stands.
+        var values = ValueCatalog(registry: .shared)
+        if case .node? = editingRow?.kind, let location, case .tree(let tree, _) = location.container,
+           let config = model.keypadConfig, let selection = config.resolve(tree: tree, path: location.path) {
+            values = values.atKey(selection, config: config)
+        }
+        return OutlineCompletionSources(
+            vocabulary: vocabulary, inheritedType: location.flatMap { model.inheritedType(above: $0) },
+            lists: model.document.lists.map(\.name), templates: model.templateFiles(), apps: AppCatalog.all.map(\.name),
+            valueKeys: model.document.valueKeys(vocabulary: vocabulary), values: values)
+    }
+
     func beginEditing(_ row: OutlineRow, replacingWith initial: String? = nil) {
         guard let outline else { return }
+        completionSources = nil
         select(row.kind)
         let index = outline.row(forItem: row)
         guard index >= 0 else { return }
@@ -737,6 +782,8 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        // While completion's list is showing, the keys are its.
+        if (textView as? OutlineFieldEditor)?.isCompleting == true { return false }
         switch selector {
         case #selector(NSResponder.insertNewline(_:)): afterEdit = .newSibling
         case #selector(NSResponder.insertTab(_:)): afterEdit = .indent
@@ -753,6 +800,7 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     func controlTextDidEndEditing(_ notification: Notification) {
         guard let row = editingRow, let field = notification.object as? NSTextField else { return }
         editingRow = nil
+        completionSources = nil
         let text = field.stringValue.trimmingCharacters(in: .whitespaces)
         let action = afterEdit
         afterEdit = nil

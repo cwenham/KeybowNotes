@@ -1,6 +1,6 @@
 # The tree editor
 
-**Status:** phases 1–5 built; mirroring on the Keybow and completion in the outline are next (see the end). The outline
+**Status:** phases 1–6 built; mirroring on the Keybow is next (see the end). The outline
 language it edits is described in [CONFIG-LANGUAGE.md](CONFIG-LANGUAGE.md).
 
 A guided outliner for the KeybowNotes outline, in the style of OmniOutliner:
@@ -206,6 +206,25 @@ in the field.
 
 The label itself is plain text.
 
+### Completion
+
+Typing in a row's brackets offers what can go there, as a list to choose
+from with ↑ ↓ and Return or Tab:
+
+| Where | Offered |
+|---|---|
+| a new item — after `[` or `, ` | the action keywords, while the node names no type; the keys the type in force takes and that aren't set yet, with their `: ` — `title: `, `start: ` — and `colour: `, `instant: `, `type: `; the names other nodes give values, `when: `; lists, `@when`; templates, `standup.md`; and, once something's typed, installed apps |
+| after `@` | the lists |
+| a pair's value — after `key: ` | what that key takes: a choice's words (`auto`, `rich`, `plain`), `true` or `false`, a type's name after `type:`, an action's keyword after `ok:`, a template after `template:`, an app after `app:` |
+| after `{{`, in a value | the {{values}} for the key, as in the inspector; after `{{#`, the blocks |
+
+The list opens as `[`, `, `, `: `, `@` and `{{` are typed, narrows as a name
+goes on, and closes when nothing fits; ⌥Esc opens it anywhere in the brackets.
+Choosing a key offers its values next; choosing a value closes its `}}`, and a
+block its `{{/ai}}`, with the caret inside. Anything else typed — a comma, a
+colon, Esc — leaves what was typed as it was. Return and Tab take the item
+while the list is showing, and do their usual work once it's gone.
+
 ---
 
 ## The inspector
@@ -406,9 +425,10 @@ tree then becomes something you can feel as well as see.
   outline, the inspector and the keypad, for any window to hold — the editor's
   own, or *Design with Claude*'s.
 - `EditorWindowController` — the editor's window, save and close.
-- `OutlinePane` — an `NSOutlineView`, with its own field editor for
-  highlighting as you type and for the keys above. `Highlighter` colours a
-  line by the roles the compiler gives its annotations.
+- `OutlinePane` — an `NSOutlineView`, editing rows with its own field editor,
+  `OutlineFieldEditor`, which completes what's typed in the brackets from
+  `OutlineCompletion` in KeybowKit. `Highlighter` colours a line, as it's
+  typed too, by the roles the compiler gives its annotations.
 - `InspectorPane` and `KeypadPane` — SwiftUI, bound to the model.
 - `ValueText` — text with {{values}}: `ValueTextEditor`, an `NSTextView` for a
   field or a page, which colours, explains, checks and completes them;
@@ -441,6 +461,6 @@ replaces a word that set the field — `[worklog.md]` — with the pair.
 4. ✅ **The keypad drawing**, with click to jump.
 5. ✅ **Values in fields**: coloured, explained, checked and completed, with
    ƒx for the list of them all.
-6. **Mirroring on the Keybow**; completion inside the outline's brackets
-   (keywords, installed apps, templates, lists, field names, values); panes for
-   lists, contacts and projects.
+6. ✅ **Completion in the outline's brackets**: keywords, keys, lists,
+   templates, apps, a key's values, and {{values}}.
+7. **Mirroring on the Keybow**; panes for lists, contacts and projects.

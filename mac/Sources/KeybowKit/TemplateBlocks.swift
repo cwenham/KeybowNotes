@@ -36,6 +36,10 @@ struct TemplateDocument {
         /// What's between the braces: `contact.phone|none`.
         case placeholder(String)
         case block(name: String, attributes: [String: String])
+        /// `{{#each clipboard}}`: its contents filled in once for each row.
+        case list(TemplateList)
+        /// `{{#header}}`, `{{#footer}}`, `{{#empty}}`: a part of the list it's in.
+        case section(TemplateList.Section)
     }
 
     struct Node {
@@ -70,12 +74,21 @@ struct TemplateDocument {
             problemPlaces.append(place)
         }
 
+        /// The name of what's open: a block's, `each`, a section's.
+        func openName(_ node: Node) -> String? {
+            switch node.kind {
+            case .block(let name, _): return name
+            case .list: return TemplateList.tagName
+            case .section(let section): return section.rawValue
+            default: return nil
+            }
+        }
+
         while let start = rest.range(of: "{{") {
-            if start.lowerBound > rest.startIndex { _ = add(.text(rest[..<start.lowerBound])) }
             let inside = rest[start.upperBound...]
             let opensBlock = inside.first == "#"
             let isOperator = !opensBlock && Self.isOperator(inside)
-            guard let end = Self.tagEnd(in: inside, quoted: opensBlock || isOperator, nested: isOperator) else {
+            guard let end = Self.tagEnd(in: inside, quoted: opensBlock || isOperator, nested: opensBlock || isOperator) else {
                 // An unclosed brace is left as written — but a tag with
                 // attributes that never ends is surely a mistake, like a stray quote.
                 if opensBlock {
@@ -85,29 +98,64 @@ struct TemplateDocument {
                     let name = inside.drop { $0 == " " }.prefix { !$0.isWhitespace }
                     problem("“{{\(name)” has no closing }} — check its quotes.", at: start.lowerBound..<rest.endIndex)
                 }
-                _ = add(.text(rest[start.lowerBound...]))
+                _ = add(.text(rest))
                 rest = ""
                 break
             }
             let tag = rest[start.lowerBound..<end.upperBound]
             let body = inside[..<end.lowerBound]
+            var before = rest[..<start.lowerBound]
             rest = inside[end.upperBound...]
+            // A list's tag alone on its line takes the line with it, so a
+            // list written over several lines adds no lines of its own.
+            if Self.isListTag(body), let line = Self.lineAlone(tag, in: text) {
+                before = before[..<max(line.lowerBound, before.startIndex)]
+                rest = text[line.upperBound...]
+            }
+            if !before.isEmpty { _ = add(.text(before)) }
 
             let place = tag.startIndex..<tag.endIndex
             if opensBlock {
-                switch Self.opening(body.dropFirst()) {
-                case .success(let (name, attributes)):
-                    open.append(add(.block(name: name, attributes: attributes), at: place))
-                case .failure(let failure):
-                    problem(failure.message, at: place)
-                    _ = add(.text(tag))
+                let name = body.dropFirst().drop { $0 == " " }.prefix { !$0.isWhitespace }
+                if name == TemplateList.tagName {
+                    switch TemplateList.opening(body.dropFirst()) {
+                    case .success(let list):
+                        open.append(add(.list(list), at: place))
+                    case .failure(let failure):
+                        // Still open, with nothing to go through, so its
+                        // {{/each}} has something to close.
+                        problem(failure.message, at: place)
+                        open.append(add(.list(TemplateList(source: "", attributes: [:])), at: place))
+                    }
+                } else if let section = TemplateList.Section(rawValue: String(name)) {
+                    let list = open[open.count - 1]
+                    guard case .list = nodes[list].kind else {
+                        problem("“{{#\(name)}}” goes inside {{#each}}…{{/each}}.", at: place)
+                        _ = add(.text(tag))
+                        continue
+                    }
+                    if nodes[list].children.contains(where: { child in
+                        if case .section(section) = nodes[child].kind { return true }
+                        return false
+                    }) {
+                        problem("“{{#each}}” has two {{#\(name)}}s.", at: place)
+                    }
+                    open.append(add(.section(section), at: place))
+                } else {
+                    switch Self.opening(body.dropFirst()) {
+                    case .success(let (name, attributes)):
+                        open.append(add(.block(name: name, attributes: attributes), at: place))
+                    case .failure(let failure):
+                        problem(failure.message, at: place)
+                        _ = add(.text(tag))
+                    }
                 }
             } else if body.first == "/" {
                 let name = body.dropFirst().trimmingCharacters(in: .whitespaces)
-                if open.count > 1, case .block(let innermost, _) = nodes[open[open.count - 1]].kind, innermost == name {
+                if open.count > 1, openName(nodes[open[open.count - 1]]) == name {
                     nodes[open.removeLast()].closing = place
                 } else {
-                    if open.count > 1, case .block(let innermost, _) = nodes[open[open.count - 1]].kind {
+                    if open.count > 1, let innermost = openName(nodes[open[open.count - 1]]) {
                         problem("“{{/\(name)}}” comes where “{{/\(innermost)}}” was expected.", at: place)
                     } else {
                         problem("“{{/\(name)}}” doesn't close anything.", at: place)
@@ -120,10 +168,37 @@ struct TemplateDocument {
         }
         if !rest.isEmpty { _ = add(.text(rest)) }
         for index in open.dropFirst() {
-            if case .block(let name, _) = nodes[index].kind, let place = nodes[index].tag {
+            if let name = openName(nodes[index]), let place = nodes[index].tag {
                 problem("“{{#\(name)}}” is never closed with {{/\(name)}}.", at: place)
             }
         }
+    }
+
+    /// `#each …`, `/each`, `#header`, and the other sections' tags.
+    private static func isListTag(_ body: Substring) -> Bool {
+        guard let first = body.first, first == "#" || first == "/" else { return false }
+        let name = String(body.dropFirst().drop { $0 == " " }.prefix { !$0.isWhitespace })
+        return name == TemplateList.tagName || TemplateList.Section(rawValue: name) != nil
+    }
+
+    /// The line a tag is on, with its new line, when there's nothing else on
+    /// it but spaces.
+    private static func lineAlone(_ tag: Substring, in text: String) -> Range<String.Index>? {
+        var start = tag.startIndex
+        while start > text.startIndex {
+            let previous = text.index(before: start)
+            guard text[previous] == " " || text[previous] == "\t" else { break }
+            start = previous
+        }
+        if start > text.startIndex {
+            let previous = text[text.index(before: start)]
+            guard previous == "\n" || previous == "\r\n" || previous == "\r" else { return nil }
+        }
+        var end = tag.endIndex
+        while end < text.endIndex, text[end] == " " || text[end] == "\t" { end = text.index(after: end) }
+        guard end < text.endIndex else { return start..<end }
+        guard text[end] == "\n" || text[end] == "\r\n" || text[end] == "\r" else { return nil }
+        return start..<text.index(after: end)
     }
 
     var hasBlocks: Bool {
@@ -134,8 +209,21 @@ struct TemplateDocument {
         nodes.compactMap { if case .block(let name, _) = $0.kind { return name }; return nil }
     }
 
+    /// What's between the braces of every placeholder — and what each list
+    /// goes through, and the placeholders in its attributes.
     var placeholderBodies: [String] {
-        nodes.compactMap { if case .placeholder(let body) = $0.kind { return body }; return nil }
+        nodes.flatMap { node -> [String] in
+            switch node.kind {
+            case .placeholder(let body): return [body]
+            case .list(let list): return list.usedBodies
+            default: return []
+            }
+        }
+    }
+
+    /// What the lists go through, at any depth: `clipboard`, `api.github`.
+    var listSources: [String] {
+        nodes.compactMap { if case .list(let list) = $0.kind, !list.source.isEmpty { return list.source }; return nil }
     }
 
     /// The placeholders inside blocks called `name`, at any depth — what's
@@ -148,6 +236,11 @@ struct TemplateDocument {
             let within = inside.contains(index)
             switch node.kind {
             case .block(let block, _) where within || block == name:
+                inside.formUnion(node.children)
+            case .list(let list) where within:
+                bodies += list.usedBodies
+                inside.formUnion(node.children)
+            case .section where within:
                 inside.formUnion(node.children)
             case .placeholder(let body) where within:
                 bodies.append(body)
@@ -168,66 +261,23 @@ struct TemplateDocument {
         var pending: [TemplateBlockCall] = []
         /// Placeholders with no value and no fallback, in order of appearance.
         var missing: [String] = []
+        /// Lists whose rows couldn't be read, or chosen as asked.
+        var problems: [String] = []
     }
 
     /// Fills everything in that can be. `value` gives a placeholder's text,
-    /// noting a name it can't fill; `replies` are blocks already worked out;
+    /// noting a name it can't fill; `raw` gives a value as it's set, or nil,
+    /// for a list to read rows from; `replies` are blocks already worked out;
     /// `standIn`, when given, stands in for any block without a reply — for
-    /// previews. `encode` applies to what's placed at the top level only, not
-    /// to what goes inside a block.
-    func render(value: (String, inout [String]) -> String, replies: [TemplateBlockCall: String],
-                standIn: ((TemplateBlockCall) -> String)? = nil,
+    /// previews. `encode` applies to what's placed outside blocks only, not
+    /// to what goes inside one.
+    func render(value: @escaping (String, inout [String]) -> String, raw: @escaping (String) -> String? = { _ in nil },
+                replies: [TemplateBlockCall: String], standIn: ((TemplateBlockCall) -> String)? = nil,
                 encode: ((String) -> String)? = nil) -> Rendering {
-        var rendering = Rendering()
-        var texts = [String?](repeating: "", count: nodes.count)
-
-        // Placeholders first, front to back, so missing names come in order.
-        for index in nodes.indices {
-            switch nodes[index].kind {
-            case .text(let text): texts[index] = String(text)
-            case .placeholder(let body): texts[index] = value(body, &rendering.missing)
-            default: break
-            }
-        }
-
-        // Then from the end: a block's contents come after it, so by the time
-        // a block is reached everything inside it has been worked out.
-        for index in nodes.indices.reversed() {
-            switch nodes[index].kind {
-            case .block(let name, let attributes):
-                var body = ""
-                var ready = true
-                for child in nodes[index].children {
-                    guard let text = texts[child] else { ready = false; break }
-                    body += text
-                }
-                guard ready else { texts[index] = nil; continue }
-                let call = TemplateBlockCall(name: name, attributes: attributes, body: body)
-                if let reply = replies[call] {
-                    texts[index] = reply
-                } else if let standIn {
-                    texts[index] = standIn(call)
-                } else {
-                    if !rendering.pending.contains(call) { rendering.pending.append(call) }
-                    texts[index] = nil
-                }
-            case .root:
-                var output = ""
-                var ready = true
-                for child in nodes[index].children {
-                    guard let text = texts[child] else { ready = false; continue }
-                    switch nodes[child].kind {
-                    case .placeholder, .block: output += encode.map { $0(text) } ?? text
-                    default: output += text
-                    }
-                }
-                texts[index] = ready ? output : nil
-            default:
-                break
-            }
-        }
-        rendering.text = texts[0]
-        return rendering
+        let renderer = TemplateRenderer(document: self, value: value, raw: raw, replies: replies, standIn: standIn,
+                                        encode: encode)
+        let text = renderer.render()
+        return Rendering(text: text, pending: renderer.pending, missing: renderer.missing, problems: renderer.problems)
     }
 
     // MARK: - Reading tags
@@ -408,6 +458,7 @@ public enum TemplateBlocks {
                         Template.value(for: body, params: params, now: now, calendar: calendar, locale: locale,
                                        missing: &missing)
                     },
+                    raw: { params[$0] },
                     replies: replies)
                 for call in rendering.pending where !round.contains(call) { round.append(call) }
             }

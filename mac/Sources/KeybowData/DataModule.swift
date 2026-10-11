@@ -135,16 +135,61 @@ public final class DataModule: KeybowModule, @unchecked Sendable {
 
     // MARK: - Fetching values
 
+    /// One use of a source: its values, and which fetch answers it.
+    struct Use {
+        let name: String
+        let source: DataSource
+        let raw: Bool
+        let given: [String: String]
+        /// The same source with the same values is fetched once.
+        var fetch: String { source.id.uuidString + given.sorted { $0.key < $1.key }.map { " \($0.key)=\($0.value)" }.joined() }
+    }
+
     public func fetch(_ names: [String], params: [String: String], now: Date) async throws -> [String: String] {
-        /// One use of a source: its values, and which fetch answers it.
-        struct Use {
-            let name: String
-            let source: DataSource
-            let raw: Bool
-            let given: [String: String]
-            /// The same source with the same values is fetched once.
-            var fetch: String { source.id.uuidString + given.sorted { $0.key < $1.key }.map { " \($0.key)=\($0.value)" }.joined() }
+        try await fetch(names, rows: [], params: params, now: now)
+    }
+
+    /// For a list, `{{#each api.issues}}`, each item a source's rule finds is
+    /// a row, and its value is there too. Finding nothing is an empty list,
+    /// not a broken rule. A raw response has no rule: its text is read as
+    /// rows instead.
+    public func fetch(_ names: [String], rows: Set<String>, params: [String: String],
+                      now: Date) async throws -> [String: String] {
+        var values: [String: String] = [:]
+        for (use, fetched) in try await responses(for: names, params: params, now: now) {
+            if use.raw {
+                values[use.name] = fetched.text
+            } else if rows.contains(use.name), let rule = use.source.rule {
+                values[Template.rowsKey(for: use.name)] = try self.rows(use.source, rule, from: fetched)
+                values[use.name] = (try? rule.value(in: fetched.body, contentType: fetched.contentType)) ?? ""
+            } else {
+                values[use.name] = try extract(use.source, from: fetched, given: use.given,
+                                               emptyIsBroken: use.source.urlNames.isEmpty)
+            }
         }
+        return values
+    }
+
+    /// What the rule finds, as rows — or, if it can't read the response, the
+    /// source marked broken.
+    private func rows(_ source: DataSource, _ rule: ExtractionRule, from fetched: Fetched) throws -> String {
+        var updated = self.source(named: source.name) ?? source
+        updated.lastChecked = fetched.at
+        do {
+            let rows = try rule.rows(in: fetched.body, contentType: fetched.contentType)
+            updated.broken = nil
+            save(updated)
+            return rows
+        } catch {
+            updated.broken = "\(error)"
+            save(updated)
+            throw ModuleError("“\(source.name)” didn't find its value",
+                              "The API may have changed. Open Data Sources in the menu bar and use Find It Again.")
+        }
+    }
+
+    /// The responses these names need: all at once, each distinct URL once.
+    private func responses(for names: [String], params: [String: String], now: Date) async throws -> [(Use, Fetched)] {
         var uses: [Use] = []
         for name in names {
             let (sourceName, raw, attributes) = Self.parse(name)
@@ -158,7 +203,6 @@ public final class DataModule: KeybowModule, @unchecked Sendable {
                             given: try Self.values(of: attributes, for: source, params: params, now: now)))
         }
 
-        // All at once, each distinct URL once.
         let responses = try await withThrowingTaskGroup(of: (String, Fetched).self) { group in
             var started = Set<String>()
             for use in uses where started.insert(use.fetch).inserted {
@@ -170,14 +214,7 @@ public final class DataModule: KeybowModule, @unchecked Sendable {
             for try await (fetch, fetched) in group { responses[fetch] = fetched }
             return responses
         }
-
-        var values: [String: String] = [:]
-        for use in uses {
-            guard let fetched = responses[use.fetch] else { continue }
-            values[use.name] = use.raw ? fetched.text
-                : try extract(use.source, from: fetched, given: use.given, emptyIsBroken: use.source.urlNames.isEmpty)
-        }
-        return values
+        return uses.compactMap { use in responses[use.fetch].map { (use, $0) } }
     }
 
     /// What a use's attributes give its URL — `term={{selection}}`, filled in —

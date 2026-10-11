@@ -186,6 +186,9 @@ final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate, NST
             h1 { font-size: 21px; } h2 { font-size: 18px; } h3 { font-size: 16px; }
             ul, ol { margin: 0.3em 0; padding-left: 1.4em; }
             li { margin: 0.15em 0; }
+            table { border-collapse: collapse; margin: 0.3em 0; }
+            th, td { border: 1px solid rgba(255,255,255,0.25) !important; padding: 3px 9px !important; vertical-align: top; }
+            th { font-weight: 600; background: rgba(255,255,255,0.06); }
             #keybow-content { display: inline-block; max-width: \(Int(width))px; overflow-wrap: break-word; }
             #keybow-content > div:has(> br:only-child) { height: 0.6em; }
             </style>
@@ -193,7 +196,7 @@ final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate, NST
         switch content {
         case .markdown(let text):
             return "<!DOCTYPE html><html><head><meta charset=\"utf-8\">\(base)</head>"
-                + "<body><div id=\"keybow-content\">\(NotesHTML.from(markdown: text, links: true))</div></body></html>"
+                + "<body><div id=\"keybow-content\">\(NotesHTML.from(markdown: text, links: true, tables: true))</div></body></html>"
         case .html(let document):
             // Its own styles come after these, so they win.
             if let head = document.range(of: "<head[^>]*>", options: [.regularExpression, .caseInsensitive]) {

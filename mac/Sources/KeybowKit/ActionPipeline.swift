@@ -269,8 +269,9 @@ public final class ActionPipeline {
         let started = Date()
         do {
             if !fetchedNames.isEmpty {
+                let rows = ActionPlanner.listSources(for: selection, context: context, vocabulary: registry.vocabulary)
                 let values = try await registry.fetch(fetchedNames, params: ActionPlanner.values(for: selection, context: context),
-                                                      now: context.now)
+                                                      now: context.now, rows: rows)
                 context.environment.merge(values) { _, fetched in fetched }
                 surroundings.log(String(format: "  fetched %d value%@ in %.1fs", values.count, values.count == 1 ? "" : "s",
                                         Date().timeIntervalSince(started)))

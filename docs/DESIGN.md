@@ -577,6 +577,28 @@ the action uses it, through the accessibility API; apps that don't answer
 (Chrome, Electron) are sent ⌘C, with the clipboard restored straight after. In
 a link, placed values are percent-encoded — see CONFIG-LANGUAGE.md §6.
 
+### Lists
+
+`{{#each clipboard}}…{{/each}}` writes its contents once for each row of a
+value, with an optional `{{#header}}`, `{{#footer}}` and `{{#empty}}` — for
+turning cells copied from a spreadsheet, a CSV file or an API's results into
+a table, a list or a sentence. Values stay text: a list reads its rows from
+its value's text when it's filled in (`DataTable`: CSV, tab-separated as
+spreadsheets copy, JSON, a Markdown table, a line each), so nothing that
+carries values had to change. A module that has more than text — a data
+source's rule finding several objects — hands over rows as JSON under a key
+of their own. `where`, `sort` and `limit` choose rows on the Mac,
+deterministically, as rules do; `@count` and `@sum.<column>` total them.
+
+Lists aren't blocks: nothing replies to them, so they may go in any field. A
+`{{#ai}}` block inside a row is asked once a row, within the 24-reply limit.
+Rendering lists recurses, but only for lists inside lists, and only 16 deep;
+blocks are still worked out without recursion, however deep.
+
+Markdown tables become HTML tables for what's copied, inserted or displayed,
+and RTF tables through it. Notes from a script still gets their lines as
+written: it can't create tables that way.
+
 ### State
 
 `state.json`, beside `tree.md`, holds what KeybowNotes keeps between runs

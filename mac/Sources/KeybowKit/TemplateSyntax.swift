@@ -27,6 +27,12 @@ public struct TemplateTag: Equatable, Sendable {
     public let range: NSRange
     /// Its name within it.
     public let nameRange: NSRange
+    /// Inside a list's `{{#each}}…{{/each}}`, where a name may be one of
+    /// the row's columns.
+    public var inList = false
+    /// What a list goes through, written in its opening tag: `clipboard` in
+    /// `{{#each clipboard}}`. Its range is the name alone.
+    public var isListSource = false
 }
 
 /// Something wrong in a template or a field, and where.
@@ -66,9 +72,16 @@ public enum TemplateSyntax {
         tags(in: text, offset: 0)
     }
 
-    private static func tags(in text: String, offset: Int) -> [TemplateTag] {
+    private static func tags(in text: String, offset: Int, inList outerList: Bool = false) -> [TemplateTag] {
         let document = TemplateDocument(text)
         var tags: [TemplateTag] = []
+        // Which nodes are inside a list.
+        var inList = Array(repeating: outerList, count: document.nodes.count)
+        for (index, node) in document.nodes.enumerated() {
+            var isList = false
+            if case .list = node.kind { isList = true }
+            for child in node.children { inList[child] = inList[index] || isList }
+        }
         func range(_ place: Range<String.Index>) -> NSRange {
             let range = NSRange(place, in: text)
             return NSRange(location: range.location + offset, length: range.length)
@@ -79,9 +92,11 @@ public enum TemplateSyntax {
             let spaces = after.prefix { $0 == " " }.utf16.count
             return NSRange(location: tag.location + 2 + lead + spaces, length: name.utf16.count)
         }
-        for node in document.nodes {
+        for (index, node) in document.nodes.enumerated() {
             guard let place = node.tag else { continue }
             let whole = range(place)
+            let count = tags.count
+            defer { for tag in count..<tags.count where inList[index] { tags[tag].inList = true } }
             switch node.kind {
             case .placeholder(let body):
                 let (head, fallback) = Template.split(body)
@@ -92,7 +107,7 @@ public enum TemplateSyntax {
                     // Tags in its attributes, where they are.
                     let inner = text[place].dropFirst(2).dropLast(2)
                     let start = NSRange(inner.startIndex..<inner.startIndex, in: text).location + offset
-                    tags += Self.tags(in: String(inner), offset: start).filter { $0.range != whole }
+                    tags += Self.tags(in: String(inner), offset: start, inList: inList[index]).filter { $0.range != whole }
                 } else {
                     let name = Template.name(of: body)
                     let colon = head.firstIndex(of: ":")
@@ -107,6 +122,42 @@ public enum TemplateSyntax {
                     let end = range(closing)
                     tags.append(TemplateTag(kind: .blockClosing, name: name, attributes: [:], fallback: nil, format: nil,
                                             range: end, nameRange: nameRange(of: end, in: closing, name: name, lead: 1)))
+                }
+            case .list(let list):
+                let attributes = list.attributes
+                tags.append(TemplateTag(kind: .blockOpening, name: TemplateList.tagName, attributes: attributes, fallback: nil,
+                                        format: nil, range: whole,
+                                        nameRange: nameRange(of: whole, in: place, name: TemplateList.tagName, lead: 1)))
+                if let source = list.sourceRange {
+                    let sourceRange = range(source)
+                    let name = Template.name(of: list.source)
+                    let call = Template.operatorCall(name)
+                    tags.append(TemplateTag(kind: call == nil ? .value : .call, name: call?.name ?? name,
+                                            attributes: call?.attributes ?? [:], fallback: nil, format: nil,
+                                            range: sourceRange,
+                                            nameRange: NSRange(location: sourceRange.location,
+                                                               length: (call?.name ?? name).utf16.count),
+                                            isListSource: true))
+                }
+                // Placeholders in its attributes, and its source's, where they are.
+                let inner = text[place].dropFirst(2).dropLast(2)
+                let start = NSRange(inner.startIndex..<inner.startIndex, in: text).location + offset
+                tags += Self.tags(in: String(inner), offset: start, inList: inList[index])
+                if let closing = node.closing {
+                    let end = range(closing)
+                    tags.append(TemplateTag(kind: .blockClosing, name: TemplateList.tagName, attributes: [:], fallback: nil,
+                                            format: nil, range: end,
+                                            nameRange: nameRange(of: end, in: closing, name: TemplateList.tagName, lead: 1)))
+                }
+            case .section(let section):
+                tags.append(TemplateTag(kind: .blockOpening, name: section.rawValue, attributes: [:], fallback: nil,
+                                        format: nil, range: whole,
+                                        nameRange: nameRange(of: whole, in: place, name: section.rawValue, lead: 1)))
+                if let closing = node.closing {
+                    let end = range(closing)
+                    tags.append(TemplateTag(kind: .blockClosing, name: section.rawValue, attributes: [:], fallback: nil,
+                                            format: nil, range: end,
+                                            nameRange: nameRange(of: end, in: closing, name: section.rawValue, lead: 1)))
                 }
             case .root, .text:
                 continue
@@ -125,7 +176,7 @@ public enum TemplateSyntax {
         var inside = before[open.upperBound...]
         let block = inside.first == "#"
         if block { inside = inside.dropFirst() }
-        guard inside.allSatisfy({ $0.isLetter || $0.isNumber || "._-".contains($0) }) else { return nil }
+        guard inside.allSatisfy({ $0.isLetter || $0.isNumber || "._-@".contains($0) }) else { return nil }
         let length = inside.utf16.count
         return (NSRange(location: caret - length, length: length), block)
     }
@@ -173,6 +224,15 @@ extension ValueCatalog {
                     issues.append(TemplateIssue("Nothing here replies to {{#\(tag.name)}}.", at: tag.nameRange, .error))
                     continue
                 }
+                // A list isn't a reply: it may go anywhere a value may.
+                if entry.group == "Lists" {
+                    if place == .value, tag.name == TemplateList.tagName {
+                        issues.append(TemplateIssue("A list in a value isn't filled in: it's kept as written.",
+                                                    at: tag.range, .warning))
+                    }
+                    issues += Self.attributeIssues(tag, entry)
+                    continue
+                }
                 switch place {
                 case .value:
                     issues.append(TemplateIssue("A block in a value doesn't run: it's kept as written.", at: tag.range, .warning))
@@ -185,10 +245,34 @@ extension ValueCatalog {
                 }
                 issues += Self.attributeIssues(tag, entry)
             case .value, .call:
+                if tag.name.hasPrefix("@") {
+                    if !tag.inList {
+                        issues.append(TemplateIssue("{{\(tag.name)}} is a list's own: it goes inside {{#each}}…{{/each}}.",
+                                                    at: tag.nameRange, .warning))
+                    } else if entry(named: tag.name) == nil {
+                        issues.append(TemplateIssue("""
+                            A list has no {{\(tag.name)}}: it has @number, @count, @row, @columns, and @sum., @average., \
+                            @min. and @max. with a column's name.
+                            """, at: tag.nameRange, .warning))
+                    }
+                    continue
+                }
+                // Inside a list, a name nothing else gives is a column.
+                if tag.inList, entry(named: tag.name).map({ !knows(tag.name, as: $0) }) ?? true { continue }
                 guard let entry = entry(named: tag.name), knows(tag.name, as: entry) else {
                     issues.append(TemplateIssue(tag.fallback == nil
                         ? "Nothing here gives {{\(tag.name)}}, so it'll be missing."
                         : "Nothing here gives {{\(tag.name)}}, so its fallback is always used.", at: tag.nameRange, .warning))
+                    continue
+                }
+                // What a list doesn't take goes to what it goes through:
+                // say so as the list's, when that takes nothing.
+                if tag.isListSource, entry.attributes.isEmpty, let unknown = tag.attributes.keys.sorted().first,
+                   let each = self.entry(named: TemplateList.tagName, block: true) {
+                    let known = each.attributes.map(\.name)
+                    issues.append(TemplateIssue("{{#each}} doesn't take “\(unknown)”: it takes "
+                                                + known.dropLast().joined(separator: ", ") + " and " + known.last! + ".",
+                                                at: tag.range, .warning))
                     continue
                 }
                 if tag.format != nil, entry.formats.isEmpty {

@@ -175,6 +175,30 @@ final class LinkAndClipboardTests: XCTestCase {
 
     // MARK: - Inserting
 
+    func testCopyAListOfWhatWasCopied() throws {
+        try """
+            {{#each clipboard where='Paid = no' sort='Due'}}
+            {{#header}}
+            | Invoice | Due |
+            |---|---|
+            {{/header}}
+            | {{Invoice}} | {{Due}} |
+            {{#empty}}
+            All paid.
+            {{/empty}}
+            {{/each}}
+            """.write(to: templates.appendingPathComponent("unpaid.md"), atomically: true, encoding: .utf8)
+        let outline = "1. Unpaid [Copy, template: unpaid.md]\n2. Odd [Copy, text: \"{{#each clipboard where='Colour = red'}}x{{/each}}\"]\n"
+        let copied = "Invoice\tDue\tPaid\nA-2\t2026-10-09\tno\nA-1\t2026-10-02\tyes\nA-3\t2026-10-01\tno"
+        XCTAssertEqual(try plan(outline, path: [0], environment: ["clipboard": copied]),
+                       .copyToClipboard("| Invoice | Due |\n|---|---|\n| A-3 | 2026-10-01 |\n| A-2 | 2026-10-09 |\n"))
+        XCTAssertEqual(try plan(outline, path: [0], environment: ["clipboard": "Invoice\tPaid\nA-1\tyes"]),
+                       .copyToClipboard("All paid.\n"))
+        assertRefused(outline, path: [1], environment: ["clipboard": copied],
+                      with: .templateProblem("The rows of {{clipboard}} have no column “Colour” to choose by: they have Invoice, Due, Paid."))
+        XCTAssertEqual(try plan(outline, path: [0]), .copyToClipboard(""), "nothing copied isn't “All paid.”")
+    }
+
     func testInsertTakesTextLikeCopy() throws {
         let outline = """
         1. Type [Insert]

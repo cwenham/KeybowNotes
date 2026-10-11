@@ -15,6 +15,10 @@ import Foundation
 ///                          TemplateBlocks)
 ///   {{quote file="q.md"}}  an operator: a name with attributes, whose value a
 ///                          module fetches before the action runs
+///   {{#each clipboard}}…{{/each}}
+///                          a list: its contents filled in for each row of
+///                          the value, the row's columns among the values
+///                          (see TemplateLists)
 ///
 /// Anything missing without a fallback expands to nothing and is reported, so
 /// callers can refuse to act on — or at least warn about — an incomplete value.
@@ -48,11 +52,26 @@ public enum Template {
             value: { body, missing in
                 value(for: body, params: params, now: now, calendar: calendar, locale: locale, missing: &missing)
             },
+            raw: { params[$0] },
             replies: blocks, standIn: standIn, encode: encode)
         // An image or PDF stands as a token: only a block's contents keep it
         // — for Claude — and everywhere else it's described.
         return Result(text: MediaToken.describe(rendering.text ?? ""), missing: rendering.missing,
-                      unresolved: rendering.pending, problems: document.problems)
+                      unresolved: rendering.pending, problems: document.problems + rendering.problems)
+    }
+
+    /// What the template's lists go through, as `names` gives them:
+    /// `clipboard`, `api.github`, `file name='team.csv'`.
+    public static func listSources(in template: String) -> Set<String> {
+        guard template.contains("{{#") else { return [] }
+        return Set(TemplateDocument(template).listSources.map(name(of:)))
+    }
+
+    /// Where a module puts a value's rows, for `{{#each}}` — as JSON, an
+    /// array of objects, arrays or plain values — when it has them as more
+    /// than text. Not a name a template can write.
+    public static func rowsKey(for name: String) -> String {
+        "#rows " + name
     }
 
     /// The names a template uses, without fallbacks or formats: "selection",
@@ -130,17 +149,25 @@ public enum Template {
         if let builtIn = builtIn(name, now: now, calendar: calendar, locale: locale) {
             return builtIn
         }
-        if let fallback {
-            // A quoted fallback, {{x|"five minutes"}}, means the words, not the quotes.
-            var text = fallback.trimmingCharacters(in: .whitespaces)
-            if text.count >= 2, let first = text.first, let last = text.last,
-               (first == "\"" && last == "\"") || (first == "\u{201C}" && last == "\u{201D}") {
-                text = String(text.dropFirst().dropLast())
-            }
-            return text
-        }
+        if let fallback { return fallbackText(fallback) }
         if !missing.contains(name) { missing.append(name) }
         return ""
+    }
+
+    /// What a fallback gives. A quoted one, {{x|"five minutes"}}, means the
+    /// words, not the quotes.
+    static func fallbackText(_ fallback: String) -> String {
+        var text = fallback.trimmingCharacters(in: .whitespaces)
+        if text.count >= 2, let first = text.first, let last = text.last,
+           (first == "\"" && last == "\"") || (first == "\u{201C}" && last == "\u{201D}") {
+            text = String(text.dropFirst().dropLast())
+        }
+        return text
+    }
+
+    /// Whether a name is filled in from the clock: `date`, `time:HH:mm`.
+    static func isBuiltIn(_ name: String) -> Bool {
+        builtInNames.contains(String(name.prefix { $0 != ":" }))
     }
 
     // MARK: - Template files

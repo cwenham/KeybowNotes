@@ -21,10 +21,13 @@ struct ValueContext: Equatable {
     func explanation(of tag: TemplateTag, in text: String) -> String {
         let block = tag.kind == .blockOpening || tag.kind == .blockClosing
         guard let entry = catalog.entry(named: tag.name, block: block) else {
+            if tag.inList, !block { return "The row's “\(tag.name)” column — or, if its rows have no such column, missing." }
             return block ? "Nothing here replies to {{#\(tag.name)}}." : "Nothing here gives {{\(tag.name)}}."
         }
         var lines = ["\(entry.title): \(entry.help)"]
-        if !block {
+        // What a list goes through, and what's only known row by row, come
+        // to nothing to show here.
+        if !block, !tag.isListSource, !tag.name.hasPrefix("@") {
             let here = ValueCatalog.preview(of: (text as NSString).substring(with: tag.range), params: params).text
             let shown = here.count > 200 ? here.prefix(200) + "…" : Substring(here)
             lines.append(shown.isEmpty ? "Here: empty" : "Here: \(shown)")
@@ -142,7 +145,7 @@ final class ValueTextView: NSTextView {
         let before = (string as NSString).substring(to: selectedRange().location)
         if entered == "{" && before.hasSuffix("{{") || entered == "#" && before.hasSuffix("{{#")
             // Typing closes the list: offer it again, narrowed, as a name goes on.
-            || character.isLetter || character.isNumber || "._-".contains(character) {
+            || character.isLetter || character.isNumber || "._-@".contains(character) {
             offerValues()
         }
     }

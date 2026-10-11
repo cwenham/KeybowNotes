@@ -81,6 +81,13 @@ public protocol KeybowModule: AnyObject, Sendable {
     /// Runs off the main thread; cancelling the task cancels it.
     func fetch(_ names: [String], params: [String: String], now: Date) async throws -> [String: String]
 
+    /// As `fetch`, when a list goes through some of them — those in `rows`,
+    /// `{{#each api.github}}`. A module that has more than text for those
+    /// gives their rows as well, under `Template.rowsKey(for:)`: a JSON array
+    /// of objects, arrays or plain values. Without, a list reads the value's
+    /// text as rows. The default fetches them as values.
+    func fetch(_ names: [String], rows: Set<String>, params: [String: String], now: Date) async throws -> [String: String]
+
     /// Other values those names need to be fetched — a URL's `{{city}}` or
     /// `{{selection}}` — so the host gets them ready first. They may be
     /// another module's fetched values, `{{location.latitude}}`, which are
@@ -157,6 +164,10 @@ extension KeybowModule {
     public func refusal(forBlock name: String, using names: Set<String>) -> String? { nil }
     public func fetch(_ names: [String], params: [String: String], now: Date) async throws -> [String: String] {
         throw ModuleError("This module doesn't fetch values")
+    }
+    public func fetch(_ names: [String], rows: Set<String>, params: [String: String],
+                      now: Date) async throws -> [String: String] {
+        try await fetch(names, params: params, now: now)
     }
     public func valuesNeeded(toFetch names: [String]) -> Set<String> { [] }
     public func standIn(forValue name: String) -> String { "‹\(name)›" }
@@ -712,8 +723,11 @@ public final class ModuleRegistry: @unchecked Sendable {
     /// Fetches them, and whatever they need that's fetched too — a round at a
     /// time, each module's names in a round at once, the modules side by
     /// side. Each round's values are there for the next: a data source's URL
-    /// gets `{{location.latitude}}`. Returns every value fetched.
-    public func fetch(_ names: [String], params: [String: String], now: Date) async throws -> [String: String] {
+    /// gets `{{location.latitude}}`. Returns every value fetched. Those in
+    /// `rows`, which lists go through, come with their rows too, under
+    /// `Template.rowsKey`, from a module that has them.
+    public func fetch(_ names: [String], params: [String: String], now: Date,
+                      rows: Set<String> = []) async throws -> [String: String] {
         var params = params
         var values: [String: String] = [:]
         for round in try fetchRounds(names, given: params) {
@@ -721,7 +735,11 @@ public final class ModuleRegistry: @unchecked Sendable {
             let given = params
             let fetched = try await withThrowingTaskGroup(of: [String: String].self) { group in
                 for (module, names) in groups {
-                    group.addTask { try await module.fetch(names, params: given, now: now) }
+                    let listed = rows.intersection(names)
+                    group.addTask {
+                        listed.isEmpty ? try await module.fetch(names, params: given, now: now)
+                            : try await module.fetch(names, rows: listed, params: given, now: now)
+                    }
                 }
                 var fetched: [String: String] = [:]
                 for try await result in group { fetched.merge(result) { first, _ in first } }

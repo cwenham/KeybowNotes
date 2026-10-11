@@ -27,6 +27,7 @@ bar or the outline directly.
 | Reply to **template blocks** — `{{#ai}}…{{/ai}}` | `manifest.blocks`, `reply(to:)`, `standIn(for:)` |
 | **Refuse a block** for what's written in it — a `{{selection}}` the person keeps from it — before anything is read | `refusal(forBlock:using:)` |
 | **Fetch values** when an action needs them — `{{api.weather}}`, `{{quote file="q.md"}}` | `manifest.fetches`, `fetch(_:params:now:)`, `valuesNeeded(toFetch:)`, `standIn(forValue:)`, `fetchSubject(for:)` |
+| **Give rows** for a list to go through — `{{#each api.github}}` | `fetch(_:rows:params:now:)` |
 | Read files the tree names, beside its templates | `ModuleHost.templatesFolder` |
 | Add **settings** to the Settings window — a page of its own — secrets kept in the Keychain | `manifest.settings`, `manifest.symbol`, `ModuleHost.setting` / `secret` |
 | **Show something on screen** until it's dismissed, with OK and Cancel — and a field to type in | `ModuleHost.display(_:)`, `ModuleDisplay.Field` |
@@ -142,6 +143,15 @@ own, with only the modules it needs.
   order=sequential`, found by its first word; `Template.operatorCall` reads
   the attributes back. Fetched values aren't blocks: they may go in fields
   that steer an action. Previews use `standIn(forValue:)`.
+- **Rows.** A list, `{{#each api.github}}…{{/each}}`, goes through a value's
+  rows. Most values are text, and the list reads rows from it — CSV, cells
+  copied from a spreadsheet, JSON, a Markdown table, a line each
+  (`DataTable`). A module that has more than text gives rows itself: the
+  names lists go through come to `fetch(_:rows:params:now:)` in `rows`, and
+  it returns, besides their values, each one's rows as a JSON array — of
+  objects, whose keys are the columns; of arrays; or of plain values — under
+  `Template.rowsKey(for:)`, a key no template can write. The default fetches
+  them as values. The pipeline asks with `ActionPlanner.listSources`.
 - **Settings.** A module describes its settings — text, a secret, a choice, a
   flag, or several of a list it gives as the window shows it
   (`choices(forSetting:)`: the person's calendars, to tick) — and the host
@@ -252,7 +262,13 @@ dependency at all: another module's values are in every action's placeholders.
 - A **rule** (`Extraction.swift`) is a JSONPath (the parts of RFC 9535 rules
   need: names, indices, wildcards, descendants, filters), an XPath 1.0 through
   `XMLDocument` (tidying HTML first), or an ICU regular expression. Several
-  matches are joined with commas.
+  matches are joined with commas. For a list, `{{#each api.github}}`, each
+  match is a row instead (`ExtractionRule.rows`): a JSON value as it is, an
+  element as its attributes and child elements by name, a match as its groups
+  by number and name. Finding nothing there is an empty list, not a broken
+  rule. RuleFinder tells Claude that a list of things for a table is found
+  whole, `$.items[*]`, and doesn't hold an object found to the expected
+  value word for word.
 - **RuleFinder** writes a rule with Claude once: the description and a sample
   of the response — keys taken out, cut at 60,000 characters — with a JSON
   schema for the answer (`found`, `kind`, `expression`, `expected_value`,
@@ -382,6 +398,11 @@ it did is on the screen, and the overlay steps aside.
 - Attribute values are templates, filled in from the action's values;
   `valuesNeeded(toFetch:)` names what's in them, so `{{selection}}` is read
   first if they use it.
+- The same target holds **Files** (`FileModule`, module id `file`):
+  `{{file name="…"}}` is a file's whole text, found as a quote's is, up to
+  20 MB, read as UTF-8, UTF-16 with its mark, or else Windows Latin, as CSV
+  from a Windows spreadsheet comes. `{{#each file='team.csv'}}` is written for
+  `{{#each file name='team.csv'}}`, so a list goes through its rows.
 
 ## Home Assistant
 

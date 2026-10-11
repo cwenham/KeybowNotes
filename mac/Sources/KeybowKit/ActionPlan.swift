@@ -235,11 +235,23 @@ public enum ActionPlanner {
     /// selected text, are fetched only when something asks for them.
     public static func placeholders(for selection: ResolvedSelection, context: ActionContext,
                                     vocabulary: ActionVocabulary = ModuleRegistry.shared.vocabulary) -> Set<String> {
+        collect(Template.names(in:), for: selection, context: context, vocabulary: vocabulary)
+    }
+
+    /// What the action's lists go through — `{{#each api.github}}` — for the
+    /// modules that fetch them to give as rows.
+    public static func listSources(for selection: ResolvedSelection, context: ActionContext,
+                                   vocabulary: ActionVocabulary = ModuleRegistry.shared.vocabulary) -> Set<String> {
+        collect(Template.listSources(in:), for: selection, context: context, vocabulary: vocabulary)
+    }
+
+    private static func collect(_ names: (String) -> Set<String>, for selection: ResolvedSelection,
+                                context: ActionContext, vocabulary: ActionVocabulary) -> Set<String> {
         guard let action = selection.action else { return [] }
-        var names = Set<String>()
+        var found = Set<String>()
         func collect(_ value: JSONValue) {
             switch value {
-            case .string(let text): names.formUnion(Template.names(in: text))
+            case .string(let text): found.formUnion(names(text))
             case .array(let items): items.forEach(collect)
             case .object(let fields): fields.values.forEach(collect)
             default: break
@@ -249,9 +261,9 @@ public enum ActionPlanner {
         if let name = action.string("template"), !name.isEmpty,
            let url = Template.fileURL(name, in: context.templatesDirectory),
            let text = try? String(contentsOf: url, encoding: .utf8) {
-            names.formUnion(Template.names(in: text))
+            found.formUnion(names(text))
         }
-        return names
+        return found
     }
 }
 
@@ -468,6 +480,7 @@ private struct Planner {
 
     private mutating func expanded(_ text: String, encode: ((String) -> String)? = nil) -> String {
         let result = expand(text, encode: encode)
+        warnings += result.problems
         var missing = result.missing
         if missing.contains("selection") {
             missing.removeAll { $0 == "selection" }
@@ -489,6 +502,7 @@ private struct Planner {
     private func required(_ text: String?, for purpose: String, encode: ((String) -> String)? = nil) throws -> String {
         guard let text else { throw ActionPlanError.empty(purpose) }
         let result = expand(text, encode: encode)
+        if let problem = result.problems.first { throw ActionPlanError.templateProblem(problem) }
         if !result.missing.isEmpty { throw missingError(result.missing, for: purpose) }
         let value = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { throw ActionPlanError.empty(purpose) }
@@ -516,6 +530,7 @@ private struct Planner {
         if let text = try templateText() { return text }
         if let text = action.string("text") {
             let result = expand(text)
+            if let problem = result.problems.first { throw ActionPlanError.templateProblem(problem) }
             if !result.missing.isEmpty { throw missingError(result.missing, for: purpose) }
             guard !result.text.isEmpty else { throw ActionPlanError.empty(purpose) }
             return result.text

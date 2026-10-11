@@ -58,7 +58,7 @@ public struct PasteboardText {
     @MainActor
     public init(_ text: String, format: TextFormat) {
         plain = text
-        let body = NotesHTML.from(markdown: text, links: true)
+        let body = NotesHTML.from(markdown: text, links: true, tables: true)
         guard format == .rich || (format == .auto && Self.isFormatted(body)) else {
             html = nil
             rtf = nil
@@ -82,7 +82,7 @@ public struct PasteboardText {
 
     /// Markdown that came out formatted: more than plain lines of text.
     static func isFormatted(_ html: String) -> Bool {
-        ["<h1>", "<h2>", "<h3>", "<ul>", "<ol>", "<b>", "<i>", "<a href"].contains { html.contains($0) }
+        ["<h1>", "<h2>", "<h3>", "<ul>", "<ol>", "<b>", "<i>", "<a href", "<table"].contains { html.contains($0) }
     }
 
     public func write(to item: NSPasteboardItem) {

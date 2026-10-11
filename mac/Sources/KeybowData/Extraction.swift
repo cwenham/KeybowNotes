@@ -71,6 +71,86 @@ public struct ExtractionRule: Codable, Equatable, Hashable, Sendable {
         }
     }
 
+    /// Everything the rule finds, as rows for `{{#each}}`: a JSON array. From
+    /// JSON, the values themselves — objects make rows with their keys as
+    /// columns. From XML or HTML, each element's attributes and child
+    /// elements by name, or its text when it has neither. From a regular
+    /// expression, each match's groups by number and name, or the match.
+    public func rows(in body: Data, contentType: String? = nil) throws -> String {
+        var rows: [Any] = []
+        switch kind {
+        case .jsonPath:
+            let json: Any
+            do {
+                json = try JSONSerialization.jsonObject(with: body, options: [.fragmentsAllowed])
+            } catch {
+                throw ExtractionError("The response isn't JSON, so a JSONPath can't read it.")
+            }
+            rows = try JSONPath(expression).values(in: json)
+        case .xPath:
+            let html = (contentType ?? "").contains("html") || Self.looksLikeHTML(body)
+            let document: XMLDocument
+            do {
+                document = html
+                    ? try XMLDocument(xmlString: Self.text(of: body, contentType: contentType), options: [.documentTidyHTML])
+                    : try XMLDocument(data: body, options: [])
+            } catch {
+                throw ExtractionError("The response isn't XML or HTML that can be read: \(error.localizedDescription)")
+            }
+            let nodes: [XMLNode]
+            do {
+                nodes = try document.nodes(forXPath: expression)
+            } catch {
+                throw ExtractionError("“\(expression)” isn't an XPath that works here: \(error.localizedDescription)")
+            }
+            rows = nodes.map { node -> Any in
+                guard let element = node as? XMLElement else { return node.stringValue ?? "" }
+                let children = (element.children ?? []).compactMap { $0 as? XMLElement }
+                let attributes = element.attributes ?? []
+                guard !children.isEmpty || !attributes.isEmpty else { return element.stringValue ?? "" }
+                var row: [String: Any] = [:]
+                for attribute in attributes { row[attribute.localName ?? attribute.name ?? ""] = attribute.stringValue ?? "" }
+                for child in children {
+                    let name = child.localName ?? child.name ?? ""
+                    let text = (child.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let earlier = row[name] {
+                        row[name] = ((earlier as? [Any]) ?? [earlier]) + [text]
+                    } else {
+                        row[name] = text
+                    }
+                }
+                return row
+            }
+        case .regex:
+            let text = String(data: body, encoding: .utf8) ?? String(decoding: body, as: UTF8.self)
+            let pattern: NSRegularExpression
+            do {
+                pattern = try NSRegularExpression(pattern: expression)
+            } catch {
+                throw ExtractionError("“\(expression)” isn't a regular expression that works.")
+            }
+            let names = Self.groupNames(in: expression)
+            rows = pattern.matches(in: text, range: NSRange(text.startIndex..., in: text)).map { match -> Any in
+                func group(_ range: NSRange) -> String { Range(range, in: text).map { String(text[$0]) } ?? "" }
+                guard match.numberOfRanges > 1 else { return group(match.range) }
+                var row: [String: Any] = [:]
+                for index in 1..<match.numberOfRanges { row[String(index)] = group(match.range(at: index)) }
+                for name in names { row[name] = group(match.range(withName: name)) }
+                return row
+            }
+        }
+        let data = try JSONSerialization.data(withJSONObject: rows, options: [.sortedKeys, .fragmentsAllowed])
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// The names of a pattern's named groups: `(?<city>…)`.
+    static func groupNames(in pattern: String) -> [String] {
+        let finder = try! NSRegularExpression(pattern: #"\(\?<([A-Za-z][A-Za-z0-9]*)>"#)
+        return finder.matches(in: pattern, range: NSRange(pattern.startIndex..., in: pattern)).compactMap { match in
+            Range(match.range(at: 1), in: pattern).map { String(pattern[$0]) }
+        }
+    }
+
     /// The value: what the rule finds, several joined with commas. Empty if
     /// it finds nothing.
     public func value(in body: Data, contentType: String? = nil) throws -> String {

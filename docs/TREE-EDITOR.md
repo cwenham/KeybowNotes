@@ -256,7 +256,12 @@ For the selected node:
   attribute it doesn't take). What's known comes from the values for the key:
   every one built in and from modules, the data sources by name, what the
   tree sets on the way to it, and — on a branch — what the keys under it set,
-  so a Meeting's `{{when}}` is known from its Today and Tomorrow.
+  so a Meeting's `{{when}}` is known from its Today and Tomorrow. Inside a
+  list, `{{#each}}…{{/each}}`, a name nothing gives is taken for one of the
+  row's columns and isn't marked, and the pointer says so; what the list goes
+  through is checked like any value, and a list's own `{{@count}}` and the
+  rest are marked only outside one. Lists, coloured as blocks, may go in a
+  link: they aren't replies.
   - **`{{` offers the values** there are, as a list to complete from, and
     `{{#` the blocks; choosing one closes the tag — a block with its
     `{{/ai}}`. A family goes as far as its part to fill in: `home.`,

@@ -64,7 +64,7 @@ final class ValueCatalogTests: XCTestCase {
     }
 
     func testGroupsInOrder() {
-        XCTAssertEqual(catalog.groups, ["This key", "Contact", "Project", "Date and time", "What you were doing"])
+        XCTAssertEqual(catalog.groups, ["This key", "Contact", "Project", "Date and time", "What you were doing", "Lists"])
     }
 
     // MARK: - Finding one

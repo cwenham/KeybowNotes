@@ -76,7 +76,7 @@ final class TemplateSyntaxTests: XCTestCase {
         XCTAssertEqual(Array(catalog.completions(for: "con", block: false)),
                        ["contact.name", "contact.phone", "contact.email", "contact."], "a family as far as its part to fill in")
         XCTAssertEqual(catalog.completions(for: "LEV", block: false), ["level1", "level2", "level3", "level4"])
-        XCTAssertEqual(catalog.completions(for: "", block: true), ["reply"])
+        XCTAssertEqual(catalog.completions(for: "", block: true), ["each", "header", "footer", "empty", "reply"])
         XCTAssertEqual(catalog.completions(for: "test", block: false), ["test.", "test.weather"])
         XCTAssertTrue(catalog.completions(for: "zz", block: false).isEmpty)
     }

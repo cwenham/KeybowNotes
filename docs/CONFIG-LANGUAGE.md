@@ -876,8 +876,9 @@ copying something incomplete.
 #### Formatted text
 
 Copy and Insert put Markdown on the clipboard formatted as well as plain:
-headings (`#` to `###`), lists, `**bold**`, `*italic*` or `_italic_`, and
-`[links](https://…)`. Mail, Notes, Pages and other rich editors paste it
+headings (`#` to `###`), lists, `**bold**`, `*italic*` or `_italic_`,
+`[links](https://…)`, and tables (`| A | B |` with a rule of dashes beneath,
+`:--:` to centre a column and `--:` to right-align it) — see *Lists* in §6. Mail, Notes, Pages and other rich editors paste it
 formatted; a plain field, a terminal or a Markdown editor gets the Markdown as
 written. Most useful for a Claude reply, which comes back in Markdown:
 
@@ -912,7 +913,7 @@ opening an app.
 2. Idea [Display, text: "{{#ai}}One idea for {{selection}}{{/ai}}", button: okCancel, ok: Copy]
 ```
 
-- **Markdown**, unless it's an **HTML document** — text that begins
+- **Markdown** — tables included — unless it's an **HTML document** — text that begins
   `<!DOCTYPE html>`, `<html>`, an XML declaration (`<?xml … encoding=…?>`) or a
   `<meta>` tag — which is shown as a web page, in its own styles, over the
   panel's dark background. What's shown is trimmed of blank lines and spaces
@@ -1163,6 +1164,8 @@ Any text in an action, and every template, can use placeholders:
 | `{{home.sensor.outdoor_temperature}}` | an entity's state in Home Assistant (below) |
 | `{{event.title}}` | the meeting under way, and the day's agenda (below) |
 | `{{quote file="quotes.md"}}` | a paragraph or list item from a file, at random or in turn (below) |
+| `{{file name="notes.txt"}}` | a file's whole text (below) |
+| `{{#each clipboard}}…{{/each}}` | its contents once for each row: of copied cells, a CSV file, an API's results (below) |
 
 A fallback in quotes is taken without them: `{{selection|"5 minute timer"}}`
 gives *5 minute timer*.
@@ -1507,6 +1510,140 @@ It takes three attributes:
 - **Previews** show `‹a quote from quotes.md, Stoics›` and pick nothing, so a
   preview never moves a sequence on.
 
+### Lists: `{{#each}}`
+
+A **list** writes what's inside it once for each row of something — cells
+copied from a spreadsheet, a CSV file, an API's results — with an optional
+header and footer. It turns rows into a table, a list or a sentence:
+
+```
+{{#each clipboard where="Paid = no" sort="Due"}}
+{{#header}}
+| Invoice | Client | Due | Amount |
+|---|---|---|--:|
+{{/header}}
+| {{Invoice}} | {{Client}} | {{Due}} | {{Amount}} |
+{{#footer}}
+
+{{@count}} unpaid, £{{@sum.Amount}} in all.
+{{/footer}}
+{{#empty}}
+Everything's paid.
+{{/empty}}
+{{/each}}
+```
+
+Copy the cells in Numbers or Excel, press the key, and paste a table into
+Mail. With rows like these on the clipboard:
+
+```
+Invoice   Client     Due          Amount    Paid
+A-101     Acme Ltd   2026-10-20   1,200.00  no
+A-102     Bolt & Co  2026-10-02   80.50     yes
+A-103     Crane plc  2026-10-09   300.00    no
+```
+
+it gives a table of A-103 and A-101, and *2 unpaid, £1500.00 in all.*
+
+**What it goes through** comes first: any value — `{{#each clipboard}}`,
+`{{#each selection}}`, `{{#each answer}}`, a value set in the tree, a data
+source — or a file, `{{#each file='team.csv'}}`, in the templates folder or a
+full or `~/` path. What it holds is read as rows:
+
+| What it holds | Rows |
+|---|---|
+| Cells copied from a spreadsheet — Numbers, Excel, Google Sheets — which copy as tab-separated text | each line; the first names the columns |
+| CSV, with commas — or semicolons, as CSV written with decimal commas has them | each line; the first names the columns. A cell in `"quotes"` can hold commas and new lines |
+| JSON: an array of objects | each object, its keys the columns — `{{author.name}}` for one inside it |
+| JSON: an array of arrays | as CSV: the first names the columns |
+| A Markdown table, `\| Name \| Role \|` with a rule beneath | each row under the rule |
+| Anything else | each line that isn't blank, bullets and numbers taken off when every line has one. Its one column is `{{1}}` |
+
+Text with commas is taken as CSV only when every line has the same number of
+them; otherwise it's lines, so a sentence isn't split up.
+
+**Inside it**, `{{Name}}` is the row's *Name* column — matched ignoring case
+and spacing — and `{{1}}`, `{{2}}` its columns by number. A blank cell is
+empty; `{{Note|none}}` gives it a fallback. Everything else is as it is
+outside: `{{leaf}}`, `{{date}}`, `{{selection}}`. A column named like one of
+those wins, inside the list. The list has values of its own:
+
+| Name | |
+|---|---|
+| `{{@number}}` | the row's number: 1, 2, 3… |
+| `{{@count}}` | how many rows there are, after `where` and `limit` |
+| `{{@row}}` | the whole row, its cells separated by tabs — for a list of single items, the item |
+| `{{@columns}}` | the columns' names, separated by tabs |
+| `{{@sum.Amount}}` | the numbers in a column added up — `£1,200.00` counts as 1200 — to as many decimal places as they have |
+| `{{@average.Amount}}` | their average |
+| `{{@min.Due}}`, `{{@max.Due}}` | a column's least and most: numbers as numbers, dates written `2026-10-20` in date order, words alphabetically |
+
+**Its parts**, each optional, anywhere inside it:
+
+| Part | |
+|---|---|
+| `{{#header}}…{{/header}}` | written once, before the rows — when there are any |
+| `{{#footer}}…{{/footer}}` | written once, after them |
+| `{{#empty}}…{{/empty}}` | written instead, when there are no rows |
+
+**Attributes**, in the opening tag:
+
+| Attribute | |
+|---|---|
+| `where` | only the rows that pass: a column, a test and a value — `Paid = no`, `Amount > 100`. `=` and `!=` ignore case; `<` `<=` `>` `>=` compare numbers as numbers; `~` is *contains*, and `!~` *doesn't contain*. A column alone means it has something in it, and `!Column` that it hasn't. Join tests with `and`: `where="Paid = no and Client ~ acme"` |
+| `sort` | columns to order the rows by, each `asc` (the default) or `desc`: `sort="Client, Due desc"` |
+| `limit` | at most this many rows, after `where` and `sort`: `limit=5` |
+| `separator` | put between the rows: `separator=", "` makes *Ann, Bob, Carol*. `\n` is a new line, and in a template file `\t` a tab |
+| `columns` | names for the columns, when there's no header row in the data — `columns="Name, Phone"` — so every row is data; `none` numbers them only |
+| `format` | `csv`, `tsv`, `json`, `markdown` or `lines`: how to read it, when the guess is wrong |
+| `file` | a file to go through, instead of a value |
+
+Attribute values can hold placeholders, filled in from the key:
+`where="Client = {{leaf}}"`, with leaves named after clients.
+
+- **A tag alone on its line takes the line with it**, so a list written over
+  several lines, as above, adds no blank lines of its own. On one line,
+  nothing is taken: `{{#each clipboard separator=", "}}{{Name}}{{/each}}`.
+- **Lists inside lists** go through a column that holds a list — an array in
+  JSON: `{{#each api.issues}}#{{number}}: {{#each labels separator=", "}}{{name}}{{/each}}{{/each}}`.
+  They go 16 deep at most.
+- **From a data source**, a list goes through each thing its rule finds. For
+  a table, describe the source's value as a list of things — *each open
+  issue, with its title and number* — and Claude writes a rule that finds
+  each one whole (`$.items[*]`); its fields are the columns. From XML or
+  HTML, each element's attributes and child elements are its columns; from a
+  regular expression, each match's groups, by number and by name. Finding
+  nothing is no rows — `{{#empty}}` — not a broken rule. `{{#each
+  api.issues.raw}}` reads the whole response instead: an API that returns
+  CSV, or a JSON array.
+- **`{{#ai}}` blocks inside a row** are asked once for each row — so at most
+  24 rows, the most replies one key may ask for. A list inside a block is sent
+  as the text it makes: `{{#ai}}Which of these is overdue? {{#each
+  clipboard}}…{{/each}}{{/ai}}`.
+- **Lists aren't blocks**: nothing replies to them, so they can go in any
+  field, a link's included — `url: "https://example.com/?ids={{#each clipboard
+  separator=,}}{{ID}}{{/each}}"` — with the values placed in it encoded, as
+  any are (§6, *Inside links*).
+- **Tables come out as tables** where they can: Copy and Insert put a
+  Markdown table on the clipboard as a table, which Mail, Pages and Notes
+  paste as one, and Display shows it as one. Notes and Append, which write
+  through a script, get the table's lines as text: Notes can't be given a
+  table that way. To paste rows into a spreadsheet instead, `{{@row}}` is
+  each row's cells with tabs between, as a spreadsheet takes them — `{{#each
+  clipboard where="Paid = no"}}{{@row}}\n{{/each}}` keeps the unpaid rows — with
+  `format: plain`.
+- **Nothing to go through** — nothing selected, for `{{#each selection}}` — is
+  a missing value (§6), not an empty list. **Rows that can't be read** — a
+  `format=json` that isn't, a `where` or `sort` column that isn't there — stop
+  a field that needs the text, saying why, and are a warning in a template.
+- **Previews** show one row of stand-ins: `‹Name›`.
+
+`{{file name="notes.txt"}}` is a file's whole text on its own — for an
+`{{#ai}}` block to read, say. Like `{{quote}}`'s, the file is found in the
+templates folder unless it's a full or `~/` path, and its name can hold
+placeholders: `name="{{leaf}}.txt"`. A file saved by a spreadsheet on Windows
+is read in its own encoding. Up to 20 MB.
+
 ### Where values come from
 
 Highest priority first:
@@ -1549,7 +1686,7 @@ Highest priority first:
 5. **Fetched:** `{{api.weather}}` and `{{api.weather.raw}}` from data sources,
    `{{location}}` and its parts from Location Services, `{{home.…}}` from Home
    Assistant, `{{event}}`, `{{agenda}}` and `{{reminder}}` from your calendar,
-   and `{{quote …}}` from a file (above) — only when the action uses them. A value one of them needs is fetched first: a source's URL
+   and `{{quote …}}` and `{{file …}}` from files (above) — only when the action uses them. A value one of them needs is fetched first: a source's URL
    gets the Mac's place.
 6. **Built-ins:**
 
@@ -1617,7 +1754,9 @@ accepts:
 For `notes.create`, a template whose first line is a `#` heading names the
 note: that line becomes the title, ahead of any `title` in the action, and the
 rest becomes the body. Checklists
-and tables can't be created from a script, so there's no syntax for them.
+and tables can't be created from a script, so there's no syntax for them in a
+note; a Markdown table is kept as its lines. Copied, inserted or displayed, a
+table is a table (§5, *Formatted text*).
 
 ---
 
@@ -1664,8 +1803,13 @@ and from modules, `stopwatch`, `display`, `ask`, `window` and `expose`.
 
 **Computed values:** `leaf`, `parent`, `level1`–`level4`, `path`, `folderPath`,
 `parentPath`, `tree`, `contact.*`, `project.*`, `selection`, `clipboard`, `frontApp`,
-`stopwatch`, `stopwatch.*`, `api.*`, `location`, `location.*`, `quote`, `displayed`, `answer`, `date`,
-`time`, `datetime`, `weekday`, `isoWeek`, and `when` by convention.
+`stopwatch`, `stopwatch.*`, `api.*`, `location`, `location.*`, `quote`, `file`, `displayed`, `answer`, `date`,
+`time`, `datetime`, `weekday`, `isoWeek`, and `when` by convention. Inside a
+list, `@number`, `@count`, `@row`, `@columns`, `@sum.*`, `@average.*`, `@min.*`
+and `@max.*`.
+
+**Template tags:** `{{#each}}` and, inside it, `{{#header}}`, `{{#footer}}`
+and `{{#empty}}`; `{{#ai}}` and other modules' blocks.
 
 **Tree names:** `main`, `row2`, `row3`, `bottom`.
 

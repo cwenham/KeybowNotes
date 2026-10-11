@@ -43,9 +43,14 @@ public struct ValueEntry: Equatable, Sendable {
     /// A module's are listed under its name.
     public internal(set) var group: String
 
+    /// What's put in for it, when it isn't the usual: `{{#each clipboard}}{{/each}}`.
+    private let written: String?
+
     public init(_ name: String, title: String, help: String, example: String? = nil, sample: String = "",
                 kind: Kind = .value, fetched: Bool = false, attributes: [ValueAttribute] = [],
-                formats: [ValueFormat] = [], membersListed: Bool = false, group: String = "") {
+                formats: [ValueFormat] = [], membersListed: Bool = false, group: String = "",
+                insertion: String? = nil) {
+        self.written = insertion
         self.name = name
         self.title = title
         self.help = help
@@ -63,6 +68,7 @@ public struct ValueEntry: Equatable, Sendable {
     /// `{{quote file=''}}`, `{{#ai}}{{/ai}}`. Single quotes, so it goes in an
     /// outline's quoted value as it is.
     public var insertion: String {
+        if let written { return written }
         switch kind {
         case .value: return "{{\(name)}}"
         case .call:
@@ -312,6 +318,56 @@ extension ValueCatalog {
                 {{#ai}} block sends as itself, and anything else describes.
                 """, "https://example.com/report"),
             mac("frontApp", "The app in front", "The app in front when the key is pressed.", "Safari"),
+        ] + lists
+    }()
+
+    /// `{{#each}}`, its parts, and the values only a list has.
+    static let lists: [ValueEntry] = {
+        func part(_ name: String, _ title: String, _ help: String) -> ValueEntry {
+            ValueEntry(name, title: title, help: help, kind: .block, group: "Lists")
+        }
+        func own(_ name: String, _ title: String, _ help: String, _ sample: String, example: String? = nil) -> ValueEntry {
+            ValueEntry(name, title: title, help: help, example: example, sample: sample, group: "Lists")
+        }
+        return [
+            ValueEntry("each", title: "Each row", help: """
+                Its contents once for each row of a value — {{#each clipboard}}, {{#each api.github}} — or of a \
+                file: {{#each file='team.csv'}}. Rows are read from CSV, cells copied from a spreadsheet, JSON, a \
+                Markdown table, or a line each; the first row of CSV names the columns. Inside, {{Name}} is the \
+                row's Name column, and {{1}} its first.
+                """, example: "{{#each clipboard where='Paid = no' sort='Due'}}…{{/each}}", kind: .block, attributes: [
+                    ValueAttribute("file", help: "A file to go through instead of a value: in the templates folder, or a full or ~/ path.",
+                                   example: "file='team.csv'"),
+                    ValueAttribute("where", help: """
+                        Only the rows that pass: a column, then = != < <= > >= ~ (contains) or !~, then a value; \
+                        tests joined with “and”. A column alone means it has something in it.
+                        """, example: "where='Paid = no and Amount > 100'"),
+                    ValueAttribute("sort", help: "Columns to order the rows by, each asc or desc: numbers as numbers.",
+                                   example: "sort='Due desc'"),
+                    ValueAttribute("limit", help: "At most this many rows: after where and sort.", example: "limit=10"),
+                    ValueAttribute("separator", help: "Put between the rows: \\n for a new line.", example: "separator=', '"),
+                    ValueAttribute("columns", help: """
+                        Names for the columns, when the data has no header row; none to number them only.
+                        """, example: "columns='Name, Phone'"),
+                    ValueAttribute("format", help: "How to read it, when guessing gets it wrong.", example: "format=csv",
+                                   choices: DataTable.Format.allCases.map(\.rawValue)),
+                ], group: "Lists", insertion: "{{#each clipboard}}{{/each}}"),
+            part("header", "Before the rows", "Inside {{#each}}: written once before the rows, when there are any."),
+            part("footer", "After the rows", "Inside {{#each}}: written once after the rows, when there are any."),
+            part("empty", "When there are none", "Inside {{#each}}: written in place of the rows when there are none."),
+            own("@number", "The row's number", "Inside {{#each}}: 1 for the first row shown, then 2, 3…", "1"),
+            own("@count", "How many rows", "Inside {{#each}}: how many rows are shown, after where and limit.", "3"),
+            own("@row", "The whole row", "Inside {{#each}}: the row's cells, separated by tabs — for a list of single items, the item.",
+                "Ann\tLead"),
+            own("@columns", "The columns' names", "Inside {{#each}}: the columns' names, separated by tabs.", "Name\tRole"),
+            own("@sum.<column>", "A column's total", "Inside {{#each}}: the numbers in a column added up, over the rows shown.",
+                "1580.50", example: "{{@sum.Amount}}"),
+            own("@average.<column>", "A column's average", "Inside {{#each}}: the average of the numbers in a column.",
+                "526.83", example: "{{@average.Amount}}"),
+            own("@min.<column>", "A column's least", "Inside {{#each}}: a column's smallest value: a number, a date, a word.",
+                "80.50", example: "{{@min.Amount}}"),
+            own("@max.<column>", "A column's most", "Inside {{#each}}: a column's largest value: a number, a date, a word.",
+                "2026-10-20", example: "{{@max.Due}}"),
         ]
     }()
 }

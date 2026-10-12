@@ -404,6 +404,33 @@ final class FocusModuleTests: XCTestCase {
         let own = await module.run(request("focus", ["shortcut": "KeybowNotes Sleep Focus", "name": "Bedtime"]), now: Date())
         XCTAssertEqual(own.message, "Bedtime Focus switched")
     }
+
+    /// Until the shortcut's made, the key shows how, and Open Shortcuts copies
+    /// its name and opens the app.
+    func testOpenShortcutsCopiesTheName() async {
+        let opened = Ran()
+        let host = MemoryModuleHost()
+        host.displayResult = .ok
+        let module = FocusModule(shortcuts: { [] }, run: { _ in }, open: { opened.shortcuts.append("Shortcuts"); return true })
+        module.start(host: host)
+
+        let outcome = await module.run(request("focus", leaf: "Bedtime"), now: Date())
+        XCTAssertEqual(outcome.message, "Copied “KeybowNotes Sleep Focus”")
+        XCTAssertEqual(host.copied, ["KeybowNotes Sleep Focus"])
+        XCTAssertEqual(opened.shortcuts, ["Shortcuts"])
+        let shown = host.displayed.first
+        XCTAssertEqual(shown?.okTitle, "Open Shortcuts")
+        XCTAssertEqual(shown?.buttons, [.cancel, .ok])
+        guard case .markdown(let page)? = shown?.content else { return XCTFail("shown as Markdown") }
+        XCTAssertTrue(page.contains("Make a new shortcut called **KeybowNotes Sleep Focus**, with:"), page)
+        XCTAssertTrue(page.contains("**If** Current Focus is Sleep: **Set Focus**, turning Sleep off"), page)
+
+        host.displayResult = .cancel
+        let cancelled = await module.run(request("focus", leaf: "Bedtime"), now: Date())
+        XCTAssertTrue(cancelled.isQuiet)
+        XCTAssertEqual(host.copied.count, 1, "Cancel copies nothing")
+        XCTAssertEqual(opened.shortcuts.count, 1)
+    }
 }
 
 final class SystemKeywordsTests: XCTestCase {

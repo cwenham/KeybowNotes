@@ -480,12 +480,16 @@ public struct ModuleDisplay: Equatable, Sendable {
     /// With a field, it takes the keyboard — without taking the app in use
     /// from the front — and OK waits for something to be typed.
     public let field: Field?
+    /// What the OK button says: "Open Shortcuts".
+    public let okTitle: String
 
-    public init(content: Content, buttons: [Button] = [], fadeAfter: TimeInterval = 10, field: Field? = nil) {
+    public init(content: Content, buttons: [Button] = [], fadeAfter: TimeInterval = 10, field: Field? = nil,
+                okTitle: String = "OK") {
         self.content = content
         self.buttons = buttons
         self.fadeAfter = fadeAfter
         self.field = field
+        self.okTitle = okTitle
     }
 }
 

@@ -30,7 +30,7 @@ bar or the outline directly.
 | **Give rows** for a list to go through — `{{#each api.github}}` | `fetch(_:rows:params:now:)` |
 | Read files the tree names, beside its templates | `ModuleHost.templatesFolder` |
 | Add **settings** to the Settings window — a page of its own — secrets kept in the Keychain | `manifest.settings`, `manifest.symbol`, `ModuleHost.setting` / `secret` |
-| **Show something on screen** until it's dismissed, with OK and Cancel — and a field to type in | `ModuleHost.display(_:)`, `ModuleDisplay.Field` |
+| **Show something on screen** until it's dismissed, with OK and Cancel — OK saying what it does, if need be — and a field to type in | `ModuleHost.display(_:)`, `ModuleDisplay.okTitle`, `ModuleDisplay.Field` |
 | Take a **template or text** whole, like Copy | `ModuleActionType.takesText` |
 | Offer **choices for a field** in the tree editor — what's there to control, following the other fields | `ModuleField.offersChoices`, `choices(for:type:fields:)` |
 | Show only the **fields that apply** to the action as it's set up | `shownFields(type:fields:)` |
@@ -494,7 +494,10 @@ down, to a level) read `do:` and labels for all of them.
   A timer ends it; one ending a hold that's since been renewed does nothing.
 - **Focus** (`focus`): runs the shortcut `KeybowNotes <name> Focus` with
   `ShortcutsApp.run` — moved there from `ActionRunner`, which runs Shortcut keys
-  the same way — or says how to make it.
+  the same way. Until it's made, a display shows how, with an OK titled *Open
+  Shortcuts* that puts the name on the clipboard (`ModuleHost.copy`) and opens
+  the app. Cancel does nothing more; where nothing can be shown — the command
+  line — the steps are the failure's detail.
 
 ## Not yet
 

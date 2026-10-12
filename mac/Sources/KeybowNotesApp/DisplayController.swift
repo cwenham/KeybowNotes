@@ -96,7 +96,7 @@ final class DisplayController: NSObject, WKNavigationDelegate, WKUIDelegate, NST
             background.addSubview(close)
         } else {
             for button in display.buttons {
-                let control = NSButton(title: button == .ok ? "OK" : "Cancel", target: self,
+                let control = NSButton(title: button == .ok ? display.okTitle : "Cancel", target: self,
                                        action: button == .ok ? #selector(okChosen) : #selector(cancelChosen))
                 control.bezelStyle = .rounded
                 control.controlSize = .large

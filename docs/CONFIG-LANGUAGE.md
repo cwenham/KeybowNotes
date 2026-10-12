@@ -1246,7 +1246,8 @@ through a restart of the app; quitting it lets the Mac sleep.
 macOS gives apps no way to switch a Focus, so the key runs a shortcut, made
 once in the Shortcuts app: *Get Current Focus*; *If* Current Focus is Sleep,
 *Set Focus* to turn Sleep off; *Otherwise*, *Set Focus* to turn Sleep on until
-turned off. Until it's made, the key says how.
+turned off. Until it's made, the key shows how, with an Open Shortcuts button
+that copies the shortcut's name, ready to paste, and opens the app.
 
 ## 6. Values: `{{placeholders}}`
 

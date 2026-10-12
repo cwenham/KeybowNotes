@@ -265,29 +265,11 @@ public enum ActionRunner {
         pasteboard.writeObjects([item])
     }
 
-    /// Runs a shortcut, handing it text as a file: the command line takes no
-    /// other kind of input.
     private static func runShortcut(_ name: String, input: String) async throws {
-        var arguments = ["run", name]
-        var inputFile: URL?
-        if !input.isEmpty {
-            let file = FileManager.default.temporaryDirectory.appendingPathComponent("keybow-\(UUID().uuidString).txt")
-            try input.write(to: file, atomically: true, encoding: .utf8)
-            arguments += ["--input-path", file.path]
-            inputFile = file
-        }
-        defer { inputFile.map { try? FileManager.default.removeItem(at: $0) } }
-        let result: Subprocess.Result
         do {
-            result = try await Subprocess.run(ShortcutsApp.path, arguments, timeout: timeout)
-        } catch {
-            throw RunError("Couldn't start \(ShortcutsApp.path)", "\(error)")
-        }
-        guard result.succeeded else {
-            let said = result.errorText.trimmingCharacters(in: .whitespacesAndNewlines)
-            let reason = result.timedOut ? "It took longer than \(Int(timeout)) seconds."
-                : said.isEmpty ? "exit status \(result.status)" : said
-            throw RunError("Shortcut “\(name)” didn't run", reason)
+            try await ShortcutsApp.run(name, input: input, timeout: timeout)
+        } catch let error as ModuleError {
+            throw RunError(error.message, error.detail)
         }
     }
 

@@ -15,6 +15,7 @@ let package = Package(
         .library(name: "KeybowWindows", targets: ["KeybowWindows"]),
         .library(name: "KeybowHome", targets: ["KeybowHome"]),
         .library(name: "KeybowCalendar", targets: ["KeybowCalendar"]),
+        .library(name: "KeybowSystem", targets: ["KeybowSystem"]),
         .executable(name: "keybow", targets: ["keybow"]),
         .executable(name: "keybownotes", targets: ["KeybowNotesApp"]),
     ],
@@ -67,11 +68,18 @@ let package = Package(
             dependencies: ["KeybowKit"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        // Volume, the microphone, brightness, Wi‑Fi and Bluetooth, Night Shift,
+        // dark mode, staying awake and Focus. Takes screens as windows do.
+        .target(
+            name: "KeybowSystem",
+            dependencies: ["KeybowKit", "KeybowWindows"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
         // The list of modules built in, for the app and the command line.
         .target(
             name: "KeybowModules",
             dependencies: ["KeybowKit", "KeybowStopwatch", "KeybowAI", "KeybowData", "KeybowLocation", "KeybowQuotes",
-                           "KeybowDisplay", "KeybowWindows", "KeybowHome", "KeybowCalendar"],
+                           "KeybowDisplay", "KeybowWindows", "KeybowHome", "KeybowCalendar", "KeybowSystem"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(
@@ -127,6 +135,11 @@ let package = Package(
         .testTarget(
             name: "KeybowCalendarTests",
             dependencies: ["KeybowCalendar", "KeybowKit"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
+            name: "KeybowSystemTests",
+            dependencies: ["KeybowSystem", "KeybowKit"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(

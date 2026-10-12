@@ -1148,6 +1148,106 @@ off. Keywords: `Done`, `Complete Reminder`, `Tick Off`. In the tree editor,
 
 ---
 
+### System controls
+
+Modules, for the Mac's own controls. Each takes `do` — else the leaf's label
+says, in words you'd write on the key — and most run on the press, as the
+keyboard's own keys do. Wi‑Fi, Bluetooth and Focus keep the time to cancel.
+
+```
+1. Sound
+   1. Louder [Volume]
+   2. Quieter [Volume]
+   3. Mute [Volume]
+   4. Mic [Microphone]
+2. Screen
+   1. Brighter [Brightness]
+   2. Dimmer [Brightness]
+   3. Night Shift [Night Shift]
+   4. Dark [Dark Mode]
+3. Mac
+   1. Wi‑Fi [Wi-Fi]
+   2. Bluetooth [Bluetooth]
+   3. Awake [Stay Awake]
+   4. Bedtime [Focus]
+```
+
+#### `volume` — the volume, up, down, or muted
+
+| Field | |
+|---|---|
+| `do` | `up`, `down`, `mute`, `unmute` or `toggle` (mute or unmute). Without it, the label: *Up*, *Louder*, *+*, *Down*, *Quieter*, *−*, *Unmute*, a level like *40%*; *Mute* and anything else toggle, as the Mute key does. |
+| `level` | Sets it, 0–100, and unmutes. |
+| `step` | How far up or down, in percent. Default a sixteenth (6.25), as the keys go. |
+
+The Mac's default output: speakers, headphones, whatever's chosen. Going up or
+down unmutes. A device with no volume of its own — a TV over HDMI — says so.
+
+#### `microphone` — muted for every app
+
+| Field | |
+|---|---|
+| `do` | `toggle`, `mute` or `unmute`. Without it, a label saying *Unmute* unmutes, and anything else toggles. |
+
+While it's muted, the overlay and the menu bar say so and the key breathes —
+however it was muted. The menu has Mute or Unmute. A microphone that can't be
+muted is turned down to nothing, and back to where it was. Keyword `Mic` too.
+
+#### `brightness` — a screen's brightness
+
+| Field | |
+|---|---|
+| `do` | `up` or `down`. Without it, the label: *Brighter*, *Up*, *+*, *Dimmer*, *Darker*, *Down*, *−*, or a level like *40%*. |
+| `level` | Sets it, 0–100. |
+| `step` | As for `volume`. |
+| `screen` | `all`, `built-in`, `main`, a number counting from the left, or part of a screen's name, as for `window`. Without it, the screen under the pointer. |
+
+Apple's own screens are set as the brightness keys set them. Others are set
+over their cable with DDC/CI, on an Intel Mac, when the monitor allows it —
+some have it turned off in their menus, and some docks don't pass it on.
+
+#### `wifi`, `bluetooth` — on and off
+
+| Field | |
+|---|---|
+| `do` | `toggle`, `on` or `off`. Without it, a label saying *On* or *Off*; else toggle. |
+
+Keywords `Wi-Fi`, `WiFi`, `Bluetooth`. Bluetooth asks for permission the first
+time. Turning it off disconnects Bluetooth keyboards, mice and headphones until
+it's back on — the keypad, on USB, can turn it on again.
+
+#### `nightShift`, `darkMode`
+
+| Field | |
+|---|---|
+| `do` | `toggle`, `on` or `off`; for dark mode, `dark` or `light` too. Without it, the label: *On*, *Off*, and for dark mode a label of just *Dark* or *Light*; else toggle. |
+
+Keywords `Night Shift`, `Dark Mode`. Dark mode is changed through System
+Events, which macOS asks about once.
+
+#### `stayAwake` — keep the Mac and its screens awake
+
+| Field | |
+|---|---|
+| `do` | `toggle`, `on` or `off`. Without it, a label saying *On* or *Off*; else toggle. |
+| `duration` | How long, or until when: `45m`, `2h`, `17:30`. Without it, a label like *1 hour*; else until it's turned off. |
+
+Keywords `Stay Awake`, `Keep Awake`. While it holds, the overlay and the menu
+bar say so, its key breathes, and the menu has Allow Sleep. It carries on
+through a restart of the app; quitting it lets the Mac sleep.
+
+#### `focus` — a Focus, through a shortcut
+
+| Field | |
+|---|---|
+| `name` | Which Focus. Default `Sleep`. |
+| `shortcut` | The shortcut that switches it. Default `KeybowNotes <name> Focus`. |
+
+macOS gives apps no way to switch a Focus, so the key runs a shortcut, made
+once in the Shortcuts app: *Get Current Focus*; *If* Current Focus is Sleep,
+*Set Focus* to turn Sleep off; *Otherwise*, *Set Focus* to turn Sleep on until
+turned off. Until it's made, the key says how.
+
 ## 6. Values: `{{placeholders}}`
 
 Any text in an action, and every template, can use placeholders:
@@ -1783,7 +1883,9 @@ the app; edit it only while KeybowNotes isn't running.
 **Outline words:** `Notes`, `Calendar`, `Reminders`, `Messages`, `Mail`, `Call`,
 `FaceTime`, `Link`, `Browser`, `Copy`, `Clipboard`, `Insert`, `Paste`, `Direct Insert`, `Type`,
 `Timer`, `Maps`, `Music`,
-`Stopwatch`, `Display`, `Show`, `Ask`, `Prompt`, `Window`, `Arrange`, `Exposé`, `Expose`, `Mission Control`
+`Stopwatch`, `Display`, `Show`, `Ask`, `Prompt`, `Window`, `Arrange`, `Exposé`, `Expose`, `Mission Control`,
+`Volume`, `Microphone`, `Mic`, `Brightness`, `Wi-Fi`, `WiFi`, `Bluetooth`, `Night Shift`, `Dark Mode`,
+`Stay Awake`, `Keep Awake`, `Focus`
 (and any other module's keywords),
 `append`, `new`, `create`, `… alert`, `….md`, `@…`, and the app names the
 compiler knows.

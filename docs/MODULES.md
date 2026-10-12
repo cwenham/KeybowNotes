@@ -53,6 +53,8 @@ KeybowQuotes         a module: {{quote}}, portions of a file
 KeybowDisplay        modules: the display and ask actions
 KeybowWindows        modules: the window action, and Exposé
 KeybowHome           a module: Home Assistant
+KeybowCalendar       a module: meetings and the agenda
+KeybowSystem         modules: the Mac's own controls, using KeybowWindows for screens
 KeybowModules        the list of built-in modules
 KeybowNotesApp       registers them at launch; shows their status
 keybow               registers them too, so their keywords compile
@@ -452,6 +454,47 @@ it did is on the screen, and the overlay steps aside.
 - Settings: *Calendars* and *Reminder lists*, every one or only those ticked —
   the person's own, listed through `CalendarSource` once access is given, and
   kept by name.
+
+## System controls
+
+`mac/Sources/KeybowSystem/`: seven modules, each with its hardware behind a
+protocol, so tests use made-up speakers, screens, radios and shortcuts and
+nothing on the Mac changes. `Switch` (toggle, on, off) and `Adjustment` (up,
+down, to a level) read `do:` and labels for all of them.
+
+- **Volume** (`volume`) and **Microphone** (`microphone`): `CoreAudioSound`, the
+  default output's and input's volume and mute through Core Audio, which needs
+  no permission. The microphone is its own module so that its status — shown
+  while muted, lighting its keys — doesn't light the volume keys too. It
+  watches the default input and its mute (not its volume: apps that level a
+  microphone move it many times a second) and redraws only when muting
+  changes. A microphone without a mute is turned to nothing, its level kept in
+  state.
+- **Brightness** (`brightness`): `SystemBrightness` tries DisplayServices
+  (private, looked up with `dlsym`), which sets Apple's screens as the keys do,
+  then DDC/CI. DDC goes through the frame buffer's I²C bus (`IOFBCopyI2CInterfaceForBus`),
+  matched to the screen by its EDID's maker, model and serial, with replies
+  given 40 ms and more, retried — monitors often answer nothing at first.
+  Reads are slow, so a value read or set is trusted for 15 s. Apple silicon has
+  no frame buffers; DDC there would need `IOAVService`, not written yet.
+  Screens are chosen as the window action's are, through `WindowGeometry`,
+  plus `all`, `built-in`, and the pointer's by default.
+- **Wi‑Fi and Bluetooth** (`radio`): CoreWLAN's `setPower`; and IOBluetooth's
+  private `IOBluetoothPreferenceSetControllerPowerState`, as `blueutil` uses,
+  then waiting up to five seconds to see it change. Bluetooth needs
+  permission: `NSBluetoothAlwaysUsageDescription` in Info.plist (without it,
+  macOS stops the app), asked for through a `CBCentralManager` with the app
+  brought forward. A development build, without the Info.plist, refuses.
+- **Appearance** (`appearance`): Night Shift through CoreBrightness's private
+  `CBBlueLightClient` — its status's second byte is whether it's on — and dark
+  mode through System Events' appearance preferences, with `osascript`.
+- **Stay Awake** (`awake`): a `PreventUserIdleDisplaySleep` power assertion, as
+  `caffeinate -d` takes; it ends with the process. State keeps when it started
+  and when it ends, so it carries on through a restart unless its time ran out.
+  A timer ends it; one ending a hold that's since been renewed does nothing.
+- **Focus** (`focus`): runs the shortcut `KeybowNotes <name> Focus` with
+  `ShortcutsApp.run` — moved there from `ActionRunner`, which runs Shortcut keys
+  the same way — or says how to make it.
 
 ## Not yet
 

@@ -131,4 +131,30 @@ public enum ShortcutsApp {
         let names = result.text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         return Set(names).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
+
+    /// Runs a shortcut, handing it text as a file: the command line takes no
+    /// other kind of input. Throws a `ModuleError` that says why it didn't run.
+    public static func run(_ name: String, input: String = "", timeout: TimeInterval) async throws {
+        var arguments = ["run", name]
+        var inputFile: URL?
+        if !input.isEmpty {
+            let file = FileManager.default.temporaryDirectory.appendingPathComponent("keybow-\(UUID().uuidString).txt")
+            try input.write(to: file, atomically: true, encoding: .utf8)
+            arguments += ["--input-path", file.path]
+            inputFile = file
+        }
+        defer { inputFile.map { try? FileManager.default.removeItem(at: $0) } }
+        let result: Subprocess.Result
+        do {
+            result = try await Subprocess.run(path, arguments, timeout: timeout)
+        } catch {
+            throw ModuleError("Couldn't start \(path)", "\(error)")
+        }
+        guard result.succeeded else {
+            let said = result.errorText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let reason = result.timedOut ? "It took longer than \(Int(timeout)) seconds."
+                : said.isEmpty ? "exit status \(result.status)" : said
+            throw ModuleError("Shortcut “\(name)” didn't run", reason)
+        }
+    }
 }

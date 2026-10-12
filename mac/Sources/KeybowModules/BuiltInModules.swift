@@ -7,6 +7,7 @@ import KeybowKit
 import KeybowLocation
 import KeybowQuotes
 import KeybowStopwatch
+import KeybowSystem
 import KeybowWindows
 
 /// Every module built in, for each host — the app, the command line — to
@@ -26,5 +27,12 @@ public enum BuiltInModules {
         ModuleRegistry.shared.register(ExposeModule(), host: host)
         ModuleRegistry.shared.register(HomeAssistantModule(), host: host)
         ModuleRegistry.shared.register(AgendaModule(), host: host)
+        ModuleRegistry.shared.register(VolumeModule(), host: host)
+        ModuleRegistry.shared.register(MicrophoneModule(), host: host)
+        ModuleRegistry.shared.register(BrightnessModule(), host: host)
+        ModuleRegistry.shared.register(RadioModule(), host: host)
+        ModuleRegistry.shared.register(AppearanceModule(), host: host)
+        ModuleRegistry.shared.register(StayAwakeModule(), host: host)
+        ModuleRegistry.shared.register(FocusModule(), host: host)
     }
 }

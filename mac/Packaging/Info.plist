@@ -38,7 +38,7 @@
 	     people choose an access level KeybowNotes can't work with, since it
 	     finds calendars by name and opens the new event afterwards. -->
 	<key>NSAppleEventsUsageDescription</key>
-	<string>KeybowNotes creates notes, reminders, events and email drafts when you choose them on the Keybow.</string>
+	<string>KeybowNotes creates notes, reminders, events and email drafts when you choose them on the Keybow, and switches dark mode through System Events.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>KeybowNotes adds the events you choose on the Keybow, and opens them for editing.</string>
 	<key>NSAppleMusicUsageDescription</key>
@@ -57,6 +57,8 @@
 	<string>KeybowNotes.sdef</string>
 	<key>NSRemovableVolumesUsageDescription</key>
 	<string>KeybowNotes sets keypads up: it puts CircuitPython and its firmware on the keypad's drive.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>KeybowNotes turns Bluetooth on and off when you press a Bluetooth key on the Keybow.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>KeybowNotes talks to Home Assistant on your network, to switch lights and read sensors from your keys.</string>
 	<key>NSAppTransportSecurity</key>

@@ -144,7 +144,8 @@ has that does nothing is flagged, with a button to remove it.
 
 ![The tree editor with a calendar event selected: its title, start, duration and alert, each showing where it comes from](docs/images/tree-editor-event.png)
 
-**Modules** — the stopwatch, the Claude blocks, data sources, location, quotes, displays, Ask, window moving and Exposé are modules: separate code that
+**Modules** — the stopwatch, the Claude blocks, data sources, location, quotes, displays, Ask, window moving, Exposé, and the Mac's
+own controls (volume, the microphone, brightness, Wi‑Fi, Bluetooth, Night Shift, dark mode, staying awake, Focus) are modules: separate code that
 plugs in through one interface, adding actions, template blocks, values, settings
 and menu commands. See [docs/MODULES.md](docs/MODULES.md).
 

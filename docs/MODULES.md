@@ -494,10 +494,12 @@ down, to a level) read `do:` and labels for all of them.
   A timer ends it; one ending a hold that's since been renewed does nothing.
 - **Focus** (`focus`): runs the shortcut `KeybowNotes <name> Focus` with
   `ShortcutsApp.run` — moved there from `ActionRunner`, which runs Shortcut keys
-  the same way. Until it's made, a display shows how, with an OK titled *Open
+  the same way. Until it's made, `ShortcutsApp.offerToMake` — which the Clock
+  timer's missing shortcut uses too — shows how, with an OK titled *Open
   Shortcuts* that puts the name on the clipboard (`ModuleHost.copy`) and opens
-  the app. Cancel does nothing more; where nothing can be shown — the command
-  line — the steps are the failure's detail.
+  a new shortcut (`shortcuts://create-shortcut`). Cancel does nothing more;
+  where nothing can be shown — the command line — the steps are the failure's
+  detail.
 
 ## Not yet
 

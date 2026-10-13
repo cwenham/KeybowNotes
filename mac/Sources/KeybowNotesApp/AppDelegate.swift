@@ -328,7 +328,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 NSPasteboard.general.setString(text, forType: .string)
             },
             bringPromptsForward: Self.bringPermissionPromptsForward,
-            run: { plan in await ActionRunner.run(plan) },
+            run: { plan in await ActionRunner.run(plan, host: Modules.host) },
             log: { Log.info($0) },
             logError: { Log.error($0) })
         let pipeline = ActionPipeline(

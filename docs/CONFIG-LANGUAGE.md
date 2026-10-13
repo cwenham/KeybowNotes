@@ -682,8 +682,9 @@ Clock can't be scripted, but Shortcuts' **Start Timer** action reaches it, so
 timers go through a shortcut you make once: in Shortcuts, a new shortcut called
 **KeybowNotes Timer** with one action, *Start Timer*, whose duration is
 *Shortcut Input* in *seconds*. KeybowNotes runs it with the length in seconds.
-Until it exists, the action stops with a message saying how to make it, and the
-tree editor shows the same steps. Clock's timers stop at 24 hours; longer is
+Until it exists, the key shows how to make it, with an Open Shortcuts button
+that copies the shortcut's name and opens a new shortcut to paste it into; the
+tree editor shows the same steps and button. Clock's timers stop at 24 hours; longer is
 refused.
 
 ```
@@ -1247,7 +1248,7 @@ macOS gives apps no way to switch a Focus, so the key runs a shortcut, made
 once in the Shortcuts app: *Get Current Focus*; *If* Current Focus is Sleep,
 *Set Focus* to turn Sleep off; *Otherwise*, *Set Focus* to turn Sleep on until
 turned off. Until it's made, the key shows how, with an Open Shortcuts button
-that copies the shortcut's name, ready to paste, and opens the app.
+that copies the shortcut's name and opens a new shortcut to paste it into.
 
 ## 6. Values: `{{placeholders}}`
 

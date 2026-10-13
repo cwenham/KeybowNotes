@@ -43,10 +43,13 @@ public struct ActionOutcome: Equatable, Sendable {
 /// `osascript`, with every value passed as an argument — never pasted into the
 /// script, where a quote in a title would break it or worse.
 public enum ActionRunner {
-    /// `registry` holds the modules that run what isn't built in.
-    public static func run(_ plan: ActionPlan, registry: ModuleRegistry = .shared) async -> ActionOutcome {
+    /// `registry` holds the modules that run what isn't built in. `host`, the
+    /// app's, shows how to make a helper shortcut that's missing; without
+    /// one, the failure says how.
+    public static func run(_ plan: ActionPlan, registry: ModuleRegistry = .shared,
+                           host: ModuleHost? = nil) async -> ActionOutcome {
         do {
-            return try await perform(plan, registry: registry)
+            return try await perform(plan, registry: registry, host: host)
         } catch let error as RunError {
             return .failure(error.message, error.detail)
         } catch {
@@ -56,7 +59,8 @@ public enum ActionRunner {
 
     // MARK: - Each action
 
-    private static func perform(_ plan: ActionPlan, registry: ModuleRegistry) async throws -> ActionOutcome {
+    private static func perform(_ plan: ActionPlan, registry: ModuleRegistry,
+                                host: ModuleHost?) async throws -> ActionOutcome {
         switch plan {
         case .createNote(let location, let title, let html):
             _ = try await appleScript(Scripts.createNote, app: "Notes",
@@ -164,9 +168,8 @@ public enum ActionRunner {
 
         case .startTimer(let seconds, let shortcut):
             guard await ShortcutsApp.names().contains(shortcut) else {
-                throw RunError("Set up the “\(shortcut)” shortcut first",
-                               "In Shortcuts, make a shortcut called “\(shortcut)” with one action: Start Timer, "
-                               + "its duration set to Shortcut Input, in seconds.")
+                return await ShortcutsApp.offerToMake(shortcut, page: timerSetUpPage(shortcut),
+                                                      steps: timerSteps(shortcut), host: host)
             }
             try await runShortcut(shortcut, input: String(seconds))
             return .success("Timer: \(DateExpression.describe(seconds: TimeInterval(seconds)))", "Started in Clock")
@@ -263,6 +266,19 @@ public enum ActionRunner {
         let item = NSPasteboardItem()
         PasteboardText(text, format: format).write(to: item)
         pasteboard.writeObjects([item])
+    }
+
+    /// How to make the shortcut a Clock timer runs.
+    static func timerSteps(_ shortcut: String) -> String {
+        "In Shortcuts, make a shortcut called “\(shortcut)” with one action: Start Timer, "
+            + "its duration set to Shortcut Input, in seconds."
+    }
+
+    /// The same, shown above Open Shortcuts.
+    static func timerSetUpPage(_ shortcut: String) -> String {
+        ShortcutsApp.setUpPage(shortcut, why: "Clock can't be scripted, but Shortcuts can start its timers.", steps: [
+            "**Start Timer**: click its duration, choose **Shortcut Input**, and set the unit to **seconds**",
+        ])
     }
 
     private static func runShortcut(_ name: String, input: String) async throws {

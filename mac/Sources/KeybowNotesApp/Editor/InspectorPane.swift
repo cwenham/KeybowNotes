@@ -1148,11 +1148,12 @@ private struct TimerSetup: View {
                     Label("Clock timers need a shortcut called “\(shortcut)”.", systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
                     // One literal, so the ** are read as Markdown.
-                    Text("Clock can't be scripted, but Shortcuts can start its timers. In Shortcuts, make a new shortcut called “\(shortcut)” with one action, **Start Timer**. Click its duration, choose **Shortcut Input**, and set the unit to **seconds**.")
+                    Text("Clock can't be scripted, but Shortcuts can start its timers. In Shortcuts, make a new shortcut called “\(shortcut)” with one action, **Start Timer**. Click its duration, choose **Shortcut Input**, and set the unit to **seconds**. Open Shortcuts copies its name, ready to paste.")
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Button("Open Shortcuts") {
-                        if let url = URL(string: "shortcuts://create-shortcut") { NSWorkspace.shared.open(url) }
+                        Modules.host.copy(shortcut)
+                        Task { _ = await ShortcutsApp.openNewShortcut() }
                     }
                     .controlSize(.small)
                 }

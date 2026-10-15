@@ -141,7 +141,9 @@ A development build sets keypads up from the repository's `firmware` folder;
 `KEYBOW_FIRMWARE` names another. For trying the setup window out,
 `KEYBOW_SETUP_SELECT` chooses a board by its ID (or `new`), and
 `KEYBOW_SETUP_START=1` presses Set Up once it can be — development builds only.
-`KEYBOW_HOME_DEMO=1` puts a made-up Home Assistant behind the editor's lists.
+`KEYBOW_HOME_DEMO=1` puts a made-up Home Assistant behind the editor's lists,
+its keys and `{{home.…}}` values. `KEYBOW_SETTINGS_PANE=privacy` (or `keys`, or a
+module's id, like `ai`) opens `--show-settings` at that page.
 `KEYBOW_DRAFT_WANTED` says something in *Design with Claude…* — with
 `KEYBOW_DEBUG_CLAUDE_REPLY` as Claude's answer — and `KEYBOW_DRAFT_THEN` says
 something more once that's answered; `KEYBOW_DRAFT_USE=1` then adds the draft.

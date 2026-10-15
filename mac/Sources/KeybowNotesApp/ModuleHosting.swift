@@ -62,7 +62,13 @@ private struct DemoHome: HTTPTransport {
     func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
         try await Task.sleep(for: .milliseconds(300))
         let path = request.url?.path ?? ""
-        let body = path.hasSuffix("/api/states") ? Self.states : path.hasSuffix("/api/services") ? Self.services : "[]"
+        var body = path.hasSuffix("/api/states") ? Self.states : path.hasSuffix("/api/services") ? Self.services : "[]"
+        // One entity's state, for {{home.…}} values.
+        if path.contains("/api/states/"), let entity = path.split(separator: "/").last,
+           let all = try JSONSerialization.jsonObject(with: Data(Self.states.utf8)) as? [[String: Any]],
+           let state = all.first(where: { $0["entity_id"] as? String == String(entity) }) {
+            body = String(decoding: try JSONSerialization.data(withJSONObject: state), as: UTF8.self)
+        }
         return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
     }
 }

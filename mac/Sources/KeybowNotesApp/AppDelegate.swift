@@ -110,7 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             overlay.flashNotice(mistakesNotice, symbol: "exclamationmark.triangle")
         }
         if !options.simulated.isEmpty { simulate(options.simulated, pace: options.pace) }
-        if options.showSettings { showSettings() }
+        if options.showSettings { showSettings(Self.debugSettingsPane) }
         if options.showDataSources { _ = ModuleRegistry.shared.module(id: "api")?.performMenuItem("open", now: Date()) }
         if options.editTree { showEditor() }
         Automation.shared = Automation(hooks: automationHooks())
@@ -144,6 +144,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .defaults:
             break    // read when an action runs
         }
+    }
+
+    /// Development builds only: KEYBOW_SETTINGS_PANE=privacy — or keys, or a
+    /// module's id, like ai — opens --show-settings at that page.
+    private static var debugSettingsPane: SettingsPane? {
+        guard Bundle.main.bundleIdentifier == nil,
+              let name = ProcessInfo.processInfo.environment["KEYBOW_SETTINGS_PANE"] else { return nil }
+        return SettingsPane.standard.first { "\($0)" == name } ?? .module(name)
     }
 
     /// At `pane`, if one's given: Privacy, or a module's page.

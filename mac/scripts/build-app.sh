@@ -14,7 +14,7 @@ cd "${0:A:h}/.."    # the mac/ directory
 
 APP_NAME=KeybowNotes
 BUNDLE_ID=io.github.cwenham.keybownotes
-VERSION=0.1.0
+VERSION=0.2.0
 BUILD=$(git rev-list --count HEAD 2>/dev/null || echo 0)
 OUT=build
 APP=$OUT/$APP_NAME.app

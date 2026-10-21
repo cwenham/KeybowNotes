@@ -13,10 +13,11 @@ import KeybowKit
 /// inherited on its own, so a branch can set one screen and the keys under it
 /// the others; a screen nothing sets is left as it is.
 ///
-/// macOS gives apps no way to switch Spaces, so it presses each desktop's
-/// *Switch to Desktop N* shortcut, as Spaceman does: N counts desktops across
-/// every screen. It reads which desktops each screen has from the window
-/// server first, and after each press waits to see the screen change.
+/// macOS gives apps no way to switch Spaces, and Mission Control's *Switch to
+/// Desktop* shortcuts reach only the main screen's desktops. So it opens
+/// Mission Control and presses each desktop's thumbnail, as Hammerspoon does,
+/// after reading which desktops each screen has from the window server; then
+/// watches each screen change, and goes again for any that didn't.
 public final class SpacesModule: KeybowModule, @unchecked Sendable {
     public static let id = "spaces"
     public static let type = "spaces"
@@ -82,10 +83,10 @@ public final class SpacesModule: KeybowModule, @unchecked Sendable {
         ])
 
     private let control: SpacesControl
-    /// How long to wait for a screen to change, before pressing again.
+    /// How long to wait for the screens to change, before going again.
     private let patience: TimeInterval
 
-    public init(control: SpacesControl = SystemSpaces(), patience: TimeInterval = 1) {
+    public init(control: SpacesControl = SystemSpaces(), patience: TimeInterval = 1.5) {
         self.control = control
         self.patience = patience
     }
@@ -125,11 +126,15 @@ public final class SpacesModule: KeybowModule, @unchecked Sendable {
 
     // MARK: - Switching
 
-    /// One screen to switch: the desktop, and the shortcut that shows it.
+    /// One screen to switch, and the desktop to show.
     struct Step: Equatable {
         let screen: SpacesLayout.Screen
         let space: SpacesLayout.Space
-        let shortcut: DesktopShortcut
+
+        var thumbnail: SpaceThumbnail {
+            SpaceThumbnail(display: screen.displayID, index: screen.spaces.firstIndex(of: space) ?? 0,
+                           count: screen.spaces.count)
+        }
     }
 
     struct Plan: Equatable {
@@ -139,11 +144,9 @@ public final class SpacesModule: KeybowModule, @unchecked Sendable {
         var already = 0
     }
 
-    /// What to press for each screen, and why any can't be switched. The
-    /// pointer's screen goes last, so the keyboard ends up where the pointer
-    /// is.
-    static func plan(_ desktops: [Int: Int], layout: SpacesLayout, shortcuts: [Int: DesktopShortcut],
-                     pointer: Int?) -> Plan {
+    /// Which screens to switch, and why any can't be. The pointer's screen
+    /// goes last, so the keyboard ends up where the pointer is.
+    static func plan(_ desktops: [Int: Int], layout: SpacesLayout, pointer: Int?) -> Plan {
         var plan = Plan()
         for (number, desktop) in desktops.sorted(by: { $0.key < $1.key }) {
             guard let screen = layout.screen(number) else {
@@ -164,17 +167,9 @@ public final class SpacesModule: KeybowModule, @unchecked Sendable {
             }
             if screen.showing == space.id {
                 plan.already += 1
-                continue
+            } else {
+                plan.steps.append(Step(screen: screen, space: space))
             }
-            guard let overall = space.missionControl, let shortcut = shortcuts[overall] else {
-                let overall = space.missionControl ?? 0
-                plan.failures.append(ModuleError("Desktop \(overall) has no shortcut to switch to it",
-                    overall > DesktopShortcut.most
-                        ? "Mission Control has shortcuts for the first \(DesktopShortcut.most) desktops only."
-                        : DesktopShortcut.whereToTurnOn(overall)))
-                continue
-            }
-            plan.steps.append(Step(screen: screen, space: space, shortcut: shortcut))
         }
         plan.steps.sort { ($0.screen.number == pointer ? 1 : 0, $0.screen.number) < ($1.screen.number == pointer ? 1 : 0, $1.screen.number) }
         return plan
@@ -189,10 +184,34 @@ public final class SpacesModule: KeybowModule, @unchecked Sendable {
                             "Allow it in System Settings → Privacy & Security → Accessibility.")
         }
         let (layout, pointer) = await control.layout()
-        var plan = Self.plan(desktops, layout: layout, shortcuts: control.shortcuts(), pointer: pointer)
-        for step in plan.steps {
-            if Task.isCancelled { break }
-            if let failure = await show(step, layout: layout) { plan.failures.append(failure) }
+        var plan = Self.plan(desktops, layout: layout, pointer: pointer)
+        var waiting = plan.steps
+        var trouble: ModuleError?
+        // Every screen in one go: Mission Control closes on the first press,
+        // and the others may take or not. Then each left, on its own.
+        for round in [[waiting]] + [waiting.map { [$0] }] {
+            for steps in round {
+                let left = steps.filter { step in waiting.contains(step) }
+                guard !left.isEmpty, !Task.isCancelled else { continue }
+                do {
+                    try await control.press(left.map(\.thumbnail))
+                } catch let error as ModuleError {
+                    trouble = error
+                    continue
+                } catch {
+                    trouble = ModuleError("Mission Control didn't switch Spaces", "\(error)")
+                    continue
+                }
+                await settle(left)
+                let showing = control.showing()
+                waiting.removeAll { showing[$0.screen.identifier] == $0.space.id }
+            }
+            if waiting.isEmpty { break }
+        }
+        for step in waiting {
+            plan.failures.append(trouble.map { ModuleError("\(step.screen.name) didn't switch: \($0.message)", $0.detail) }
+                ?? ModuleError("\(step.screen.name) didn't switch to desktop \(step.space.desktop ?? 0)",
+                               "Its thumbnail in Mission Control was pressed, and the screen stayed as it was."))
         }
         guard let first = plan.failures.first else {
             // What it did is on the screens.
@@ -202,41 +221,21 @@ public final class SpacesModule: KeybowModule, @unchecked Sendable {
         return .failure("\(plan.failures.count) screens didn't switch", plan.failures.map(\.description).joined(separator: " · "))
     }
 
-    /// Presses the step's shortcut and waits to see its screen show the
-    /// desktop — pressing once more if nothing changes, in case the press
-    /// came while another screen was still sliding. Nil once it's showing.
-    private func show(_ step: Step, layout: SpacesLayout) async -> ModuleError? {
-        let before = control.showing()
-        for _ in 0..<2 {
-            control.press(step.shortcut)
-            let deadline = Date().addingTimeInterval(patience)
-            repeat {
-                let now = control.showing()
-                if now[step.screen.identifier] == step.space.id { return nil }
-                // Another desktop came up: Mission Control counts them otherwise.
-                if let changed = now.first(where: { before[$0.key] != $0.value }) {
-                    return Self.misnumbered(step, showed: changed.value, on: changed.key, layout: layout)
-                }
-                try? await Task.sleep(nanoseconds: 40_000_000)
-            } while Date() < deadline && !Task.isCancelled
+    /// Waits for the screens to show their desktops as Mission Control
+    /// closes: for the first pressed, which closes it, then a moment for the
+    /// rest, which may not take.
+    private func settle(_ steps: [Step]) async {
+        func shown(_ steps: ArraySlice<Step>) -> Bool {
+            let showing = control.showing()
+            return steps.allSatisfy { showing[$0.screen.identifier] == $0.space.id }
         }
-        let overall = step.space.missionControl ?? 0
-        return ModuleError("\(step.screen.name) didn't switch to desktop \(step.space.desktop ?? 0)",
-                           "Pressing \(step.shortcut.title), the shortcut for Desktop \(overall), changed nothing.")
-    }
-
-    /// The desktop that came up wasn't the one meant: Mission Control counts
-    /// desktops in another order than from the left.
-    static func misnumbered(_ step: Step, showed space: Int, on identifier: String, layout: SpacesLayout) -> ModuleError {
-        let overall = step.space.missionControl ?? 0
-        let screen = layout.screen(identifier: identifier)
-        let desktop = screen?.spaces.first { $0.id == space }?.desktop
-        var detail = "Its shortcut, \(step.shortcut.title), showed \(screen?.name ?? "another screen")'s desktop "
-            + "\(desktop.map(String.init) ?? "?") instead of \(step.screen.name)'s desktop \(step.space.desktop ?? 0): "
-            + "macOS numbers desktops across screens in another order."
-        if layout.serverNumber(of: space) == overall {
-            detail += " It seems to count the main screen's first."
+        var deadline = Date().addingTimeInterval(patience)
+        while !shown(steps.prefix(1)), Date() < deadline, !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 30_000_000)
         }
-        return ModuleError("Desktop \(overall) is on another screen", detail)
+        deadline = Date().addingTimeInterval(min(patience, 0.5))
+        while !shown(steps[...]), Date() < deadline, !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 30_000_000)
+        }
     }
 }

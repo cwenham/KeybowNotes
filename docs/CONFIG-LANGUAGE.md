@@ -1037,22 +1037,20 @@ documentation on the right.
   that should leave a screen alone that a branch above sets. A screen nothing
   sets is left as it is.
 - **Desktops are counted on each screen**, so adding one to another screen
-  doesn't change which is meant. Mission Control numbers them across every
-  screen — the middle screen's first may be its *Desktop 4* — and the tree
-  editor shows that number when the pointer rests on a desktop.
-- **It presses Mission Control's shortcuts.** macOS gives apps no way to
-  switch Spaces, so it presses *Switch to Desktop N* for each screen, as you
-  would. Each desktop it's asked for needs that shortcut turned on, in System
-  Settings → Keyboard → Keyboard Shortcuts → Mission Control — any keys will
-  do, and there are shortcuts for the first 16 desktops. *Displays have
-  separate Spaces* needs to be on, as it is unless it's been turned off.
+  doesn't change which is meant.
+- **It works Mission Control.** macOS gives apps no way to switch Spaces, and
+  its *Switch to Desktop* shortcuts reach only the main screen's desktops. So
+  the key opens Mission Control and presses each screen's desktop, as you
+  would — Mission Control shows for a moment. *Displays have separate Spaces*
+  needs to be on, as it is unless it's been turned off.
 - It reads which desktops each screen has, and which it shows, from the
   window server first: a screen already showing its desktop is left alone,
   and the screen the pointer is on goes last, so the keyboard ends up there.
-  It waits to see each screen change, and says which didn't.
-- An app's full-screen space can't be chosen: Mission Control has no shortcut
-  for one. It runs on the press, needs **Accessibility** access, as Insert
-  does, and says nothing once the screens show what was asked.
+  Mission Control closes on the first desktop pressed, so it opens again for
+  any screen that didn't switch, and the overlay says which still didn't.
+- An app's full-screen space can't be chosen, only desktops. It runs on the
+  press, needs **Accessibility** access, as Insert does, and says nothing
+  once the screens show what was asked.
 
 Keywords: `Spaces`, `Space`.
 

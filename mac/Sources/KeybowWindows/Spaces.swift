@@ -9,6 +9,7 @@ import KeybowKit
 public struct SpacesLayout: Equatable, Sendable {
     /// A connected screen, as macOS describes it.
     public struct Display: Equatable, Sendable {
+        public let id: CGDirectDisplayID
         /// The display's UUID, as the window server names it among Spaces.
         public let identifier: String
         public let name: String
@@ -17,7 +18,8 @@ public struct SpacesLayout: Equatable, Sendable {
         /// The one with the menu bar.
         public let isMain: Bool
 
-        public init(identifier: String, name: String, frame: CGRect, isMain: Bool) {
+        public init(id: CGDirectDisplayID, identifier: String, name: String, frame: CGRect, isMain: Bool) {
+            self.id = id
             self.identifier = identifier.uppercased()
             self.name = name
             self.frame = frame
@@ -31,9 +33,6 @@ public struct SpacesLayout: Equatable, Sendable {
         /// Its number among its screen's desktops, from 1, left to right as
         /// Mission Control shows them; nil for an app's full-screen space.
         public let desktop: Int?
-        /// Mission Control's number for a desktop — Desktop 7 — counted
-        /// across every screen, which its keyboard shortcut goes by.
-        public let missionControl: Int?
         /// The app whose full-screen space it is.
         public let app: String?
     }
@@ -43,9 +42,10 @@ public struct SpacesLayout: Equatable, Sendable {
         public let number: Int
         public let name: String
         public let frame: CGRect
+        public let displayID: CGDirectDisplayID
         public let identifier: String
-        /// In Mission Control's order. Empty when screens share the main
-        /// one's Spaces.
+        /// In Mission Control's order, full-screen spaces too. Empty when
+        /// screens share the main one's Spaces.
         public let spaces: [Space]
         /// The space it shows now.
         public let showing: Int?
@@ -63,9 +63,6 @@ public struct SpacesLayout: Equatable, Sendable {
     /// False when *Displays have separate Spaces* is off, and every screen
     /// shows the main one's.
     public let separate: Bool
-    /// The screens' identifiers in the window server's own order, the main
-    /// one's first: Mission Control may number desktops this way instead.
-    public let serverOrder: [String]
 
     /// From the window server's list — one entry per display, each with its
     /// `Display Identifier`, `Spaces` and `Current Space` — and the screens
@@ -73,39 +70,28 @@ public struct SpacesLayout: Equatable, Sendable {
     /// with no entry have no Spaces of their own.
     public init(managed: [[String: Any]], displays: [Display], separate: Bool = true,
                 appName: (Int) -> String? = { _ in nil }) {
-        func identifier(_ entry: [String: Any]) -> String? {
-            guard let id = (entry["Display Identifier"] as? String)?.uppercased() else { return nil }
-            if id == "MAIN" { return displays.first(where: \.isMain)?.identifier }
-            return displays.contains { $0.identifier == id } ? id : nil
-        }
         var entries: [String: [String: Any]] = [:]
-        var serverOrder: [String] = []
         for entry in managed {
-            guard let id = identifier(entry), entries[id] == nil else { continue }
-            entries[id] = entry
-            serverOrder.append(id)
+            guard var id = (entry["Display Identifier"] as? String)?.uppercased() else { continue }
+            if id == "MAIN", let main = displays.first(where: \.isMain) { id = main.identifier }
+            if entries[id] == nil { entries[id] = entry }
         }
-
-        // Mission Control numbers desktops across screens from the left, as
-        // Spaceman does: the first screen's, then the next one's.
-        var missionControl = 0
         screens = displays.sorted { WindowGeometry.comesFirst($0.frame, $1.frame) }.enumerated().map { index, display in
             let entry = entries[display.identifier] ?? [:]
             var desktop = 0
             let spaces = (entry["Spaces"] as? [[String: Any]] ?? []).compactMap { raw -> Space? in
                 guard let id = Self.spaceID(raw) else { return nil }
                 if Self.isFullScreen(raw) {
-                    return Space(id: id, desktop: nil, missionControl: nil, app: (raw["pid"] as? Int).flatMap(appName))
+                    return Space(id: id, desktop: nil, app: (raw["pid"] as? Int).flatMap(appName))
                 }
                 desktop += 1
-                missionControl += 1
-                return Space(id: id, desktop: desktop, missionControl: missionControl, app: nil)
+                return Space(id: id, desktop: desktop, app: nil)
             }
-            return Screen(number: index + 1, name: display.name, frame: display.frame, identifier: display.identifier,
-                          spaces: spaces, showing: (entry["Current Space"] as? [String: Any]).flatMap(Self.spaceID))
+            return Screen(number: index + 1, name: display.name, frame: display.frame, displayID: display.id,
+                          identifier: display.identifier, spaces: spaces,
+                          showing: (entry["Current Space"] as? [String: Any]).flatMap(Self.spaceID))
         }
         self.separate = separate
-        self.serverOrder = serverOrder
     }
 
     public func screen(_ number: Int) -> Screen? {
@@ -128,20 +114,6 @@ public struct SpacesLayout: Equatable, Sendable {
         return showing
     }
 
-    /// A desktop's number counting screens in the window server's order —
-    /// what Mission Control would call it if it counted the main screen's
-    /// first — for saying what went wrong.
-    func serverNumber(of space: Int) -> Int? {
-        var number = 0
-        for identifier in serverOrder {
-            for desktop in screen(identifier: identifier)?.desktops ?? [] {
-                number += 1
-                if desktop.id == space { return number }
-            }
-        }
-        return nil
-    }
-
     private static func spaceID(_ raw: [String: Any]) -> Int? {
         (raw["ManagedSpaceID"] as? Int) ?? (raw["id64"] as? Int)
     }
@@ -152,65 +124,18 @@ public struct SpacesLayout: Equatable, Sendable {
     }
 }
 
-/// A *Switch to Desktop N* keyboard shortcut, as System Settings → Keyboard →
-/// Keyboard Shortcuts → Mission Control keeps it.
-public struct DesktopShortcut: Equatable, Sendable {
-    public let key: CGKeyCode
-    /// Shift, Control, Option and Command, as an event carries them.
-    public let modifiers: CGEventFlags
-    /// What's on the key: "1", "=".
-    public let character: String
+/// A space's thumbnail in Mission Control: its screen's display, and its place
+/// among that screen's Spaces, from 0.
+public struct SpaceThumbnail: Equatable, Sendable {
+    public let display: CGDirectDisplayID
+    public let index: Int
+    /// How many Spaces the screen has, to check Mission Control lists the same.
+    public let count: Int
 
-    /// Mission Control has shortcuts for this many desktops.
-    public static let most = 16
-    /// The symbolic hot key for Desktop 1; Desktop N's is this plus N − 1.
-    static let firstHotKey = 118
-
-    public init(key: CGKeyCode, modifiers: CGEventFlags, character: String) {
-        self.key = key
-        self.modifiers = modifiers
-        self.character = character
-    }
-
-    /// From its entry in `com.apple.symbolichotkeys` — turned on, with
-    /// parameters [character, key code, modifiers] — or nil when it's off.
-    init?(entry: Any?) {
-        guard let entry = entry as? [String: Any], entry["enabled"] as? Bool == true,
-              let value = entry["value"] as? [String: Any], let parameters = value["parameters"] as? [Int],
-              parameters.count >= 3, (0..<0xFFFF).contains(parameters[1]) else { return nil }
-        let kept = CGEventFlags.maskShift.rawValue | CGEventFlags.maskControl.rawValue
-            | CGEventFlags.maskAlternate.rawValue | CGEventFlags.maskCommand.rawValue
-        key = CGKeyCode(parameters[1])
-        modifiers = CGEventFlags(rawValue: UInt64(max(parameters[2], 0)) & kept)
-        let scalar = (33..<0xFFFF).contains(parameters[0]) ? UnicodeScalar(parameters[0]) : nil
-        character = scalar.map { String($0).uppercased() } ?? "key \(parameters[1])"
-    }
-
-    /// The ones turned on, by desktop number, from the `AppleSymbolicHotKeys`
-    /// in `com.apple.symbolichotkeys`.
-    public static func all(in hotKeys: [String: Any]) -> [Int: DesktopShortcut] {
-        var shortcuts: [Int: DesktopShortcut] = [:]
-        for desktop in 1...most {
-            if let shortcut = DesktopShortcut(entry: hotKeys[String(firstHotKey + desktop - 1)]) {
-                shortcuts[desktop] = shortcut
-            }
-        }
-        return shortcuts
-    }
-
-    /// As menus write it: ⌃⌥⇧⌘, then the key.
-    public var title: String {
-        var text = ""
-        if modifiers.contains(.maskControl) { text += "⌃" }
-        if modifiers.contains(.maskAlternate) { text += "⌥" }
-        if modifiers.contains(.maskShift) { text += "⇧" }
-        if modifiers.contains(.maskCommand) { text += "⌘" }
-        return text + character
-    }
-
-    /// Where it's turned on, for saying so.
-    public static func whereToTurnOn(_ desktop: Int) -> String {
-        "Turn on “Switch to Desktop \(desktop)” in System Settings → Keyboard → Keyboard Shortcuts → Mission Control."
+    public init(display: CGDirectDisplayID, index: Int, count: Int) {
+        self.display = display
+        self.index = index
+        self.count = count
     }
 }
 
@@ -222,23 +147,27 @@ public protocol SpacesControl: AnyObject, Sendable {
     func layout() async -> (layout: SpacesLayout, pointer: Int?)
     /// The space each screen shows now, by its identifier.
     func showing() -> [String: Int]
-    /// The *Switch to Desktop* shortcuts turned on, by desktop number.
-    func shortcuts() -> [Int: DesktopShortcut]
-    /// Whether keys may be pressed for the person: Accessibility.
+    /// Whether Mission Control may be worked for the person: Accessibility.
     var mayPress: Bool { get }
     /// Asks for Accessibility, so the app is in System Settings' list.
     func askToPress()
-    func press(_ shortcut: DesktopShortcut)
+    /// Opens Mission Control and presses these thumbnails, in turn. The first
+    /// closes it; the rest are pressed straight after, and may or may not
+    /// take. Throws a `ModuleError` when none could be pressed.
+    func press(_ thumbnails: [SpaceThumbnail]) async throws
 }
 
-/// The Mac's own: the window server's Spaces, System Settings' shortcuts,
-/// and keys pressed as if typed.
+/// The Mac's own: the window server's Spaces, and Mission Control worked
+/// through the Dock's Accessibility elements.
 ///
 /// macOS gives apps no way to list or switch Spaces. The list comes from the
 /// window server's private `CGSCopyManagedDisplaySpaces`, as Spaceman and
 /// yabai read it, looked up when first needed — failing that, from what the
-/// Dock last saved, which may be a moment behind. Switching is done as a
-/// person would: by pressing the desktop's shortcut.
+/// Dock last saved, which may be a moment behind. Mission Control's *Switch to
+/// Desktop* shortcuts reach only the main screen's desktops, so switching is
+/// done as Hammerspoon's `hs.spaces.gotoSpace` does it: by opening Mission
+/// Control and pressing the space's thumbnail, which only exists while it's
+/// showing.
 public final class SystemSpaces: SpacesControl, @unchecked Sendable {
     public init() {}
 
@@ -247,16 +176,6 @@ public final class SystemSpaces: SpacesControl, @unchecked Sendable {
     public static func layout() -> SpacesLayout {
         SpacesLayout(managed: managedDisplays(), displays: displays(), separate: separate,
                      appName: { NSRunningApplication(processIdentifier: pid_t($0))?.localizedName })
-    }
-
-    /// The *Switch to Desktop* shortcuts turned on, read afresh.
-    public static func shortcuts() -> [Int: DesktopShortcut] {
-        let domain = "com.apple.symbolichotkeys" as CFString
-        CFPreferencesAppSynchronize(domain)
-        guard let hotKeys = CFPreferencesCopyAppValue("AppleSymbolicHotKeys" as CFString, domain) as? [String: Any] else {
-            return [:]
-        }
-        return DesktopShortcut.all(in: hotKeys)
     }
 
     public func layout() async -> (layout: SpacesLayout, pointer: Int?) {
@@ -272,8 +191,6 @@ public final class SystemSpaces: SpacesControl, @unchecked Sendable {
         SpacesLayout.showing(in: Self.managedDisplays(), mainIdentifier: Self.uuid(of: CGMainDisplayID()))
     }
 
-    public func shortcuts() -> [Int: DesktopShortcut] { Self.shortcuts() }
-
     public var mayPress: Bool { AXIsProcessTrusted() }
 
     public func askToPress() {
@@ -283,8 +200,95 @@ public final class SystemSpaces: SpacesControl, @unchecked Sendable {
         _ = AXIsProcessTrustedWithOptions([prompt: true] as CFDictionary)
     }
 
-    public func press(_ shortcut: DesktopShortcut) {
-        Keystroke.press(shortcut.key, with: shortcut.modifiers)
+    // MARK: - Mission Control
+
+    public func press(_ thumbnails: [SpaceThumbnail]) async throws {
+        guard let dock = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first else {
+            throw ModuleError("The Dock isn't running", "Mission Control is part of it.")
+        }
+        let app = AXUIElementCreateApplication(dock.processIdentifier)
+        AXUIElementSetMessagingTimeout(app, 1)
+
+        // Mission Control may still be closing from a press just before: wait
+        // for it to go. If it stays, it's open, and is used as it is.
+        if Self.missionControl(app) != nil {
+            _ = await Self.wait(seconds: 1) { Self.missionControl(app) == nil ? true : nil }
+        }
+        var group = Self.missionControl(app)
+        if group == nil {
+            guard let send = ExposeModule.sendToDock else { throw ModuleError("Mission Control can't be opened from here") }
+            await MainActor.run { send("com.apple.expose.awake" as CFString, nil) }
+            group = await Self.wait(seconds: 2) { Self.missionControl(app) }
+        }
+        guard let group else {
+            throw ModuleError("Mission Control didn't open", "KeybowNotes opens it to switch Spaces.")
+        }
+
+        var pressed = 0
+        var problem: ModuleError?
+        for (index, thumbnail) in thumbnails.enumerated() {
+            // Its thumbnails are made once Mission Control is fully open.
+            let list = await Self.wait(seconds: index == 0 ? 2 : 0.3) {
+                Self.spacesList(in: group, display: thumbnail.display).flatMap { $0.isEmpty ? nil : $0 }
+            }
+            guard let list else {
+                problem = problem ?? ModuleError("Mission Control doesn't show that screen's Spaces")
+                continue
+            }
+            guard list.count == thumbnail.count, list.indices.contains(thumbnail.index) else {
+                problem = problem ?? ModuleError("Mission Control lists \(list.count) Spaces for a screen with \(thumbnail.count)",
+                                                 "They may have changed a moment ago: press the key again.")
+                continue
+            }
+            if index == 0 { try? await Task.sleep(nanoseconds: 300_000_000) }
+            if AXUIElementPerformAction(list[thumbnail.index], kAXPressAction as CFString) == .success { pressed += 1 }
+        }
+        if pressed == 0 {
+            // Nothing closed it: don't leave it open.
+            await MainActor.run { ExposeModule.sendToDock?("com.apple.expose.awake" as CFString, nil) }
+            throw problem ?? ModuleError("Mission Control didn't take the press")
+        }
+    }
+
+    /// Mission Control's group in the Dock, there only while it shows.
+    private static func missionControl(_ dock: AXUIElement) -> AXUIElement? {
+        children(dock).first { identifier($0) == "mc" }
+    }
+
+    /// One screen's thumbnails, in order: `mc.display` for the display, then
+    /// `mc.spaces`, then `mc.spaces.list`.
+    private static func spacesList(in group: AXUIElement, display: CGDirectDisplayID) -> [AXUIElement]? {
+        guard let screen = children(group).first(where: { identifier($0) == "mc.display" && displayID($0) == display }),
+              let spaces = children(screen).first(where: { identifier($0) == "mc.spaces" }),
+              let list = children(spaces).first(where: { identifier($0) == "mc.spaces.list" }) else { return nil }
+        return children(list)
+    }
+
+    private static func attribute(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
+        var value: CFTypeRef?
+        return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value : nil
+    }
+
+    private static func children(_ element: AXUIElement) -> [AXUIElement] {
+        attribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+    }
+
+    private static func identifier(_ element: AXUIElement) -> String? {
+        attribute(element, kAXIdentifierAttribute) as? String
+    }
+
+    private static func displayID(_ element: AXUIElement) -> CGDirectDisplayID? {
+        (attribute(element, "AXDisplayID") as? NSNumber).map { CGDirectDisplayID($0.uint32Value) }
+    }
+
+    /// Asks every 30 ms until there's an answer, or the time's up.
+    private static func wait<T>(seconds: TimeInterval, for answer: () -> T?) async -> T? {
+        let deadline = Date().addingTimeInterval(seconds)
+        repeat {
+            if let found = answer() { return found }
+            try? await Task.sleep(nanoseconds: 30_000_000)
+        } while Date() < deadline && !Task.isCancelled
+        return answer()
     }
 
     // MARK: - The window server
@@ -292,10 +296,13 @@ public final class SystemSpaces: SpacesControl, @unchecked Sendable {
     @MainActor
     private static func displays() -> [SpacesLayout.Display] {
         NSScreen.screens.compactMap { screen in
-            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber,
-                  let uuid = uuid(of: CGDirectDisplayID(number.uint32Value)) else { return nil }
-            return SpacesLayout.Display(identifier: uuid, name: screen.localizedName, frame: screen.frame,
-                                        isMain: CGDirectDisplayID(number.uint32Value) == CGMainDisplayID())
+            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+                return nil
+            }
+            let id = CGDirectDisplayID(number.uint32Value)
+            guard let uuid = uuid(of: id) else { return nil }
+            return SpacesLayout.Display(id: id, identifier: uuid, name: screen.localizedName, frame: screen.frame,
+                                        isMain: id == CGMainDisplayID())
         }
     }
 

@@ -18,7 +18,6 @@ struct SpacesPicker: View {
     let set: (String, String?) -> Void
 
     @State private var layout: SpacesLayout?
-    @State private var shortcuts: [Int: DesktopShortcut] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -30,7 +29,7 @@ struct SpacesPicker: View {
                     missingScreenRow(number)
                 }
                 Text("Screens are counted from the left, and each screen's desktops from 1, as Mission Control "
-                     + "shows them. A key switches them with Mission Control's “Switch to Desktop” shortcuts.")
+                     + "shows them. A key opens Mission Control for a moment to switch them.")
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
@@ -51,7 +50,6 @@ struct SpacesPicker: View {
 
     private func refresh() {
         layout = SystemSpaces.layout()
-        shortcuts = SystemSpaces.shortcuts()
     }
 
     // MARK: - A screen
@@ -113,42 +111,20 @@ struct SpacesPicker: View {
         } else {
             SpaceBox(symbol: "arrow.up.left.and.arrow.down.right", size: size, showing: showing) {}
                 .disabled(true)
-                .help("\(space.app ?? "An app")'s full-screen space. Mission Control has no shortcut to switch to it.")
+                .help("\(space.app ?? "An app")'s full-screen space: only desktops can be chosen.")
         }
     }
 
     private func boxHelp(_ space: SpacesLayout.Space, showing: Bool) -> String {
-        var text = "Desktop \(space.missionControl ?? 0) in Mission Control"
-        if let overall = space.missionControl, let shortcut = shortcuts[overall] {
-            text += " · \(shortcut.title)"
-        } else {
-            text += " · no shortcut is on"
-        }
-        return showing ? text + " · showing now" : text
+        "Desktop \(space.desktop ?? 0) of this screen" + (showing ? " · showing now" : "")
     }
 
     /// What's wrong with the screen's choice, if anything.
     @ViewBuilder
     private func footer(for choice: SpacesModule.Choice, on screen: SpacesLayout.Screen) -> some View {
-        if case .desktop(let number) = choice {
-            if screen.desktop(number) == nil {
-                warning("This screen has \(screen.desktops.count) desktop\(screen.desktops.count == 1 ? "" : "s"); "
-                        + "Mission Control adds more.")
-            } else if let overall = screen.desktop(number)?.missionControl, shortcuts[overall] == nil {
-                HStack(alignment: .firstTextBaseline) {
-                    warning(overall > DesktopShortcut.most
-                        ? "Mission Control has shortcuts for the first \(DesktopShortcut.most) desktops only; this is Desktop \(overall)."
-                        : DesktopShortcut.whereToTurnOn(overall))
-                    if overall <= DesktopShortcut.most {
-                        Button("Open…") {
-                            if let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension") {
-                                NSWorkspace.shared.open(url)
-                            }
-                        }
-                        .controlSize(.small)
-                    }
-                }
-            }
+        if case .desktop(let number) = choice, screen.desktop(number) == nil {
+            warning("This screen has \(screen.desktops.count) desktop\(screen.desktops.count == 1 ? "" : "s"); "
+                    + "Mission Control adds more.")
         }
     }
 

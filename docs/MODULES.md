@@ -383,20 +383,22 @@ it did is on the screen, and the overlay steps aside.
   and yabai use it, else what the Dock last saved in `com.apple.spaces`. A
   display is matched to its screen by its UUID; the main one may be called
   `Main`.
-- macOS gives apps no way to switch Spaces, so it presses Mission Control's
-  *Switch to Desktop N* shortcuts, read from `com.apple.symbolichotkeys`
-  (hot keys 118 to 133, with whatever keys the person chose) through
-  `Keystroke.press`, which needs Accessibility. N counts desktops across
-  screens from the left, as Spaceman counts them; a full-screen app's space
-  has no number and no shortcut.
-- `plan` leaves out screens already showing theirs and puts the pointer's
-  screen last. After each press it watches the window server's list for the
-  screen to change, pressing once more if nothing did — a press can come while
-  another screen slides. If another desktop comes up instead, macOS numbers
-  them another way, and the failure says so, noting when counting the main
-  screen's first (`serverOrder`) would explain it.
-- `SpacesControl` is the protocol tests fake: a made-up window server whose
-  shortcuts bring up the desktops it says.
+- macOS gives apps no way to switch Spaces, and Mission Control's *Switch to
+  Desktop N* shortcuts move only the main screen, whichever desktop N names
+  (found on the user's Mac, 2026-10-21). So `SystemSpaces.press` works
+  Mission Control as Hammerspoon's `hs.spaces.gotoSpace` does: opens it with
+  the Dock notification Exposé sends, finds the Dock's Accessibility group
+  `mc`, then `mc.display` by its `AXDisplayID`, `mc.spaces` and
+  `mc.spaces.list`, whose buttons are the screen's Spaces in order — full-screen
+  ones too — waits 0.3 s for them to settle, and presses one. It needs
+  Accessibility, and checks Mission Control lists as many Spaces as the window
+  server does.
+- Pressing a thumbnail switches that screen and closes Mission Control. So the
+  module presses every screen's in one go, watches the window server's list,
+  and opens Mission Control again for each screen that didn't change. Screens
+  already showing theirs are left out, and the pointer's screen goes last.
+- `SpacesControl` is the protocol tests fake: a made-up window server and
+  Mission Control, which can take every press, only the first, or none.
 - In the tree editor, `SpacesPicker` draws every screen, one under another,
   with a box per space shaped like the screen, *No change* first, and the
   space each shows now marked. Choosing what the branch above gives takes the

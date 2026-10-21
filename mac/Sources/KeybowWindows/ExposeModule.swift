@@ -131,8 +131,8 @@ public final class ExposeModule: KeybowModule, @unchecked Sendable {
     }
 
     /// The Dock's own way in, as the launcher uses it; nil if it's gone.
-    private typealias DockNotification = @convention(c) (CFString, UnsafeMutableRawPointer?) -> Void
-    private static let sendToDock: DockNotification? = {
+    typealias DockNotification = @convention(c) (CFString, UnsafeMutableRawPointer?) -> Void
+    static let sendToDock: DockNotification? = {
         let services = "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices"
         guard let handle = dlopen(services, RTLD_LAZY), let symbol = dlsym(handle, "CoreDockSendNotification") else {
             return nil

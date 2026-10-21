@@ -8,11 +8,12 @@ import XCTest
 // listed as the window server lists them, the main one's first. Nothing on
 // the Mac running the tests changes.
 
-private let portrait = SpacesLayout.Display(identifier: "00000000-0000-0000-0000-00000000000a", name: "Portrait Display",
-                                            frame: CGRect(x: -1080, y: -200, width: 1080, height: 1920), isMain: false)
-private let main = SpacesLayout.Display(identifier: "00000000-0000-0000-0000-00000000000B", name: "Studio Display",
+private let portrait = SpacesLayout.Display(id: 1, identifier: "00000000-0000-0000-0000-00000000000a", name: "Portrait Display",
+                                            frame: CGRect(x: -1080, y: -200, width: 1080, height: 1920),
+                                            isMain: false)
+private let main = SpacesLayout.Display(id: 2, identifier: "00000000-0000-0000-0000-00000000000B", name: "Studio Display",
                                         frame: CGRect(x: 0, y: 0, width: 2560, height: 1440), isMain: true)
-private let side = SpacesLayout.Display(identifier: "00000000-0000-0000-0000-00000000000C", name: "LG HDR 4K",
+private let side = SpacesLayout.Display(id: 3, identifier: "00000000-0000-0000-0000-00000000000C", name: "LG HDR 4K",
                                         frame: CGRect(x: 2560, y: 0, width: 2560, height: 1440), isMain: false)
 
 private func desktop(_ id: Int) -> [String: Any] { ["ManagedSpaceID": id, "id64": id, "type": 0] }
@@ -32,45 +33,38 @@ private let managed: [[String: Any]] = [
 
 private let threeScreens = SpacesLayout(managed: managed, displays: [main, side, portrait], appName: { $0 == 900 ? "Keynote" : nil })
 
-/// ⌃1 to ⌃7.
-private let controlNumbers = Dictionary(uniqueKeysWithValues: (1...7).map {
-    ($0, DesktopShortcut(key: CGKeyCode(17 + $0), modifiers: .maskControl, character: String($0)))
-})
-
+/// A made-up Mission Control: pressing a thumbnail shows its space, unless a
+/// test says the press doesn't take.
 private final class FakeSpaces: SpacesControl, @unchecked Sendable {
     var screens = threeScreens
     var pointer: Int? = 2
     var current = SpacesLayout.showing(in: managed, mainIdentifier: main.identifier)
-    var keys = controlNumbers
     var allowed = true
     var asked = false
-    var pressed: [String] = []
-    /// What each desktop number brings up, as this Mac numbers them: from
-    /// the left, unless a test says.
-    var numbering: [Int: (screen: String, space: Int)] = [:]
-    /// Presses that come to nothing, as one might while a screen slides.
-    var ignored = 0
-
-    init() {
-        for screen in threeScreens.screens {
-            for space in screen.desktops { numbering[space.missionControl!] = (screen.identifier, space.id) }
-        }
-    }
+    /// Each time Mission Control was opened, the thumbnails pressed: "screen:desktop".
+    var pressed: [[String]] = []
+    /// As Mission Control does, closing on the first: the rest come to nothing.
+    var onlyFirstTakes = false
+    /// Screens whose thumbnails never take.
+    var stuck: Set<CGDirectDisplayID> = []
+    var failure: ModuleError?
 
     func layout() async -> (layout: SpacesLayout, pointer: Int?) { (screens, pointer) }
     func showing() -> [String: Int] { current }
-    func shortcuts() -> [Int: DesktopShortcut] { keys }
     var mayPress: Bool { allowed }
     func askToPress() { asked = true }
 
-    func press(_ shortcut: DesktopShortcut) {
-        pressed.append(shortcut.title)
-        if ignored > 0 {
-            ignored -= 1
-            return
+    func press(_ thumbnails: [SpaceThumbnail]) async throws {
+        if let failure { throw failure }
+        pressed.append(thumbnails.map { thumbnail in
+            let screen = screens.screens.first { $0.displayID == thumbnail.display }!
+            return "\(screen.number):\(screen.spaces[thumbnail.index].desktop ?? 0)"
+        })
+        for (index, thumbnail) in thumbnails.enumerated() where !(onlyFirstTakes && index > 0) {
+            guard !stuck.contains(thumbnail.display),
+                  let screen = screens.screens.first(where: { $0.displayID == thumbnail.display }) else { continue }
+            current[screen.identifier] = screen.spaces[thumbnail.index].id
         }
-        guard let number = keys.first(where: { $0.value == shortcut })?.key, let shown = numbering[number] else { return }
-        current[shown.screen] = shown.space
     }
 }
 
@@ -93,12 +87,10 @@ final class SpacesLayoutTests: XCTestCase {
         XCTAssertNil(threeScreens.screen(4), "the unplugged one is left out")
     }
 
-    func testMissionControlCountsDesktopsAcrossScreensFromTheLeft() {
-        XCTAssertEqual(threeScreens.screens.map { $0.desktops.map(\.missionControl!) }, [[1, 2], [3, 4, 5], [6, 7]])
-        XCTAssertEqual(threeScreens.serverOrder, [main.identifier, side.identifier, portrait.identifier])
-        XCTAssertEqual(threeScreens.serverNumber(of: 3), 1, "counting the main screen's first")
-        XCTAssertEqual(threeScreens.serverNumber(of: 30), 6)
-        XCTAssertNil(threeScreens.serverNumber(of: 50), "a full-screen space has no number")
+    func testThumbnailsCountFullScreenSpacesToo() throws {
+        let studio = try XCTUnwrap(threeScreens.screen(2))
+        let step = SpacesModule.Step(screen: studio, space: try XCTUnwrap(studio.desktop(3)))
+        XCTAssertEqual(step.thumbnail, SpaceThumbnail(display: 2, index: 3, count: 4), "after Keynote's")
     }
 
     func testScreensSharingTheMainOnesSpacesHaveNoneOfTheirOwn() {
@@ -106,24 +98,6 @@ final class SpacesLayoutTests: XCTestCase {
                                   displays: [main, side], separate: false)
         XCTAssertFalse(shared.separate)
         XCTAssertEqual(shared.screens.map { $0.spaces.count }, [2, 0])
-    }
-
-    func testShortcutsAsSystemSettingsKeepsThem() {
-        let hotKeys: [String: Any] = [
-            "118": ["enabled": true, "value": ["type": "standard", "parameters": [49, 18, 655_360]]],
-            "119": ["enabled": false, "value": ["type": "standard", "parameters": [50, 19, 262_144]]],
-            "120": ["enabled": true, "value": ["type": "standard", "parameters": [65_535, 20, 262_144]]],
-            // The function key's bit is left out of the press.
-            "129": ["enabled": true, "value": ["type": "standard", "parameters": [61, 24, 262_144 | 0x80_0000]]],
-            "79": ["enabled": true, "value": ["type": "standard", "parameters": [65_535, 123, 262_144]]],
-        ]
-        let shortcuts = DesktopShortcut.all(in: hotKeys)
-        XCTAssertEqual(shortcuts.keys.sorted(), [1, 3, 12], "only Switch to Desktop, and only those on")
-        XCTAssertEqual(shortcuts[1], DesktopShortcut(key: 18, modifiers: [.maskAlternate, .maskShift], character: "1"))
-        XCTAssertEqual(shortcuts[1]?.title, "⌥⇧1")
-        XCTAssertEqual(shortcuts[3]?.title, "⌃key 20")
-        XCTAssertEqual(shortcuts[12]?.modifiers, .maskControl)
-        XCTAssertEqual(shortcuts[12]?.title, "⌃=")
     }
 }
 
@@ -156,65 +130,62 @@ final class SpacesModuleTests: XCTestCase {
     }
 
     func testThePlanLeavesThePointersScreenTillLastAndSkipsWhatsShowing() {
-        let plan = SpacesModule.plan([1: 1, 2: 2, 3: 2], layout: threeScreens, shortcuts: controlNumbers, pointer: 1)
-        XCTAssertEqual(plan.steps.map { "\($0.screen.number):\($0.space.id):\($0.shortcut.title)" }, ["3:21:⌃7", "1:30:⌃1"])
+        let plan = SpacesModule.plan([1: 1, 2: 2, 3: 2], layout: threeScreens, pointer: 1)
+        XCTAssertEqual(plan.steps.map { "\($0.screen.number):\($0.space.id)" }, ["3:21", "1:30"])
         XCTAssertEqual(plan.already, 1, "screen 2 already shows its desktop 2")
         XCTAssertEqual(plan.failures, [])
     }
 
     func testThePlanSaysWhatCantBeSwitched() {
-        var shortcuts = controlNumbers
-        shortcuts[7] = nil
-        let plan = SpacesModule.plan([2: 5, 3: 2, 4: 1], layout: threeScreens, shortcuts: shortcuts, pointer: nil)
+        let plan = SpacesModule.plan([2: 5, 4: 1], layout: threeScreens, pointer: nil)
         XCTAssertEqual(plan.steps, [])
         XCTAssertEqual(plan.failures, [
             ModuleError("Studio Display has no desktop 5", "It has 3. Mission Control adds more."),
-            ModuleError("Desktop 7 has no shortcut to switch to it", DesktopShortcut.whereToTurnOn(7)),
             ModuleError("There's no screen 4", "Screens are numbered 1 to 3, from the left."),
         ])
         let shared = SpacesLayout(managed: [entry("Main", [desktop(3), desktop(4)], showing: 3)],
                                   displays: [main, side], separate: false)
-        XCTAssertEqual(SpacesModule.plan([2: 1], layout: shared, shortcuts: controlNumbers, pointer: nil).failures.first?.message,
+        XCTAssertEqual(SpacesModule.plan([2: 1], layout: shared, pointer: nil).failures.first?.message,
                        "LG HDR 4K shows the main screen's Spaces")
     }
 
-    func testPressesEachScreensShortcutAndSaysNothingOnceTheyShow() async {
+    func testPressesEveryScreensThumbnailInOneGoWhenTheyTake() async {
         let fake = FakeSpaces()
-        let module = SpacesModule(control: fake, patience: 0.2)
-        let outcome = await module.run(request(["screen1": "1", "screen2": "3", "screen3": "2"]), now: Date())
+        let outcome = await SpacesModule(control: fake, patience: 0.2).run(request(["screen1": "1", "screen2": "3", "screen3": "2"]),
+                                                                           now: Date())
         XCTAssertEqual(outcome, .quiet)
-        XCTAssertEqual(fake.pressed, ["⌃1", "⌃7", "⌃5"], "the pointer's screen, 2, last")
+        XCTAssertEqual(fake.pressed, [["1:1", "3:2", "2:3"]], "the pointer's screen, 2, last")
         XCTAssertEqual(fake.current[portrait.identifier], 30)
         XCTAssertEqual(fake.current[main.identifier], 5)
         XCTAssertEqual(fake.current[side.identifier], 21)
     }
 
-    func testPressesAgainWhenNothingChanged() async {
+    func testGoesAgainForEachScreenMissionControlClosedOn() async {
         let fake = FakeSpaces()
-        fake.ignored = 1
-        let outcome = await SpacesModule(control: fake, patience: 0.2).run(request(["screen3": "2"]), now: Date())
+        fake.onlyFirstTakes = true
+        let outcome = await SpacesModule(control: fake, patience: 0.2).run(request(["screen1": "1", "screen2": "3", "screen3": "2"]),
+                                                                           now: Date())
         XCTAssertEqual(outcome, .quiet)
-        XCTAssertEqual(fake.pressed, ["⌃7", "⌃7"])
-
-        fake.ignored = 2
-        let failed = await SpacesModule(control: fake, patience: 0.1).run(request(["screen1": "1"]), now: Date())
-        XCTAssertEqual(failed, .failure("Portrait Display didn't switch to desktop 1",
-                                        "Pressing ⌃1, the shortcut for Desktop 1, changed nothing."))
+        XCTAssertEqual(fake.pressed, [["1:1", "3:2", "2:3"], ["3:2"], ["2:3"]])
     }
 
-    func testSaysSoWhenMacOSNumbersDesktopsTheOtherWay() async {
+    func testSaysWhichScreensDidntSwitch() async {
         let fake = FakeSpaces()
-        // The main screen's first, as the window server lists them.
-        fake.numbering = [1: (main.identifier, 3), 2: (main.identifier, 4), 3: (main.identifier, 5),
-                          4: (side.identifier, 20), 5: (side.identifier, 21),
-                          6: (portrait.identifier, 30), 7: (portrait.identifier, 31)]
-        let outcome = await SpacesModule(control: fake, patience: 0.2).run(request(["screen1": "1"]), now: Date())
-        XCTAssertFalse(outcome.succeeded)
-        XCTAssertEqual(outcome.message, "Desktop 1 is on another screen")
-        XCTAssertEqual(outcome.detail, "Its shortcut, ⌃1, showed Studio Display's desktop 1 instead of Portrait Display's "
-                       + "desktop 1: macOS numbers desktops across screens in another order. "
-                       + "It seems to count the main screen's first.")
-        XCTAssertEqual(fake.pressed, ["⌃1"], "and it stops there")
+        fake.stuck = [side.id]
+        let outcome = await SpacesModule(control: fake, patience: 0.1).run(request(["screen1": "1", "screen3": "2"]), now: Date())
+        XCTAssertEqual(outcome, .failure("LG HDR 4K didn't switch to desktop 2",
+                                         "Its thumbnail in Mission Control was pressed, and the screen stayed as it was."))
+        XCTAssertEqual(fake.current[portrait.identifier], 30, "the other one did")
+        XCTAssertEqual(fake.pressed, [["1:1", "3:2"], ["3:2"]])
+
+        let closed = FakeSpaces()
+        closed.failure = ModuleError("Mission Control didn't open", "KeybowNotes opens it to switch Spaces.")
+        let failed = await SpacesModule(control: closed, patience: 0.1).run(request(["screen3": "2", "screen1": "1"]), now: Date())
+        XCTAssertFalse(failed.succeeded)
+        XCTAssertEqual(failed.message, "2 screens didn't switch")
+        XCTAssertEqual(failed.detail, "Portrait Display didn't switch: Mission Control didn't open — KeybowNotes opens it to "
+                       + "switch Spaces. · LG HDR 4K didn't switch: Mission Control didn't open — KeybowNotes opens it to "
+                       + "switch Spaces.")
     }
 
     func testAsksForAccessibilityFirst() async {

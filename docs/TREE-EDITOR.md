@@ -335,10 +335,9 @@ For the selected node:
   choice is filled in when it's set here and outlined when it's inherited,
   with where it comes from beside the screen's name; choosing what the branch
   above gives takes this node's own away again, and **Use Inherited** does
-  the same. Resting on a desktop gives its number in Mission Control and its
-  shortcut; a desktop whose shortcut is off, or that the screen doesn't have,
-  is marked with what to do. An app's full-screen space is shown but can't be
-  chosen. A screen the node sets that isn't connected is listed, to remove.
+  the same. A desktop the screen doesn't have is marked. An app's
+  full-screen space is shown but can't be chosen. A screen the node sets
+  that isn't connected is listed, to remove.
 - **Clock timer setup** — for *Clock timer*, if the helper shortcut doesn't
   exist yet, the steps to make it, with **Open Shortcuts**.
 - **Template file** — which file the action uses: a combo box of the files in

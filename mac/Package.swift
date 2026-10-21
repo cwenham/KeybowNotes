@@ -89,7 +89,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "KeybowNotesApp",
-            dependencies: ["KeybowKit", "KeybowAI", "KeybowLocation", "KeybowModules"],
+            dependencies: ["KeybowKit", "KeybowAI", "KeybowLocation", "KeybowWindows", "KeybowModules"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(

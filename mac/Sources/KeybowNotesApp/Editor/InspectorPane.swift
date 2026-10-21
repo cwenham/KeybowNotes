@@ -1,4 +1,5 @@
 import KeybowKit
+import KeybowWindows
 import SwiftUI
 
 struct InspectorPane: View {
@@ -249,8 +250,14 @@ private struct NodeInspector: View {
             }
             if let type = action?.type, let fields = fields(for: type) {
                 let shown = ModuleRegistry.shared.module(handling: type)?.shownFields(type: type, fields: effectiveFields(of: type))
+                if type == SpacesModule.type {
+                    SpacesPicker(own: { ownValue($0) }, above: { inheritedValue($0) }, source: { source(of: $0) },
+                                 set: { setField($0, $1) })
+                }
                 ForEach(fields.filter { spec in
                     if case .action = spec.kind { return false }
+                    // Drawn as screens and desktops, above.
+                    if type == SpacesModule.type, SpacesModule.screen(ofKey: spec.key) != nil { return false }
                     return shown.map { $0.contains(spec.key) || ownValue(spec.key) != nil } ?? true
                 }, id: \.key) { spec in
                     fieldRow(spec)
@@ -350,6 +357,15 @@ private struct NodeInspector: View {
             return inner[parts[1]]?.stringValue ?? ""
         }
         return action.fields[key]?.stringValue ?? ""
+    }
+
+    /// What the branches above give a field — nil when they give nothing, or
+    /// give it to another type of action, whose fields this one doesn't take.
+    private func inheritedValue(_ key: String) -> String? {
+        guard let tree, location.path.count > 1, let type = action?.type,
+              let above = config?.inheritedAction(tree: tree, path: Array(location.path.dropLast())),
+              above.type == type, let value = above.fields[key]?.stringValue, !value.isEmpty else { return nil }
+        return value
     }
 
     /// "set here", "from Meeting", or "default". A field can be set by a pair

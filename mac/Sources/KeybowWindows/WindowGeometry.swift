@@ -91,9 +91,13 @@ public enum WindowGeometry {
     /// The screens in order, left to right — top to bottom where they're
     /// stacked — which is how they're numbered: `screen: 1` is the leftmost.
     public static func ordered(_ screens: [Screen]) -> [Screen] {
-        screens.sorted { a, b in
-            a.frame.minX != b.frame.minX ? a.frame.minX < b.frame.minX : a.frame.maxY > b.frame.maxY
-        }
+        screens.sorted { comesFirst($0.frame, $1.frame) }
+    }
+
+    /// Whether a screen with frame `a` is numbered before one with `b`:
+    /// further left, else higher.
+    public static func comesFirst(_ a: CGRect, _ b: CGRect) -> Bool {
+        a.minX != b.minX ? a.minX < b.minX : a.maxY > b.maxY
     }
 
     /// The screen a window is on: the one holding most of it, else the nearest.

@@ -1013,6 +1013,49 @@ Keywords: `Exposé`, `Expose`, `Mission Control`. It asks the Dock, as macOS's
 own Mission Control launcher does, so it needs no permissions, and Mission
 Control's settings — grouping by app, separate spaces per display — apply.
 
+### `spaces` — a desktop on each screen
+
+A module. Shows a chosen desktop — one of Mission Control's Spaces — on each
+screen it names, and leaves the others as they are. With several screens, one
+key can set them all: Claude on the left, the editor in the middle, the
+documentation on the right.
+
+| Field | |
+|---|---|
+| `screen1` … `screen6` | The desktop to show on that screen, counting screens from the left as `window`'s `screen: 2` does, and each screen's desktops from 1, left to right as Mission Control shows them. `no change` leaves the screen as it is. |
+
+```
+1. Coding [Spaces, screen1: 2]
+   1. KeybowNotes [screen2: 1, screen3: 3]
+   2. Website [screen2: 4, screen3: 1]
+   3. Just docs [screen1: no change, screen3: 2]
+```
+
+- **Each screen is inherited on its own.** A branch can set one screen and the
+  keys under it the others: *KeybowNotes* above shows desktop 2 on the left
+  screen, from *Coding*, as well as its own two. `no change` is for a key
+  that should leave a screen alone that a branch above sets. A screen nothing
+  sets is left as it is.
+- **Desktops are counted on each screen**, so adding one to another screen
+  doesn't change which is meant. Mission Control numbers them across every
+  screen — the middle screen's first may be its *Desktop 4* — and the tree
+  editor shows that number when the pointer rests on a desktop.
+- **It presses Mission Control's shortcuts.** macOS gives apps no way to
+  switch Spaces, so it presses *Switch to Desktop N* for each screen, as you
+  would. Each desktop it's asked for needs that shortcut turned on, in System
+  Settings → Keyboard → Keyboard Shortcuts → Mission Control — any keys will
+  do, and there are shortcuts for the first 16 desktops. *Displays have
+  separate Spaces* needs to be on, as it is unless it's been turned off.
+- It reads which desktops each screen has, and which it shows, from the
+  window server first: a screen already showing its desktop is left alone,
+  and the screen the pointer is on goes last, so the keyboard ends up there.
+  It waits to see each screen change, and says which didn't.
+- An app's full-screen space can't be chosen: Mission Control has no shortcut
+  for one. It runs on the press, needs **Accessibility** access, as Insert
+  does, and says nothing once the screens show what was asked.
+
+Keywords: `Spaces`, `Space`.
+
 ### `ask` — ask for something, and hand it on
 
 A module, built on `display`. Shows a question with a field to type in, and on
@@ -1886,6 +1929,7 @@ the app; edit it only while KeybowNotes isn't running.
 `FaceTime`, `Link`, `Browser`, `Copy`, `Clipboard`, `Insert`, `Paste`, `Direct Insert`, `Type`,
 `Timer`, `Maps`, `Music`,
 `Stopwatch`, `Display`, `Show`, `Ask`, `Prompt`, `Window`, `Arrange`, `Exposé`, `Expose`, `Mission Control`,
+`Spaces`, `Space`,
 `Volume`, `Microphone`, `Mic`, `Brightness`, `Wi-Fi`, `WiFi`, `Bluetooth`, `Night Shift`, `Dark Mode`,
 `Stay Awake`, `Keep Awake`, `Focus`
 (and any other module's keywords),
@@ -1903,7 +1947,7 @@ action fields listed in §2.
 **Action types:** `notes.create`, `notes.append`, `calendar.createEvent`,
 `reminders.create`, `messages.compose`, `mail.compose`, `phone.call`, `app.open`,
 `url.open`, `clipboard.copy`, `text.insert`, `text.insertDirect`, `clock.timer`, `maps.search`, `music.play`, `shortcut`,
-and from modules, `stopwatch`, `display`, `ask`, `window` and `expose`.
+and from modules, `stopwatch`, `display`, `ask`, `window`, `expose` and `spaces`.
 
 **Computed values:** `leaf`, `parent`, `level1`–`level4`, `path`, `folderPath`,
 `parentPath`, `tree`, `contact.*`, `project.*`, `selection`, `clipboard`, `frontApp`,

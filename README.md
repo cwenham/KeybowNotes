@@ -267,7 +267,9 @@ its own type and fields:
 
 **Window** puts the window you're working in on a half or a quarter of the
 screen, fills it, or sends it to another screen. **Exposé** shows every window,
-the app's, or the desktop. And the Mac's own controls: **Volume**, the
+the app's, or the desktop. **Spaces** shows a chosen desktop on each screen —
+one key for Claude on the left, the editor in the middle and the docs on the
+right — each screen's choice inherited down the tree on its own. And the Mac's own controls: **Volume**, the
 **Microphone** (muted for every app), **Brightness** — Apple's screens and, on an
 Intel Mac, monitors over DDC — **Wi‑Fi**, **Bluetooth**, **Night Shift**,
 **Dark Mode**, **Stay Awake** and **Focus**.
@@ -432,7 +434,7 @@ say when one is misspelt; a template can be edited in place. See
 [docs/TREE-EDITOR.md](docs/TREE-EDITOR.md).
 
 **Modules** — the stopwatch, Claude blocks, data sources, location, quotes,
-displays, Ask, window moving, Exposé, meetings, Home Assistant and the Mac's own
+displays, Ask, window moving, Exposé, Spaces, meetings, Home Assistant and the Mac's own
 controls are modules: separate code that plugs in through one interface, adding
 actions, template blocks, values, settings and menu commands. See
 [docs/MODULES.md](docs/MODULES.md).

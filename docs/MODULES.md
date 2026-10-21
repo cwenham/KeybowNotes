@@ -51,7 +51,7 @@ KeybowData           a module: data sources, using KeybowAI to write rules
 KeybowLocation       a module: where the Mac is, from Location Services
 KeybowQuotes         a module: {{quote}}, portions of a file
 KeybowDisplay        modules: the display and ask actions
-KeybowWindows        modules: the window action, and Exposé
+KeybowWindows        modules: the window action, Exposé, and Spaces
 KeybowHome           a module: Home Assistant
 KeybowCalendar       a module: meetings and the agenda
 KeybowSystem         modules: the Mac's own controls, using KeybowWindows for screens
@@ -369,6 +369,38 @@ it exits before the Dock hears it. Should the function go, the launcher is
 opened as an app instead — no argument for Mission Control, `1` for the
 desktop, `2` for the app's windows. It fires at once and answers quietly: what
 it did is on the screen, and the overlay steps aside.
+
+`SpacesModule`, beside it: action type `spaces`, keywords `Spaces` and `Space`.
+
+- Fields `screen1` to `screen6`: a desktop for each screen, counted from the
+  left as `screen: 2` counts them, or `no change`. Separate fields, so the
+  tree inherits each screen on its own; the module reads them as one request
+  (`wanted`). Desktops are counted on each screen, from 1.
+- `SpacesLayout` (`Spaces.swift`) is the screens and their Spaces, built from
+  plain values — the window server's list and the screens' frames — so it's
+  tested without one. `SystemSpaces` reads the real ones: the window server's
+  private `CGSCopyManagedDisplaySpaces`, looked up with `dlsym` as Spaceman
+  and yabai use it, else what the Dock last saved in `com.apple.spaces`. A
+  display is matched to its screen by its UUID; the main one may be called
+  `Main`.
+- macOS gives apps no way to switch Spaces, so it presses Mission Control's
+  *Switch to Desktop N* shortcuts, read from `com.apple.symbolichotkeys`
+  (hot keys 118 to 133, with whatever keys the person chose) through
+  `Keystroke.press`, which needs Accessibility. N counts desktops across
+  screens from the left, as Spaceman counts them; a full-screen app's space
+  has no number and no shortcut.
+- `plan` leaves out screens already showing theirs and puts the pointer's
+  screen last. After each press it watches the window server's list for the
+  screen to change, pressing once more if nothing did — a press can come while
+  another screen slides. If another desktop comes up instead, macOS numbers
+  them another way, and the failure says so, noting when counting the main
+  screen's first (`serverOrder`) would explain it.
+- `SpacesControl` is the protocol tests fake: a made-up window server whose
+  shortcuts bring up the desktops it says.
+- In the tree editor, `SpacesPicker` draws every screen, one under another,
+  with a box per space shaped like the screen, *No change* first, and the
+  space each shows now marked. Choosing what the branch above gives takes the
+  node's own field away again.
 
 ## Ask
 

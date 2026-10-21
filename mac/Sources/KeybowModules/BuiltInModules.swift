@@ -25,6 +25,7 @@ public enum BuiltInModules {
         ModuleRegistry.shared.register(AskModule(), host: host)
         ModuleRegistry.shared.register(WindowModule(), host: host)
         ModuleRegistry.shared.register(ExposeModule(), host: host)
+        ModuleRegistry.shared.register(SpacesModule(), host: host)
         ModuleRegistry.shared.register(HomeAssistantModule(), host: host)
         ModuleRegistry.shared.register(AgendaModule(), host: host)
         ModuleRegistry.shared.register(VolumeModule(), host: host)

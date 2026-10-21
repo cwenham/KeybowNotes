@@ -393,12 +393,14 @@ it did is on the screen, and the overlay steps aside.
   ones too — waits 0.3 s for them to settle, and presses one. It needs
   Accessibility, and checks Mission Control lists as many Spaces as the window
   server does.
-- Pressing a thumbnail switches that screen and closes Mission Control. So the
-  module presses every screen's in one go, watches the window server's list,
-  and opens Mission Control again for each screen that didn't change. Screens
-  already showing theirs are left out, and the pointer's screen goes last.
+- Pressing a thumbnail switches that screen and closes Mission Control, and a
+  second pressed straight after never takes. So the module visits Mission
+  Control once per screen — about a second each — watching the window
+  server's list for the screen to change, and once more for any that didn't.
+  Screens already showing theirs are left out, and the pointer's screen goes
+  last.
 - `SpacesControl` is the protocol tests fake: a made-up window server and
-  Mission Control, which can take every press, only the first, or none.
+  Mission Control, whose presses can take, come to nothing once, or never.
 - In the tree editor, `SpacesPicker` draws every screen, one under another,
   with a box per space shaped like the screen, *No change* first, and the
   space each shows now marked. Choosing what the branch above gives takes the

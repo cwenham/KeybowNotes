@@ -15,9 +15,10 @@ import KeybowKit
 ///
 /// macOS gives apps no way to switch Spaces, and Mission Control's *Switch to
 /// Desktop* shortcuts reach only the main screen's desktops. So it opens
-/// Mission Control and presses each desktop's thumbnail, as Hammerspoon does,
-/// after reading which desktops each screen has from the window server; then
-/// watches each screen change, and goes again for any that didn't.
+/// Mission Control and presses the desktop's thumbnail, as Hammerspoon does,
+/// once for each screen — it closes on the press — after reading which
+/// desktops each screen has from the window server; then watches each screen
+/// change, and goes again for any that didn't.
 public final class SpacesModule: KeybowModule, @unchecked Sendable {
     public static let id = "spaces"
     public static let type = "spaces"
@@ -187,14 +188,12 @@ public final class SpacesModule: KeybowModule, @unchecked Sendable {
         var plan = Self.plan(desktops, layout: layout, pointer: pointer)
         var waiting = plan.steps
         var trouble: ModuleError?
-        // Every screen in one go: Mission Control closes on the first press,
-        // and the others may take or not. Then each left, on its own.
-        for round in [[waiting]] + [waiting.map { [$0] }] {
-            for steps in round {
-                let left = steps.filter { step in waiting.contains(step) }
-                guard !left.isEmpty, !Task.isCancelled else { continue }
+        // A visit to Mission Control for each screen — it closes on the
+        // press — then another for any that didn't change.
+        for _ in 0..<2 where !waiting.isEmpty {
+            for step in waiting where !Task.isCancelled {
                 do {
-                    try await control.press(left.map(\.thumbnail))
+                    try await control.press(step.thumbnail)
                 } catch let error as ModuleError {
                     trouble = error
                     continue
@@ -202,11 +201,10 @@ public final class SpacesModule: KeybowModule, @unchecked Sendable {
                     trouble = ModuleError("Mission Control didn't switch Spaces", "\(error)")
                     continue
                 }
-                await settle(left)
-                let showing = control.showing()
-                waiting.removeAll { showing[$0.screen.identifier] == $0.space.id }
+                await settle(step)
             }
-            if waiting.isEmpty { break }
+            let showing = control.showing()
+            waiting.removeAll { showing[$0.screen.identifier] == $0.space.id }
         }
         for step in waiting {
             plan.failures.append(trouble.map { ModuleError("\(step.screen.name) didn't switch: \($0.message)", $0.detail) }
@@ -221,20 +219,11 @@ public final class SpacesModule: KeybowModule, @unchecked Sendable {
         return .failure("\(plan.failures.count) screens didn't switch", plan.failures.map(\.description).joined(separator: " · "))
     }
 
-    /// Waits for the screens to show their desktops as Mission Control
-    /// closes: for the first pressed, which closes it, then a moment for the
-    /// rest, which may not take.
-    private func settle(_ steps: [Step]) async {
-        func shown(_ steps: ArraySlice<Step>) -> Bool {
-            let showing = control.showing()
-            return steps.allSatisfy { showing[$0.screen.identifier] == $0.space.id }
-        }
-        var deadline = Date().addingTimeInterval(patience)
-        while !shown(steps.prefix(1)), Date() < deadline, !Task.isCancelled {
-            try? await Task.sleep(nanoseconds: 30_000_000)
-        }
-        deadline = Date().addingTimeInterval(min(patience, 0.5))
-        while !shown(steps[...]), Date() < deadline, !Task.isCancelled {
+    /// Waits for the screen to show its desktop as Mission Control closes,
+    /// or the time's up.
+    private func settle(_ step: Step) async {
+        let deadline = Date().addingTimeInterval(patience)
+        while control.showing()[step.screen.identifier] != step.space.id, Date() < deadline, !Task.isCancelled {
             try? await Task.sleep(nanoseconds: 30_000_000)
         }
     }

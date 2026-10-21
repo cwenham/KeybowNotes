@@ -151,10 +151,9 @@ public protocol SpacesControl: AnyObject, Sendable {
     var mayPress: Bool { get }
     /// Asks for Accessibility, so the app is in System Settings' list.
     func askToPress()
-    /// Opens Mission Control and presses these thumbnails, in turn. The first
-    /// closes it; the rest are pressed straight after, and may or may not
-    /// take. Throws a `ModuleError` when none could be pressed.
-    func press(_ thumbnails: [SpaceThumbnail]) async throws
+    /// Opens Mission Control and presses the thumbnail, which closes it.
+    /// Throws a `ModuleError` when it can't be pressed.
+    func press(_ thumbnail: SpaceThumbnail) async throws
 }
 
 /// The Mac's own: the window server's Spaces, and Mission Control worked
@@ -202,14 +201,14 @@ public final class SystemSpaces: SpacesControl, @unchecked Sendable {
 
     // MARK: - Mission Control
 
-    public func press(_ thumbnails: [SpaceThumbnail]) async throws {
+    public func press(_ thumbnail: SpaceThumbnail) async throws {
         guard let dock = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first else {
             throw ModuleError("The Dock isn't running", "Mission Control is part of it.")
         }
         let app = AXUIElementCreateApplication(dock.processIdentifier)
         AXUIElementSetMessagingTimeout(app, 1)
 
-        // Mission Control may still be closing from a press just before: wait
+        // Mission Control may still be closing from the screen before: wait
         // for it to go. If it stays, it's open, and is used as it is.
         if Self.missionControl(app) != nil {
             _ = await Self.wait(seconds: 1) { Self.missionControl(app) == nil ? true : nil }
@@ -224,30 +223,26 @@ public final class SystemSpaces: SpacesControl, @unchecked Sendable {
             throw ModuleError("Mission Control didn't open", "KeybowNotes opens it to switch Spaces.")
         }
 
-        var pressed = 0
+        // Its thumbnails are made once Mission Control is fully open.
+        let list = await Self.wait(seconds: 2) {
+            Self.spacesList(in: group, display: thumbnail.display).flatMap { $0.isEmpty ? nil : $0 }
+        }
         var problem: ModuleError?
-        for (index, thumbnail) in thumbnails.enumerated() {
-            // Its thumbnails are made once Mission Control is fully open.
-            let list = await Self.wait(seconds: index == 0 ? 2 : 0.3) {
-                Self.spacesList(in: group, display: thumbnail.display).flatMap { $0.isEmpty ? nil : $0 }
+        if let list {
+            if list.count == thumbnail.count, list.indices.contains(thumbnail.index) {
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                if AXUIElementPerformAction(list[thumbnail.index], kAXPressAction as CFString) == .success { return }
+                problem = ModuleError("Mission Control didn't take the press")
+            } else {
+                problem = ModuleError("Mission Control lists \(list.count) Spaces for a screen with \(thumbnail.count)",
+                                      "They may have changed a moment ago: press the key again.")
             }
-            guard let list else {
-                problem = problem ?? ModuleError("Mission Control doesn't show that screen's Spaces")
-                continue
-            }
-            guard list.count == thumbnail.count, list.indices.contains(thumbnail.index) else {
-                problem = problem ?? ModuleError("Mission Control lists \(list.count) Spaces for a screen with \(thumbnail.count)",
-                                                 "They may have changed a moment ago: press the key again.")
-                continue
-            }
-            if index == 0 { try? await Task.sleep(nanoseconds: 300_000_000) }
-            if AXUIElementPerformAction(list[thumbnail.index], kAXPressAction as CFString) == .success { pressed += 1 }
+        } else {
+            problem = ModuleError("Mission Control doesn't show that screen's Spaces")
         }
-        if pressed == 0 {
-            // Nothing closed it: don't leave it open.
-            await MainActor.run { ExposeModule.sendToDock?("com.apple.expose.awake" as CFString, nil) }
-            throw problem ?? ModuleError("Mission Control didn't take the press")
-        }
+        // Nothing closed it: don't leave it open.
+        await MainActor.run { ExposeModule.sendToDock?("com.apple.expose.awake" as CFString, nil) }
+        throw problem ?? ModuleError("Mission Control didn't take the press")
     }
 
     /// Mission Control's group in the Dock, there only while it shows.

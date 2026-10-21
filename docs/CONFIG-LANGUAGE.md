@@ -1041,13 +1041,14 @@ documentation on the right.
 - **It works Mission Control.** macOS gives apps no way to switch Spaces, and
   its *Switch to Desktop* shortcuts reach only the main screen's desktops. So
   the key opens Mission Control and presses each screen's desktop, as you
-  would — Mission Control shows for a moment. *Displays have separate Spaces*
+  would — Mission Control shows for a moment, once for each screen. *Displays have separate Spaces*
   needs to be on, as it is unless it's been turned off.
 - It reads which desktops each screen has, and which it shows, from the
   window server first: a screen already showing its desktop is left alone,
   and the screen the pointer is on goes last, so the keyboard ends up there.
-  Mission Control closes on the first desktop pressed, so it opens again for
-  any screen that didn't switch, and the overlay says which still didn't.
+  Mission Control closes as a desktop is pressed, so it opens once for each
+  screen, about a second each — and again for any that didn't switch, and
+  the overlay says which still didn't.
 - An app's full-screen space can't be chosen, only desktops. It runs on the
   press, needs **Accessibility** access, as Insert does, and says nothing
   once the screens show what was asked.

@@ -41,10 +41,10 @@ private final class FakeSpaces: SpacesControl, @unchecked Sendable {
     var current = SpacesLayout.showing(in: managed, mainIdentifier: main.identifier)
     var allowed = true
     var asked = false
-    /// Each time Mission Control was opened, the thumbnails pressed: "screen:desktop".
-    var pressed: [[String]] = []
-    /// As Mission Control does, closing on the first: the rest come to nothing.
-    var onlyFirstTakes = false
+    /// Each thumbnail pressed, one per visit to Mission Control: "screen:desktop".
+    var pressed: [String] = []
+    /// Presses that come to nothing.
+    var ignored = 0
     /// Screens whose thumbnails never take.
     var stuck: Set<CGDirectDisplayID> = []
     var failure: ModuleError?
@@ -54,17 +54,16 @@ private final class FakeSpaces: SpacesControl, @unchecked Sendable {
     var mayPress: Bool { allowed }
     func askToPress() { asked = true }
 
-    func press(_ thumbnails: [SpaceThumbnail]) async throws {
+    func press(_ thumbnail: SpaceThumbnail) async throws {
         if let failure { throw failure }
-        pressed.append(thumbnails.map { thumbnail in
-            let screen = screens.screens.first { $0.displayID == thumbnail.display }!
-            return "\(screen.number):\(screen.spaces[thumbnail.index].desktop ?? 0)"
-        })
-        for (index, thumbnail) in thumbnails.enumerated() where !(onlyFirstTakes && index > 0) {
-            guard !stuck.contains(thumbnail.display),
-                  let screen = screens.screens.first(where: { $0.displayID == thumbnail.display }) else { continue }
-            current[screen.identifier] = screen.spaces[thumbnail.index].id
+        let screen = screens.screens.first { $0.displayID == thumbnail.display }!
+        pressed.append("\(screen.number):\(screen.spaces[thumbnail.index].desktop ?? 0)")
+        if ignored > 0 {
+            ignored -= 1
+            return
         }
+        guard !stuck.contains(thumbnail.display) else { return }
+        current[screen.identifier] = screen.spaces[thumbnail.index].id
     }
 }
 
@@ -149,24 +148,23 @@ final class SpacesModuleTests: XCTestCase {
                        "LG HDR 4K shows the main screen's Spaces")
     }
 
-    func testPressesEveryScreensThumbnailInOneGoWhenTheyTake() async {
+    func testVisitsMissionControlOnceForEachScreen() async {
         let fake = FakeSpaces()
         let outcome = await SpacesModule(control: fake, patience: 0.2).run(request(["screen1": "1", "screen2": "3", "screen3": "2"]),
                                                                            now: Date())
         XCTAssertEqual(outcome, .quiet)
-        XCTAssertEqual(fake.pressed, [["1:1", "3:2", "2:3"]], "the pointer's screen, 2, last")
+        XCTAssertEqual(fake.pressed, ["1:1", "3:2", "2:3"], "the pointer's screen, 2, last")
         XCTAssertEqual(fake.current[portrait.identifier], 30)
         XCTAssertEqual(fake.current[main.identifier], 5)
         XCTAssertEqual(fake.current[side.identifier], 21)
     }
 
-    func testGoesAgainForEachScreenMissionControlClosedOn() async {
+    func testGoesAgainForAScreenThatDidntChange() async {
         let fake = FakeSpaces()
-        fake.onlyFirstTakes = true
-        let outcome = await SpacesModule(control: fake, patience: 0.2).run(request(["screen1": "1", "screen2": "3", "screen3": "2"]),
-                                                                           now: Date())
+        fake.ignored = 1
+        let outcome = await SpacesModule(control: fake, patience: 0.1).run(request(["screen1": "1", "screen3": "2"]), now: Date())
         XCTAssertEqual(outcome, .quiet)
-        XCTAssertEqual(fake.pressed, [["1:1", "3:2", "2:3"], ["3:2"], ["2:3"]])
+        XCTAssertEqual(fake.pressed, ["1:1", "3:2", "1:1"])
     }
 
     func testSaysWhichScreensDidntSwitch() async {
@@ -176,7 +174,7 @@ final class SpacesModuleTests: XCTestCase {
         XCTAssertEqual(outcome, .failure("LG HDR 4K didn't switch to desktop 2",
                                          "Its thumbnail in Mission Control was pressed, and the screen stayed as it was."))
         XCTAssertEqual(fake.current[portrait.identifier], 30, "the other one did")
-        XCTAssertEqual(fake.pressed, [["1:1", "3:2"], ["3:2"]])
+        XCTAssertEqual(fake.pressed, ["1:1", "3:2", "3:2"], "twice, then it gives up")
 
         let closed = FakeSpaces()
         closed.failure = ModuleError("Mission Control didn't open", "KeybowNotes opens it to switch Spaces.")

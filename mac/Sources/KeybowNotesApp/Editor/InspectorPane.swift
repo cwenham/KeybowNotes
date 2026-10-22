@@ -250,16 +250,16 @@ private struct NodeInspector: View {
     /// Each step, summed up as the overlay would: "New event · Standup",
     /// and an If's steps under it.
     private func stepLines(_ steps: [ResolvedStep], of selection: ResolvedSelection, config: KeybowConfig,
-                           depth: Int = 0) -> [(id: String, depth: Int, text: String, isCondition: Bool)] {
-        var lines: [(id: String, depth: Int, text: String, isCondition: Bool)] = []
-        for (index, step) in steps.enumerated() {
+                           depth: Int = 0) -> [(depth: Int, text: String, isCondition: Bool)] {
+        var lines: [(depth: Int, text: String, isCondition: Bool)] = []
+        for step in steps {
             switch step.kind {
             case .action:
                 let summary = ActionSummary(selection: selection.doing(step), config: config,
                                             environment: ActionSummary.stepStandIns)
-                lines.append(("\(depth).\(index).\(lines.count)", depth, "\(summary.verb) · \(summary.subject)", false))
+                lines.append((depth, "\(summary.verb) · \(summary.subject)", false))
             case .condition(let condition):
-                lines.append(("\(depth).\(index).\(lines.count)", depth, condition.label, true))
+                lines.append((depth, condition.label, true))
                 lines += stepLines(step.steps, of: selection, config: config, depth: depth + 1)
             }
         }
@@ -324,7 +324,8 @@ private struct NodeInspector: View {
             let summary = ActionSummary(selection: selection, config: config)
             VStack(alignment: .leading, spacing: 3) {
                 Text("Pressing this runs, in turn").font(.caption).foregroundStyle(.secondary)
-                ForEach(stepLines(selection.steps, of: selection, config: config), id: \.id) { line in
+                // By position: a line's place in the list is what tells it apart.
+                ForEach(Array(stepLines(selection.steps, of: selection, config: config).enumerated()), id: \.offset) { _, line in
                     Text(line.text)
                         .font(.system(size: 13, weight: line.isCondition ? .regular : .semibold))
                         .foregroundStyle(line.isCondition ? Color.indigo : Color.primary)

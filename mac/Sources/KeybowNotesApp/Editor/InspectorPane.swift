@@ -196,11 +196,12 @@ private struct NodeInspector: View {
 
     // MARK: - Where and what
 
-    /// A step's name in the path: its label, or its number among its neighbours.
+    /// A name in the path: the label — or, without one, a step's number among
+    /// its neighbours, and for a key just added and not yet named, "New key".
     private func name(_ node: OutlineNode) -> String {
         guard node.label.isEmpty else { return node.label }
-        let address = model.document.stepAddress(of: node.id)
-        return "Step \((address?.path.last ?? 0) + 1)"
+        guard let address = model.document.stepAddress(of: node.id) else { return "New key" }
+        return "Step \((address.path.last ?? 0) + 1)"
     }
 
     /// Where a step is, and when it runs.

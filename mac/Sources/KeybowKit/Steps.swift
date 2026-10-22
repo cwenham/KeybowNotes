@@ -124,7 +124,7 @@ public struct StepTest: Equatable, Sendable {
 
     /// The words and signs, longest first, so `is not` is found before `is`.
     /// Words need a space on each side.
-    private static let spellings: [(String, Operator)] = [
+    static let spellings: [(String, Operator)] = [
         ("does not contain", .notContains), ("doesn't contain", .notContains), ("doesn’t contain", .notContains),
         ("is not empty", .notEmpty), ("isn't empty", .notEmpty), ("isn’t empty", .notEmpty),
         ("is empty", .empty),

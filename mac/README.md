@@ -34,6 +34,7 @@ swift test
 | `Troubleshooting.swift` | What a diagnosis is drawn from: keypads known and sought, drives, ports, console readings, key lights |
 | `TreeControl.swift` | The tree as scripts and agents change it: entries named by their labels, added, changed, removed, run, checked |
 | `AgentGuide.swift` | What an AI agent is told: the guides, and a catalogue of the action types here |
+| `EditorVocabulary.swift` | `keybow vocabulary`: every keyword, field and `{{value}}` as JSON, for the VS Code extension |
 | `TreeDraft.swift` | Trees designed with Claude: each turn's request, the outline found in the reply, and the draft carried into the file |
 | `MCPServer.swift` | `keybow mcp`: the Model Context Protocol, asking the app through its AppleScript |
 | `Troubleshooter.swift` | The rules: what's wrong with a missing or silent keypad, and what to do — plus a plain-text report |
@@ -222,6 +223,7 @@ Config commands:
 ./.build/debug/keybow convert tree.md                  # print the JSON it compiles to
 ./.build/debug/keybow tree tree.md                     # print the trees and each leaf's action
 ./.build/debug/keybow run tree.md                      # drive the keypad with its trees; prints, runs nothing
+./.build/debug/keybow vocabulary                       # the language's words as JSON, for ../vscode
 ```
 
 Without a file named, they use the tree the app does: the one chosen in its

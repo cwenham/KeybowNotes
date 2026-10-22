@@ -47,6 +47,9 @@ usage: keybow <command>
                      input and output — read the guide and the action types,
                      check outline text, read and change the trees, run
                      entries and work the stopwatch, through the app
+  vocabulary         print the outline language's keywords, fields and
+                     {{values}} as JSON, for editor tooling — what the VS Code
+                     extension's completion is made from
   upgrade-outline <outline>
                      rewrite an older outline in the current syntax: [brackets]
                      instead of (parentheses), plus # contacts and # projects
@@ -394,6 +397,14 @@ case "convert":
     report("Still to fill in", result.todo)
     report("Warnings", result.warnings)
     if let output { FileHandle.standardError.write(Data("\nWrote \(output)\n".utf8)) }
+    exit(0)
+
+case "vocabulary":
+    do {
+        print(try EditorVocabulary.json())
+    } catch {
+        fail("cannot write the vocabulary: \(error.localizedDescription)")
+    }
     exit(0)
 
 case "upgrade-outline":

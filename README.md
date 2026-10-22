@@ -458,6 +458,11 @@ Fields that take values colour them as you type, complete them after `{{`, and
 say when one is misspelt; a template can be edited in place. See
 [docs/TREE-EDITOR.md](docs/TREE-EDITOR.md).
 
+**In VS Code**, the extension in [vscode/](vscode/) colours `tree.md` and
+templates and completes keywords, fields, `{{values}}` and `If`/`Else` steps,
+with the tree editor's own help. It knows a KeybowNotes file from other
+Markdown by where it is and what's in it, and switches to its mode by itself.
+
 **Modules** — the stopwatch, Claude blocks, data sources, location, quotes,
 displays, Ask, window moving, Exposé, Spaces, meetings, Home Assistant and the Mac's own
 controls are modules: separate code that plugs in through one interface, adding
@@ -495,6 +500,8 @@ See [docs/AUTOMATION.md](docs/AUTOMATION.md).
 - **[mac/](mac/)** — a Swift package: the menu-bar app, the tree editor, the core
   library, a `keybow` command-line tool, and the modules. Everything that decides
   what a key means lives here, on the Mac.
+- **[vscode/](vscode/)** — a VS Code extension for editing the outline and
+  templates by hand.
 - **[docs/](docs/)** — the design, the configuration language, the editor, and
   the module interface.
 
@@ -599,6 +606,8 @@ through AppleScript rules that out.
   pictures, with a key of every kind
 - [firmware/README.md](firmware/README.md) — the keypad's side and its protocol
 - [mac/README.md](mac/README.md) — building, running and testing the Mac side
+- [vscode/README.md](vscode/README.md) — the VS Code extension: what it does,
+  installing it, and how it tells KeybowNotes files from other Markdown
 
 ## Licence
 

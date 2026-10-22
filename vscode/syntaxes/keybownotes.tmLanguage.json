@@ -1,0 +1,638 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "KeybowNotes Outline",
+  "scopeName": "source.keybownotes",
+  "patterns": [
+    {
+      "include": "#preamble"
+    },
+    {
+      "include": "#section-people"
+    },
+    {
+      "include": "#section-defaults"
+    },
+    {
+      "include": "#section-list"
+    },
+    {
+      "include": "#section-keypad"
+    },
+    {
+      "include": "#heading-tree"
+    },
+    {
+      "include": "#heading-other"
+    },
+    {
+      "include": "#tree"
+    }
+  ],
+  "repository": {
+    "preamble": {
+      "begin": "\\A(?![ \\t]*$)(?![ \\t]*(?:#|\\d+\\.|-(?:[ \\t]|$)|\\*[ \\t]))",
+      "end": "(?=^[ \\t]*(?:#|\\d+\\.|-(?:[ \\t]|$)|\\*[ \\t]))",
+      "name": "comment.block.preamble.keybownotes"
+    },
+    "section-people": {
+      "begin": "^[ \\t]*(#+)[ \\t]*((?i:contacts|projects))[ \\t]*$",
+      "beginCaptures": {
+        "0": {
+          "name": "markup.heading.keybownotes"
+        },
+        "1": {
+          "name": "punctuation.definition.heading.keybownotes"
+        },
+        "2": {
+          "name": "entity.name.section.keybownotes"
+        }
+      },
+      "end": "(?=^[ \\t]*#)",
+      "patterns": [
+        {
+          "include": "#entry"
+        },
+        {
+          "include": "#ignored"
+        }
+      ]
+    },
+    "section-defaults": {
+      "begin": "^[ \\t]*(#+)[ \\t]*((?i:defaults))[ \\t]*$",
+      "beginCaptures": {
+        "0": {
+          "name": "markup.heading.keybownotes"
+        },
+        "1": {
+          "name": "punctuation.definition.heading.keybownotes"
+        },
+        "2": {
+          "name": "entity.name.section.keybownotes"
+        }
+      },
+      "end": "(?=^[ \\t]*#)",
+      "patterns": [
+        {
+          "include": "#default"
+        },
+        {
+          "include": "#ignored"
+        }
+      ]
+    },
+    "section-list": {
+      "begin": "^[ \\t]*(#+)[ \\t]*((?i:list))[ \\t:]*(.+?)[ \\t]*$",
+      "beginCaptures": {
+        "0": {
+          "name": "markup.heading.keybownotes"
+        },
+        "1": {
+          "name": "punctuation.definition.heading.keybownotes"
+        },
+        "2": {
+          "name": "entity.name.section.keybownotes"
+        },
+        "3": {
+          "name": "entity.name.type.list.keybownotes"
+        }
+      },
+      "end": "(?=^[ \\t]*#)",
+      "patterns": [
+        {
+          "include": "#tree"
+        }
+      ]
+    },
+    "section-keypad": {
+      "begin": "^[ \\t]*(#+)[ \\t]*((?i:keypad))[ \\t]+(.*?)[ \\t]*(?:(\\[)(.*)(\\]))?[ \\t]*$",
+      "beginCaptures": {
+        "0": {
+          "name": "markup.heading.keybownotes"
+        },
+        "1": {
+          "name": "punctuation.definition.heading.keybownotes"
+        },
+        "2": {
+          "name": "entity.name.section.keybownotes"
+        },
+        "3": {
+          "name": "entity.name.type.keypad.keybownotes"
+        },
+        "4": {
+          "name": "punctuation.definition.annotations.begin.keybownotes"
+        },
+        "5": {
+          "patterns": [
+            {
+              "match": "(?i:keybow[ \\t]*2040|rgb[ \\t]*keypad(?:[ \\t]*base)?|pico[ \\t]*rgb[ \\t]*keypad|keybow|pico|rgb)",
+              "name": "support.type.model.keybownotes"
+            },
+            {
+              "match": "(id)[ \\t]*(:)[ \\t]*([^,\\]]*)",
+              "captures": {
+                "1": {
+                  "name": "support.type.property-name.keybownotes"
+                },
+                "2": {
+                  "name": "punctuation.separator.key-value.keybownotes"
+                },
+                "3": {
+                  "name": "constant.other.board-id.keybownotes"
+                }
+              }
+            },
+            {
+              "match": ",",
+              "name": "punctuation.separator.annotations.keybownotes"
+            }
+          ]
+        },
+        "6": {
+          "name": "punctuation.definition.annotations.end.keybownotes"
+        }
+      },
+      "end": "(?=^[ \\t]*#)",
+      "patterns": [
+        {
+          "include": "#tree"
+        }
+      ]
+    },
+    "heading-tree": {
+      "match": "^[ \\t]*(#+)[ \\t]*((?i:(?:tree[ \\t-]*)?(?:main|top|row[ \\t-]*[123]|row[ \\t-]*4(?:[ \\t-]*up)?|bottom(?:[ \\t-]*up)?)(?:[ \\t-]*tree)?))[ \\t]*(?:(\\[)([^\\]]*)(\\]))?[ \\t]*$",
+      "name": "markup.heading.keybownotes",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.heading.keybownotes"
+        },
+        "2": {
+          "name": "entity.name.section.keybownotes"
+        },
+        "3": {
+          "name": "punctuation.definition.annotations.begin.keybownotes"
+        },
+        "4": {
+          "patterns": [
+            {
+              "match": "(?i:\\bpages\\b)",
+              "name": "keyword.other.pages.keybownotes"
+            }
+          ]
+        },
+        "5": {
+          "name": "punctuation.definition.annotations.end.keybownotes"
+        }
+      }
+    },
+    "heading-other": {
+      "match": "^[ \\t]*(#+)[ \\t]*(.*)$",
+      "name": "markup.heading.keybownotes",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.heading.keybownotes"
+        },
+        "2": {
+          "name": "entity.name.section.title.keybownotes"
+        }
+      }
+    },
+    "tree": {
+      "patterns": [
+        {
+          "include": "#item"
+        },
+        {
+          "include": "#step"
+        },
+        {
+          "include": "#ignored"
+        }
+      ]
+    },
+    "item": {
+      "begin": "^([ \\t]*)(\\d+)(\\.)",
+      "beginCaptures": {
+        "2": {
+          "name": "constant.numeric.key.keybownotes"
+        },
+        "3": {
+          "name": "punctuation.separator.key.keybownotes"
+        }
+      },
+      "end": "$",
+      "name": "meta.item.keybownotes",
+      "patterns": [
+        {
+          "include": "#annotations"
+        },
+        {
+          "include": "#escape"
+        }
+      ]
+    },
+    "step": {
+      "begin": "^([ \\t]*)(-(?=[ \\t]|$)|\\*(?=[ \\t]))",
+      "beginCaptures": {
+        "2": {
+          "name": "punctuation.definition.list.begin.step.keybownotes"
+        }
+      },
+      "end": "$",
+      "name": "meta.step.keybownotes",
+      "patterns": [
+        {
+          "include": "#condition-else"
+        },
+        {
+          "include": "#condition"
+        },
+        {
+          "include": "#annotations"
+        },
+        {
+          "include": "#escape"
+        }
+      ]
+    },
+    "condition": {
+      "begin": "\\G[ \\t]*((?i:else[ \\t]+if|otherwise[ \\t]+if|elif|if))(?=[ \\t]|:|$)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.conditional.keybownotes"
+        }
+      },
+      "end": "(?=\\[(?=(?:[^\\[\"\\\\]|\\\\.|\"(?:[^\"\\\\]|\\\\.)*\")*\\][ \\t]*$))|$",
+      "name": "meta.condition.keybownotes",
+      "patterns": [
+        {
+          "match": ":(?=[ \\t]*(?:\\[(?=(?:[^\\[\"\\\\]|\\\\.|\"(?:[^\"\\\\]|\\\\.)*\")*\\][ \\t]*$)|$))",
+          "name": "punctuation.separator.condition.keybownotes"
+        },
+        {
+          "match": "\"(?:[^\"\\\\]|\\\\.)*\"",
+          "name": "string.quoted.double.keybownotes"
+        },
+        {
+          "match": "'[^']*'",
+          "name": "string.quoted.single.keybownotes"
+        },
+        {
+          "include": "source.keybownotes.tags"
+        },
+        {
+          "match": "(?<=[ \\t])(?i:does not contain|doesn't contain|doesn’t contain|is not empty|isn't empty|isn’t empty|starts with|begins with|ends with|is empty|contains|is not|equals|isn't|isn’t|is)(?=[ \\t]|$)",
+          "name": "keyword.operator.wordlike.keybownotes"
+        },
+        {
+          "match": "==|!=|>=|<=|=|>|<",
+          "name": "keyword.operator.comparison.keybownotes"
+        }
+      ]
+    },
+    "condition-else": {
+      "match": "\\G[ \\t]*((?i:else|otherwise))[ \\t]*(:)?(?=[ \\t]*(?:\\[|$))",
+      "captures": {
+        "1": {
+          "name": "keyword.control.conditional.keybownotes"
+        },
+        "2": {
+          "name": "punctuation.separator.condition.keybownotes"
+        }
+      }
+    },
+    "escape": {
+      "match": "\\\\[\\[\\]]",
+      "name": "constant.character.escape.keybownotes"
+    },
+    "annotations": {
+      "begin": "(\\[)(?=(?:[^\\[\"\\\\]|\\\\.|\"(?:[^\"\\\\]|\\\\.)*\")*\\][ \\t]*$)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.annotations.begin.keybownotes"
+        }
+      },
+      "end": "(\\])[ \\t]*$|$",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.annotations.end.keybownotes"
+        }
+      },
+      "name": "meta.annotations.keybownotes",
+      "patterns": [
+        {
+          "include": "#pair-colour"
+        },
+        {
+          "include": "#pair-type"
+        },
+        {
+          "include": "#pair-holder"
+        },
+        {
+          "include": "#pair-field"
+        },
+        {
+          "include": "#pair"
+        },
+        {
+          "include": "#word-list"
+        },
+        {
+          "include": "#word-alert"
+        },
+        {
+          "include": "#word-link"
+        },
+        {
+          "include": "#word-template"
+        },
+        {
+          "include": "#word-keyword"
+        },
+        {
+          "include": "#word-other"
+        },
+        {
+          "match": ",",
+          "name": "punctuation.separator.annotations.keybownotes"
+        }
+      ]
+    },
+    "pair-colour": {
+      "begin": "(?<=[\\[,])[ \\t]*((?i:colou?r))(:)(?!//)[ \\t]*",
+      "beginCaptures": {
+        "1": {
+          "name": "support.type.property-name.colour.keybownotes"
+        },
+        "2": {
+          "name": "punctuation.separator.key-value.keybownotes"
+        }
+      },
+      "end": "(?=,|\\][ \\t]*$)|$",
+      "contentName": "",
+      "patterns": [
+        {
+          "match": "\\G#?[0-9A-Fa-f]{6}(?=[ \\t]*(?:,|\\][ \\t]*$))",
+          "name": "constant.other.color.rgb-value.keybownotes"
+        },
+        {
+          "include": "#value"
+        }
+      ]
+    },
+    "pair-type": {
+      "begin": "(?<=[\\[,])[ \\t]*(type)(:)(?!//)[ \\t]*",
+      "beginCaptures": {
+        "1": {
+          "name": "support.type.property-name.type.keybownotes"
+        },
+        "2": {
+          "name": "punctuation.separator.key-value.keybownotes"
+        }
+      },
+      "end": "(?=,|\\][ \\t]*$)|$",
+      "contentName": "",
+      "patterns": [
+        {
+          "match": "\\G(?:calendar\\.createEvent|reminders\\.complete|text\\.insertDirect|reminders\\.create|messages\\.compose|calendar\\.addNote|clipboard\\.copy|calendar\\.join|notes\\.create|notes\\.append|mail\\.compose|text\\.insert|clock\\.timer|maps\\.search|phone\\.call|music\\.play|microphone|brightness|nightShift|stopwatch|bluetooth|stayAwake|app\\.open|url\\.open|shortcut|darkMode|display|window|expose|spaces|volume|focus|home|wifi|ask)(?=[ \\t]*(?:,|\\][ \\t]*$))",
+          "name": "support.type.action.keybownotes"
+        },
+        {
+          "include": "#value"
+        }
+      ]
+    },
+    "pair-holder": {
+      "begin": "(?<=[\\[,])[ \\t]*(cancel|ok)(:)(?!//)[ \\t]*",
+      "beginCaptures": {
+        "1": {
+          "name": "support.type.property-name.field.keybownotes"
+        },
+        "2": {
+          "name": "punctuation.separator.key-value.keybownotes"
+        }
+      },
+      "end": "(?=,|\\][ \\t]*$)|$",
+      "contentName": "",
+      "patterns": [
+        {
+          "match": "\\G(?i:Complete Reminder|Mission Control|Home Assistant|Direct Insert|Join Meeting|Add to Event|Night Shift|Event Note|Microphone|Brightness|Stay Awake|Keep Awake|Reminders|Clipboard|Stopwatch|Bluetooth|Dark Mode|Calendar|Messages|FaceTime|Tick Off|Browser|Display|Arrange|Create|append|Insert|Prompt|Window|Exposé|Expose|Spaces|Volume|Notes|Paste|Timer|Music|Space|Wi\\-Fi|Focus|Mail|Call|Link|Copy|Type|Maps|Show|Home|Join|Done|WiFi|New|Ask|Mic)(?=[ \\t]*(?:,|\\][ \\t]*$))",
+          "name": "keyword.other.action.keybownotes"
+        },
+        {
+          "match": "\\G(?:calendar\\.createEvent|reminders\\.complete|text\\.insertDirect|reminders\\.create|messages\\.compose|calendar\\.addNote|clipboard\\.copy|calendar\\.join|notes\\.create|notes\\.append|mail\\.compose|text\\.insert|clock\\.timer|maps\\.search|phone\\.call|music\\.play|microphone|brightness|nightShift|stopwatch|bluetooth|stayAwake|app\\.open|url\\.open|shortcut|darkMode|display|window|expose|spaces|volume|focus|home|wifi|ask)(?=[ \\t]*(?:,|\\][ \\t]*$))",
+          "name": "support.type.action.keybownotes"
+        },
+        {
+          "include": "#value"
+        }
+      ]
+    },
+    "pair-field": {
+      "begin": "(?<=[\\[,])[ \\t]*((?:(?:cancel|ok)\\.)?(?:guards\\.refuseInlineImages|guards\\.maxBodyBytes|createIfMissing|alertMinutes|find\\.byName|temperature|calendarId|brightness|multiline|template|duration|calendar|bundleId|shortcut|playlist|account|subject|shuffle|initial|screen1|screen2|screen3|screen4|screen5|screen6|service|instant|folder|target|format|artist|button|cancel|screen|entity|kelvin|title|entry|start|notes|query|album|genre|input|place|color|value|which|level|show|list|body|open|text|song|name|fade|hint|mode|data|step|due|via|app|url|to|do|ok)(?![\\p{L}\\p{N}._-]))(:)(?!//)[ \\t]*",
+      "beginCaptures": {
+        "1": {
+          "name": "support.type.property-name.field.keybownotes"
+        },
+        "2": {
+          "name": "punctuation.separator.key-value.keybownotes"
+        }
+      },
+      "end": "(?=,|\\][ \\t]*$)|$",
+      "contentName": "string.unquoted.value.keybownotes",
+      "patterns": [
+        {
+          "include": "#scalar"
+        },
+        {
+          "include": "#value"
+        }
+      ]
+    },
+    "pair": {
+      "begin": "(?<=[\\[,])[ \\t]*([\\p{L}][\\p{L}\\p{N}._-]*)(:)(?!//)[ \\t]*",
+      "beginCaptures": {
+        "1": {
+          "name": "variable.other.property.keybownotes"
+        },
+        "2": {
+          "name": "punctuation.separator.key-value.keybownotes"
+        }
+      },
+      "end": "(?=,|\\][ \\t]*$)|$",
+      "contentName": "string.unquoted.value.keybownotes",
+      "patterns": [
+        {
+          "include": "#scalar"
+        },
+        {
+          "include": "#value"
+        }
+      ]
+    },
+    "scalar": {
+      "patterns": [
+        {
+          "match": "\\G(?:true|false)(?=[ \\t]*(?:,|\\][ \\t]*$))",
+          "name": "constant.language.boolean.keybownotes"
+        },
+        {
+          "match": "\\G-?\\d+(?:\\.\\d+)?(?=[ \\t]*(?:,|\\][ \\t]*$))",
+          "name": "constant.numeric.keybownotes"
+        }
+      ]
+    },
+    "value": {
+      "patterns": [
+        {
+          "begin": "\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.keybownotes"
+            }
+          },
+          "end": "(\")|$",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.string.end.keybownotes"
+            }
+          },
+          "name": "string.quoted.double.keybownotes",
+          "patterns": [
+            {
+              "include": "source.keybownotes.tags"
+            },
+            {
+              "match": "\\\\.",
+              "name": "constant.character.escape.keybownotes"
+            }
+          ]
+        },
+        {
+          "include": "source.keybownotes.tags"
+        }
+      ]
+    },
+    "word-list": {
+      "match": "(?<=[\\[,])[ \\t]*(@)([^,\\]]*?)(?=[ \\t]*(?:,|\\][ \\t]*$))",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.list-reference.keybownotes"
+        },
+        "2": {
+          "name": "variable.other.list.keybownotes"
+        }
+      }
+    },
+    "word-alert": {
+      "match": "(?<=[\\[,])[ \\t]*(\\d+)[ \\t]*((?i:minutes|minute|mins|min|hours|hour|hrs|hr|h))[ \\t]+((?i:alert))(?=[ \\t]*(?:,|\\][ \\t]*$))",
+      "captures": {
+        "1": {
+          "name": "constant.numeric.keybownotes"
+        },
+        "2": {
+          "name": "keyword.other.unit.keybownotes"
+        },
+        "3": {
+          "name": "keyword.other.action.keybownotes"
+        }
+      }
+    },
+    "word-link": {
+      "match": "(?<=[\\[,])[ \\t]*([\\p{L}][\\p{L}\\p{N}+.-]*://[^,\\]]*?)(?=[ \\t]*(?:,|\\][ \\t]*$))",
+      "captures": {
+        "1": {
+          "name": "string.other.link.keybownotes markup.underline.link.keybownotes"
+        }
+      }
+    },
+    "word-template": {
+      "match": "(?<=[\\[,])[ \\t]*([^,\\]\"]*?\\.(?i:md))(?=[ \\t]*(?:,|\\][ \\t]*$))",
+      "captures": {
+        "1": {
+          "name": "string.unquoted.template.keybownotes"
+        }
+      }
+    },
+    "word-keyword": {
+      "match": "(?<=[\\[,])[ \\t]*((?i:Complete Reminder|Mission Control|Home Assistant|Direct Insert|Join Meeting|Add to Event|Night Shift|Event Note|Microphone|Brightness|Stay Awake|Keep Awake|Reminders|Clipboard|Stopwatch|Bluetooth|Dark Mode|Calendar|Messages|FaceTime|Tick Off|Browser|Display|Arrange|Create|append|Insert|Prompt|Window|Exposé|Expose|Spaces|Volume|Notes|Paste|Timer|Music|Space|Wi\\-Fi|Focus|Mail|Call|Link|Copy|Type|Maps|Show|Home|Join|Done|WiFi|New|Ask|Mic))(?=[ \\t]*(?:,|\\][ \\t]*$))",
+      "captures": {
+        "1": {
+          "name": "keyword.other.action.keybownotes"
+        }
+      }
+    },
+    "word-other": {
+      "match": "(?<=[\\[,])[ \\t]*([^,\\]\"]+?)(?=[ \\t]*(?:,|\\][ \\t]*$))",
+      "captures": {
+        "1": {
+          "name": "entity.name.type.app.keybownotes"
+        }
+      }
+    },
+    "entry": {
+      "begin": "^([ \\t]*)(-(?=[ \\t]|$)|\\*(?=[ \\t]))[ \\t]*",
+      "beginCaptures": {
+        "2": {
+          "name": "punctuation.definition.list.begin.keybownotes"
+        }
+      },
+      "end": "$",
+      "name": "meta.entry.keybownotes",
+      "patterns": [
+        {
+          "match": "\\G((?:[^\\[\\\\]|\\\\.)+?)(?=[ \\t]*(?:\\[(?=(?:[^\\[\"\\\\]|\\\\.|\"(?:[^\"\\\\]|\\\\.)*\")*\\][ \\t]*$)|$))",
+          "captures": {
+            "1": {
+              "name": "entity.name.type.entry.keybownotes"
+            }
+          }
+        },
+        {
+          "include": "#annotations"
+        }
+      ]
+    },
+    "default": {
+      "begin": "^([ \\t]*)(-|\\*)[ \\t]+([\\p{L}][\\p{L}\\p{N}._-]*)[ \\t]*(:)[ \\t]*",
+      "beginCaptures": {
+        "2": {
+          "name": "punctuation.definition.list.begin.keybownotes"
+        },
+        "3": {
+          "name": "support.type.property-name.default.keybownotes"
+        },
+        "4": {
+          "name": "punctuation.separator.key-value.keybownotes"
+        }
+      },
+      "end": "$",
+      "name": "meta.default.keybownotes",
+      "patterns": [
+        {
+          "match": "\\G#?[0-9A-Fa-f]{6}[ \\t]*$",
+          "name": "constant.other.color.rgb-value.keybownotes"
+        },
+        {
+          "match": "\\G(?:true|false)[ \\t]*$",
+          "name": "constant.language.boolean.keybownotes"
+        },
+        {
+          "match": "\\G-?\\d+(?:\\.\\d+)?[ \\t]*$",
+          "name": "constant.numeric.keybownotes"
+        },
+        {
+          "match": "\\G(?:calendar\\.createEvent|reminders\\.complete|text\\.insertDirect|reminders\\.create|messages\\.compose|calendar\\.addNote|clipboard\\.copy|calendar\\.join|notes\\.create|notes\\.append|mail\\.compose|text\\.insert|clock\\.timer|maps\\.search|phone\\.call|music\\.play|microphone|brightness|nightShift|stopwatch|bluetooth|stayAwake|app\\.open|url\\.open|shortcut|darkMode|display|window|expose|spaces|volume|focus|home|wifi|ask)[ \\t]*$",
+          "name": "support.type.action.keybownotes"
+        },
+        {
+          "include": "#value"
+        }
+      ]
+    },
+    "ignored": {
+      "match": "^(?![ \\t]*(?:#|\\d+\\.|-(?:[ \\t]|$)|\\*[ \\t]))[ \\t]*\\S.*$",
+      "name": "comment.line.ignored.keybownotes"
+    }
+  }
+}

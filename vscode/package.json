@@ -1,0 +1,120 @@
+{
+  "name": "keybownotes",
+  "displayName": "KeybowNotes",
+  "description": "Highlighting and completion for KeybowNotes' outline (tree.md) and its templates, with {{values}}, steps and If/Else.",
+  "version": "0.1.0",
+  "publisher": "cwenham",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cwenham/KeybowNotes",
+    "directory": "vscode"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "keybow",
+    "keypad",
+    "outline",
+    "templates"
+  ],
+  "main": "./src/extension.js",
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "keybownotes",
+        "aliases": [
+          "KeybowNotes Outline",
+          "keybownotes"
+        ],
+        "filenamePatterns": [
+          "**/KeybowNotes/tree.md",
+          "**/tree.demo.md"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "keybownotes-template",
+        "aliases": [
+          "KeybowNotes Template"
+        ],
+        "filenamePatterns": [
+          "**/KeybowNotes/templates/**/*.md"
+        ],
+        "configuration": "./template-language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "keybownotes",
+        "scopeName": "source.keybownotes",
+        "path": "./syntaxes/keybownotes.tmLanguage.json"
+      },
+      {
+        "language": "keybownotes-template",
+        "scopeName": "text.html.markdown.keybownotes",
+        "path": "./syntaxes/keybownotes-template.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.html": "html",
+          "meta.embedded.block.frontmatter": "yaml"
+        }
+      },
+      {
+        "scopeName": "source.keybownotes.tags",
+        "path": "./syntaxes/keybownotes-tags.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "KeybowNotes",
+      "properties": {
+        "keybownotes.detect.outlines": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Open Markdown files that read as a KeybowNotes outline — numbered keys with `[annotations]`, `# row 2` and the like — in the KeybowNotes Outline mode."
+        },
+        "keybownotes.detect.templates": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Open Markdown files that use KeybowNotes `{{values}}` — `{{leaf}}`, `{{date:d MMM}}`, `{{#each}}` — in the KeybowNotes Template mode."
+        }
+      }
+    },
+    "configurationDefaults": {
+      "[keybownotes]": {
+        "editor.quickSuggestions": {
+          "other": "on",
+          "strings": "on",
+          "comments": "off"
+        },
+        "editor.wordBasedSuggestions": "off",
+        "editor.unicodeHighlight.ambiguousCharacters": false,
+        "editor.unicodeHighlight.invisibleCharacters": false
+      },
+      "[keybownotes-template]": {
+        "editor.wordWrap": "on",
+        "editor.wordBasedSuggestions": "off",
+        "editor.unicodeHighlight.ambiguousCharacters": false,
+        "editor.unicodeHighlight.invisibleCharacters": false
+      }
+    }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.*",
+    "test:vscode": "node test/vscode/run.js",
+    "vocabulary": "sh scripts/update-vocabulary.sh",
+    "grammars": "node scripts/build-grammars.mjs",
+    "package": "vsce package --no-dependencies --baseImagesUrl https://github.com/cwenham/KeybowNotes/raw/HEAD/vscode/"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.2.1",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.1.0"
+  }
+}

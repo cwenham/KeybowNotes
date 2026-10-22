@@ -1,0 +1,65 @@
+{
+  "brackets": [
+    [
+      "[",
+      "]"
+    ],
+    [
+      "{",
+      "}"
+    ]
+  ],
+  "colorizedBracketPairs": [],
+  "autoClosingPairs": [
+    {
+      "open": "[",
+      "close": "]"
+    },
+    {
+      "open": "{",
+      "close": "}"
+    },
+    {
+      "open": "\"",
+      "close": "\"",
+      "notIn": [
+        "string"
+      ]
+    }
+  ],
+  "autoCloseBefore": ";:.,=}])>` \n\t",
+  "surroundingPairs": [
+    [
+      "[",
+      "]"
+    ],
+    [
+      "{",
+      "}"
+    ],
+    [
+      "\"",
+      "\""
+    ],
+    [
+      "'",
+      "'"
+    ]
+  ],
+  "folding": {
+    "offSide": true
+  },
+  "wordPattern": {
+    "pattern": "[\\p{L}\\p{N}_@][\\p{L}\\p{N}_.@-]*",
+    "flags": "ug"
+  },
+  "onEnterRules": [
+    {
+      "beforeText": "^\\s*[-*]\\s+\\S.*$",
+      "action": {
+        "indent": "none",
+        "appendText": "- "
+      }
+    }
+  ]
+}

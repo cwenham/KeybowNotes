@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "KeybowNotes Template",
+  "scopeName": "text.html.markdown.keybownotes",
+  "patterns": [
+    {
+      "include": "text.html.markdown"
+    }
+  ],
+  "injections": {
+    "L:text.html.markdown.keybownotes -comment": {
+      "patterns": [
+        {
+          "include": "source.keybownotes.tags"
+        }
+      ]
+    }
+  }
+}

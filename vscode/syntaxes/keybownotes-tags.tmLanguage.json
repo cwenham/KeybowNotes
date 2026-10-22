@@ -1,0 +1,205 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "KeybowNotes values",
+  "scopeName": "source.keybownotes.tags",
+  "patterns": [
+    {
+      "include": "#tag"
+    }
+  ],
+  "repository": {
+    "tag": {
+      "patterns": [
+        {
+          "include": "#block-closing"
+        },
+        {
+          "include": "#block-opening"
+        },
+        {
+          "include": "#value"
+        }
+      ]
+    },
+    "block-closing": {
+      "match": "(\\{\\{)(/)[ \\t]*([^\\s}]*)[ \\t]*(\\}\\})",
+      "name": "meta.tag.block.closing.keybownotes",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.tag.begin.keybownotes"
+        },
+        "2": {
+          "name": "keyword.control.block.keybownotes"
+        },
+        "3": {
+          "name": "entity.name.function.block.keybownotes"
+        },
+        "4": {
+          "name": "punctuation.definition.tag.end.keybownotes"
+        }
+      }
+    },
+    "block-opening": {
+      "begin": "(\\{\\{)(#)[ \\t]*([\\p{L}_][\\p{L}\\p{N}_.-]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.begin.keybownotes"
+        },
+        "2": {
+          "name": "keyword.control.block.keybownotes"
+        },
+        "3": {
+          "name": "entity.name.function.block.keybownotes"
+        }
+      },
+      "end": "(\\}\\})|$",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.end.keybownotes"
+        }
+      },
+      "name": "meta.tag.block.opening.keybownotes",
+      "patterns": [
+        {
+          "include": "#list-source"
+        },
+        {
+          "include": "#attributes"
+        }
+      ]
+    },
+    "value": {
+      "begin": "(\\{\\{)(?![#/])",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.begin.keybownotes"
+        }
+      },
+      "end": "(\\}\\})|$",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.end.keybownotes"
+        }
+      },
+      "name": "meta.tag.value.keybownotes",
+      "patterns": [
+        {
+          "include": "#name"
+        },
+        {
+          "match": "(:)([^|}]*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.separator.format.keybownotes"
+            },
+            "2": {
+              "name": "string.unquoted.format.keybownotes"
+            }
+          }
+        },
+        {
+          "begin": "\\|",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.separator.fallback.keybownotes"
+            }
+          },
+          "end": "(?=\\}\\})|$",
+          "contentName": "string.unquoted.fallback.keybownotes",
+          "patterns": [
+            {
+              "include": "#strings"
+            },
+            {
+              "include": "#tag"
+            }
+          ]
+        },
+        {
+          "include": "#attributes"
+        }
+      ]
+    },
+    "name": {
+      "patterns": [
+        {
+          "match": "\\G[ \\t]*((?:event\\.next\\.|@average\\.|contact\\.|project\\.|@sum\\.|@min\\.|@max\\.|home\\.|api\\.)[^\\s}|:='\"{]+|(?:location\\.longitude|stopwatch\\.seconds|location\\.latitude|location\\.altitude|location\\.accuracy|stopwatch\\.splits|event\\.attendees|event\\.organizer|agenda\\.tomorrow|stopwatch\\.laps|event\\.location|event\\.calendar|reminder\\.title|reminder\\.notes|contact\\.phone|contact\\.email|reminder\\.list|contact\\.name|project\\.name|project\\.path|agenda\\.today|reminder\\.due|event\\.title|event\\.start|event\\.notes|folderPath|parentPath|event\\.time|event\\.date|event\\.link|event\\.next|selection|clipboard|stopwatch|displayed|event\\.end|datetime|frontApp|@columns|location|reminder|weekday|isoWeek|@number|parent|level1|level2|level3|level4|@count|answer|agenda|quote|event|leaf|path|tree|date|time|@row|file))(?=[\\s}|:]|$)",
+          "captures": {
+            "1": {
+              "name": "support.variable.keybownotes"
+            }
+          }
+        },
+        {
+          "match": "\\G[ \\t]*([^\\s}|:='\"{]+)",
+          "captures": {
+            "1": {
+              "name": "variable.other.keybownotes"
+            }
+          }
+        }
+      ]
+    },
+    "list-source": {
+      "patterns": [
+        {
+          "match": "\\G[ \\t]+((?:event\\.next\\.|@average\\.|contact\\.|project\\.|@sum\\.|@min\\.|@max\\.|home\\.|api\\.)[^\\s}|:='\"{]+|(?:location\\.longitude|stopwatch\\.seconds|location\\.latitude|location\\.altitude|location\\.accuracy|stopwatch\\.splits|event\\.attendees|event\\.organizer|agenda\\.tomorrow|stopwatch\\.laps|event\\.location|event\\.calendar|reminder\\.title|reminder\\.notes|contact\\.phone|contact\\.email|reminder\\.list|contact\\.name|project\\.name|project\\.path|agenda\\.today|reminder\\.due|event\\.title|event\\.start|event\\.notes|folderPath|parentPath|event\\.time|event\\.date|event\\.link|event\\.next|selection|clipboard|stopwatch|displayed|event\\.end|datetime|frontApp|@columns|location|reminder|weekday|isoWeek|@number|parent|level1|level2|level3|level4|@count|answer|agenda|quote|event|leaf|path|tree|date|time|@row|file))(?=[\\s}]|$)",
+          "captures": {
+            "1": {
+              "name": "support.variable.keybownotes"
+            }
+          }
+        },
+        {
+          "match": "\\G[ \\t]+([^\\s}|:='\"{]+)(?![=\\p{L}\\p{N}_.@-])",
+          "captures": {
+            "1": {
+              "name": "variable.other.keybownotes"
+            }
+          }
+        }
+      ]
+    },
+    "attributes": {
+      "patterns": [
+        {
+          "match": "([\\p{L}_][\\p{L}\\p{N}_-]*)(=)",
+          "captures": {
+            "1": {
+              "name": "entity.other.attribute-name.keybownotes"
+            },
+            "2": {
+              "name": "punctuation.separator.key-value.keybownotes"
+            }
+          }
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#tag"
+        },
+        {
+          "match": "(?<==)[^\\s}'\"|{\\\\]+",
+          "name": "string.unquoted.attribute-value.keybownotes"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "match": "\\\\\"(?:[^\"\\\\]|\\\\[^\"])*?\\\\\"",
+          "name": "string.quoted.double.keybownotes"
+        },
+        {
+          "match": "\"[^\"]*\"",
+          "name": "string.quoted.double.keybownotes"
+        },
+        {
+          "match": "'[^']*'",
+          "name": "string.quoted.single.keybownotes"
+        }
+      ]
+    }
+  }
+}

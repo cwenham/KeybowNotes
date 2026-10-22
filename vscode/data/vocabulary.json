@@ -1,0 +1,2239 @@
+{
+  "actions" : [
+    {
+      "fields" : [
+        {
+          "help" : "The note's title. A template whose first line is a # heading names the note instead.\nExample: {{leaf}} — {{date:d MMM yyyy}}",
+          "key" : "title",
+          "kind" : "text",
+          "title" : "Title"
+        },
+        {
+          "help" : "The Notes folder, levels separated by /. Missing folders are made. Empty: the account's default folder.\nExample: Work/Meetings/{{parent}}",
+          "hint" : "Levels separated by /",
+          "key" : "folder",
+          "kind" : "text",
+          "title" : "Folder"
+        },
+        {
+          "help" : "A file whose text starts the note. Markdown headings, lists and bold become Notes formatting.\nExample: standup.md",
+          "key" : "template",
+          "kind" : "text",
+          "title" : "Template"
+        },
+        {
+          "help" : "The Notes account, by name, if you have more than one. Empty: the default account.\nExample: iCloud",
+          "key" : "account",
+          "kind" : "text",
+          "title" : "Account"
+        }
+      ],
+      "keywords" : [
+        "Notes",
+        "New",
+        "Create"
+      ],
+      "takesText" : false,
+      "title" : "New note",
+      "type" : "notes.create"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "The note to add to, by its title. It's made the first time if Create if missing is on.\nExamples: {{leaf}} · Journal",
+          "key" : "find.byName",
+          "kind" : "text",
+          "title" : "Note"
+        },
+        {
+          "help" : "The folder the note is in, levels separated by /.\nExample: Projects/{{parent}}",
+          "key" : "folder",
+          "kind" : "text",
+          "title" : "Folder"
+        },
+        {
+          "help" : "A file whose text is the entry added each time.\nExample: worklog.md",
+          "key" : "template",
+          "kind" : "text",
+          "title" : "Template"
+        },
+        {
+          "help" : "What's added to the note, if there's no template. Markdown works; ⌥Return for a new line.\nExample: **{{datetime}}** — {{selection}}",
+          "key" : "entry",
+          "kind" : "text",
+          "title" : "Entry"
+        },
+        {
+          "help" : "Make the note if there's none by that name. Off: stop and say so instead.",
+          "key" : "createIfMissing",
+          "kind" : "flag",
+          "title" : "Create if missing"
+        },
+        {
+          "help" : "Won't add to a note longer than this many characters: adding rewrites the whole note.\nExample: 500000",
+          "hint" : "characters",
+          "key" : "guards.maxBodyBytes",
+          "kind" : "number",
+          "title" : "Largest note"
+        },
+        {
+          "help" : "Won't add to a note with an image in its text, which adding would turn into an attachment.",
+          "key" : "guards.refuseInlineImages",
+          "kind" : "flag",
+          "title" : "Refuse inline images"
+        }
+      ],
+      "keywords" : [
+        "append"
+      ],
+      "takesText" : false,
+      "title" : "Add to a note",
+      "type" : "notes.append"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "The event's title.\nExample: {{parent}} with {{leaf}}",
+          "key" : "title",
+          "kind" : "text",
+          "title" : "Title"
+        },
+        {
+          "help" : "When it starts: a day, a time, or both. \"today\" is half an hour from now; other days start at 9:00.\nExamples: tomorrow 14:00 · friday · +2h · 2026-10-01 · {{when}}",
+          "hint" : "tomorrow 14:00, friday…",
+          "key" : "start",
+          "kind" : "text",
+          "title" : "Starts"
+        },
+        {
+          "help" : "How long it lasts, in minutes or hours.\nExamples: 30m · 1h · 90 min",
+          "hint" : "30m, 1h",
+          "key" : "duration",
+          "kind" : "text",
+          "title" : "Duration"
+        },
+        {
+          "help" : "An alert this many minutes before it starts. Can also be a word in the brackets: [10 min alert].\nExample: 10",
+          "hint" : "minutes before",
+          "key" : "alertMinutes",
+          "kind" : "number",
+          "title" : "Alert"
+        },
+        {
+          "help" : "The calendar, by name. Empty: the one chosen in Settings, else Calendar's default.\nExample: Work",
+          "key" : "calendar",
+          "kind" : "text",
+          "title" : "Calendar"
+        },
+        {
+          "help" : "The calendar by its identifier, which survives renaming. Usually left empty; name it in Calendar instead.",
+          "key" : "calendarId",
+          "kind" : "text",
+          "title" : "Calendar ID"
+        },
+        {
+          "help" : "Notes added to it. Placeholders work.\nExample: From {{frontApp}}: {{selection}}",
+          "key" : "notes",
+          "kind" : "text",
+          "title" : "Notes"
+        },
+        {
+          "help" : "Open the new event in Calendar, ready to edit.",
+          "key" : "show",
+          "kind" : "flag",
+          "title" : "Open for editing"
+        }
+      ],
+      "keywords" : [
+        "Calendar"
+      ],
+      "takesText" : false,
+      "title" : "Calendar event",
+      "type" : "calendar.createEvent"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "The reminder.\nExample: Call {{leaf}}",
+          "key" : "title",
+          "kind" : "text",
+          "title" : "Title"
+        },
+        {
+          "help" : "When it's due, and when it alerts: a length from now, or a day and time.\nExamples: +25m · tomorrow 9:00 · friday · {{when}}",
+          "hint" : "+25m, tomorrow…",
+          "key" : "due",
+          "kind" : "text",
+          "title" : "Due"
+        },
+        {
+          "help" : "The Reminders list, by name. Empty: the one chosen in Settings, else the default list.\nExample: Errands",
+          "key" : "list",
+          "kind" : "text",
+          "title" : "List"
+        },
+        {
+          "help" : "Notes added to it. Placeholders work.\nExample: From {{frontApp}}: {{selection}}",
+          "key" : "notes",
+          "kind" : "text",
+          "title" : "Notes"
+        }
+      ],
+      "keywords" : [
+        "Reminders"
+      ],
+      "takesText" : false,
+      "title" : "Reminder",
+      "type" : "reminders.create"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "The phone number or email address to message. Usually the contact's, which is the default.\nExamples: {{contact.phone}} · +44 7700 900123",
+          "key" : "to",
+          "kind" : "text",
+          "title" : "To"
+        },
+        {
+          "help" : "The message, ready in Messages — nothing is sent until you press Return there. ⌥Return for a new line.\nExample: Running late, there by {{time}}",
+          "key" : "body",
+          "kind" : "text",
+          "title" : "Message"
+        },
+        {
+          "help" : "A file whose text is the message instead.\nExample: late.md",
+          "key" : "template",
+          "kind" : "text",
+          "title" : "Template"
+        }
+      ],
+      "keywords" : [
+        "Messages"
+      ],
+      "takesText" : false,
+      "title" : "Message",
+      "type" : "messages.compose"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "The address to write to. Usually the contact's, which is the default. Empty: a draft with no one to send to.\nExamples: {{contact.email}} · alex@example.com",
+          "key" : "to",
+          "kind" : "text",
+          "title" : "To"
+        },
+        {
+          "help" : "The email's subject.\nExample: Notes from {{date}}",
+          "key" : "subject",
+          "kind" : "text",
+          "title" : "Subject"
+        },
+        {
+          "help" : "The email's text, in a draft you send yourself. ⌥Return for a new line.\nExample: Hi {{leaf}},",
+          "key" : "body",
+          "kind" : "text",
+          "title" : "Body"
+        },
+        {
+          "help" : "A file whose text is the email instead.\nExample: weekly-report.md",
+          "key" : "template",
+          "kind" : "text",
+          "title" : "Template"
+        }
+      ],
+      "keywords" : [
+        "Mail"
+      ],
+      "takesText" : false,
+      "title" : "Email",
+      "type" : "mail.compose"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "The number to call. Usually the contact's, which is the default. Only digits, + and dialling marks are used.\nExamples: {{contact.phone}} · +44 7700 900123",
+          "key" : "to",
+          "kind" : "text",
+          "title" : "Number"
+        },
+        {
+          "help" : "Empty: a phone call through your iPhone. facetime: a FaceTime audio call. macOS asks before dialling.\nExample: facetime",
+          "hint" : "empty for iPhone, or facetime",
+          "key" : "via",
+          "kind" : "text",
+          "title" : "Via"
+        }
+      ],
+      "keywords" : [
+        "Call",
+        "FaceTime"
+      ],
+      "takesText" : false,
+      "title" : "Phone call",
+      "type" : "phone.call"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "The app to open. Pick one from the list, type its name, or Choose… it in the Finder.\nExample: Visual Studio Code",
+          "key" : "app",
+          "kind" : "text",
+          "title" : "App"
+        },
+        {
+          "help" : "The app's identifier, so it's found wherever it's installed. Filled in for you; needed only when the name doesn't find the app.\nExample: com.microsoft.VSCode",
+          "key" : "bundleId",
+          "kind" : "text",
+          "title" : "Bundle ID"
+        },
+        {
+          "help" : "A file, folder or link for the app to open; ~ for your home folder. Empty: just open the app.\nExamples: ~/Projects/{{leaf}} · {{project.path}} · https://github.com",
+          "hint" : "a path or a link",
+          "key" : "open",
+          "kind" : "text",
+          "title" : "Open"
+        },
+        {
+          "help" : "A channel or place inside the app, noted until it has a link. Add Open with the link to go there.\nExample: general",
+          "key" : "target",
+          "kind" : "text",
+          "title" : "Target"
+        }
+      ],
+      "keywords" : [
+
+      ],
+      "takesText" : false,
+      "title" : "Open an app",
+      "type" : "app.open"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "A link to open — web links in your browser, others in their own app — or a file's path. Values placed into a link are encoded; a field that's only a placeholder is the link itself.\nExamples: https://duckduckgo.com/?q={{selection}} · {{selection}} · ~/Downloads",
+          "hint" : "https://…?q={{selection}}, or a path",
+          "key" : "url",
+          "kind" : "text",
+          "title" : "Link"
+        }
+      ],
+      "keywords" : [
+        "Link",
+        "Browser"
+      ],
+      "takesText" : false,
+      "title" : "Open a link",
+      "type" : "url.open"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "The text to put on the clipboard, kept exactly. Empty: the node's label. ⌥Return for a new line.\nExample: {{contact.phone}}",
+          "hint" : "empty copies the label",
+          "key" : "text",
+          "kind" : "text",
+          "title" : "Text"
+        },
+        {
+          "help" : "A file whose text is copied instead.\nExample: signature.md",
+          "key" : "template",
+          "kind" : "text",
+          "title" : "Template"
+        },
+        {
+          "choices" : [
+            "auto",
+            "rich",
+            "plain"
+          ],
+          "help" : "auto: formatted too when the text is Markdown — headings, lists, **bold**, *italic*, links — so Mail, Notes and Pages paste it formatted; plain fields get the Markdown. rich: formatted always. plain: the text alone.\nExample: plain",
+          "hint" : "Inherit: formatted when it's Markdown",
+          "key" : "format",
+          "kind" : "choice",
+          "title" : "Format"
+        }
+      ],
+      "keywords" : [
+        "Copy",
+        "Clipboard"
+      ],
+      "takesText" : true,
+      "title" : "Copy to clipboard",
+      "type" : "clipboard.copy"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "The text to type at the cursor in the app in front, replacing any selection. Empty: the node's label.\nExamples: {{date:d MMMM yyyy}} · \"{{selection}}\"",
+          "hint" : "empty inserts the label — {{date}}, {{selection}}…",
+          "key" : "text",
+          "kind" : "text",
+          "title" : "Text"
+        },
+        {
+          "help" : "A file whose text is inserted instead.\nExample: signature.md",
+          "key" : "template",
+          "kind" : "text",
+          "title" : "Template"
+        },
+        {
+          "choices" : [
+            "auto",
+            "rich",
+            "plain"
+          ],
+          "help" : "auto: pasted formatted when the text is Markdown — headings, lists, **bold**, *italic*, links — where the app takes formatting; elsewhere, the Markdown. rich: formatted always. plain: the text alone.\nExample: plain",
+          "hint" : "Inherit: formatted when it's Markdown",
+          "key" : "format",
+          "kind" : "choice",
+          "title" : "Format"
+        }
+      ],
+      "keywords" : [
+        "Insert",
+        "Paste"
+      ],
+      "takesText" : true,
+      "title" : "Insert text",
+      "type" : "text.insert"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "The text to put at the cursor in the app in front, replacing any selection — without using the clipboard, so a clipboard manager doesn't record it. Empty: the node's label. ⌥Return for a new line.\nExamples: {{date:d MMMM yyyy}} · Kind regards",
+          "hint" : "empty inserts the label — {{date}}, {{selection}}…",
+          "key" : "text",
+          "kind" : "text",
+          "title" : "Text"
+        },
+        {
+          "help" : "A file whose text is inserted instead.\nExample: signature.md",
+          "key" : "template",
+          "kind" : "text",
+          "title" : "Template"
+        },
+        {
+          "choices" : [
+            "accessibility",
+            "typing"
+          ],
+          "help" : "How it goes in. Accessibility: the app replaces its selection with the text, exactly — standard Mac text views take this. Typing: a key press for each character; works nearly everywhere, but new lines press Return, which sends in some chat apps. Inherit: accessibility where the app takes it, else typing.\nExample: via: typing",
+          "hint" : "Inherit: accessibility where the app takes it, else typing",
+          "key" : "via",
+          "kind" : "choice",
+          "title" : "Via"
+        }
+      ],
+      "keywords" : [
+        "Direct Insert",
+        "Type"
+      ],
+      "takesText" : true,
+      "title" : "Direct insert",
+      "type" : "text.insertDirect"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "How long the timer runs, or until when. Empty: a Due value, else the node's label.\nExamples: 5 min · 1h 30m · 90s · 16:30 · tomorrow 9:00",
+          "hint" : "5 min, 1h 30m, 16:30 — else the label",
+          "key" : "duration",
+          "kind" : "text",
+          "title" : "Length"
+        },
+        {
+          "help" : "The shortcut that starts Clock's timers. Empty: KeybowNotes Timer.\nExample: My Timer",
+          "hint" : "KeybowNotes Timer",
+          "key" : "shortcut",
+          "kind" : "text",
+          "title" : "Shortcut"
+        }
+      ],
+      "keywords" : [
+        "Timer"
+      ],
+      "takesText" : false,
+      "title" : "Clock timer",
+      "type" : "clock.timer"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "What to search for in Maps. Empty: the node's label.\nExamples: coffee · {{selection}} · {{leaf}} near me",
+          "hint" : "the label, if empty — {{selection}} works",
+          "key" : "query",
+          "kind" : "text",
+          "title" : "Search for"
+        }
+      ],
+      "keywords" : [
+        "Maps"
+      ],
+      "takesText" : false,
+      "title" : "Search Maps",
+      "type" : "maps.search"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "A playlist, by name. With no song, album, artist or genre either: the node's label.\nExample: Focus",
+          "hint" : "the label, if nothing else is set",
+          "key" : "playlist",
+          "kind" : "text",
+          "title" : "Playlist"
+        },
+        {
+          "help" : "One song in your library, by its title. Wins over everything else; Artist picks between songs that share a title.\nExample: So What",
+          "hint" : "plays just this",
+          "key" : "song",
+          "kind" : "text",
+          "title" : "Song"
+        },
+        {
+          "help" : "An album in your library, played in track order. Wins over Playlist, Artist and Genre.\nExample: Kind of Blue",
+          "hint" : "in track order",
+          "key" : "album",
+          "kind" : "text",
+          "title" : "Album"
+        },
+        {
+          "help" : "By itself, plays the artist's songs; with Genre, those in the genre. With a song or an album, picks whose when two share a name. Matches the artist or album artist.\nExamples: Miles Davis · {{leaf}}",
+          "hint" : "their songs — or whose album or song",
+          "key" : "artist",
+          "kind" : "text",
+          "title" : "Artist"
+        },
+        {
+          "help" : "Plays the genre's songs — or, with Artist, that artist's in it.\nExample: Jazz",
+          "hint" : "its songs, or an artist's in it",
+          "key" : "genre",
+          "kind" : "text",
+          "title" : "Genre"
+        },
+        {
+          "help" : "Shuffle, or play in order. Inherit leaves Music's setting as it is for a playlist, and shuffles an artist's or a genre's songs, which have no order of their own.",
+          "key" : "shuffle",
+          "kind" : "flag",
+          "title" : "Shuffle"
+        }
+      ],
+      "keywords" : [
+        "Music"
+      ],
+      "takesText" : false,
+      "title" : "Play music",
+      "type" : "music.play"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "The shortcut to run, by its name in the Shortcuts app.\nExample: Log Water",
+          "key" : "name",
+          "kind" : "text",
+          "title" : "Shortcut"
+        },
+        {
+          "help" : "Text handed to the shortcut as its input.\nExamples: {{selection}} · {{clipboard}}",
+          "hint" : "text passed to it — {{selection}}, {{clipboard}}…",
+          "key" : "input",
+          "kind" : "text",
+          "title" : "Input"
+        }
+      ],
+      "keywords" : [
+
+      ],
+      "takesText" : false,
+      "title" : "Run a shortcut",
+      "type" : "shortcut"
+    },
+    {
+      "fields" : [
+        {
+          "choices" : [
+            "toggle",
+            "start",
+            "stop",
+            "lap",
+            "reset"
+          ],
+          "help" : "What the key does to the stopwatch. Inherit lets the label decide — Start, Stop, Pause, Lap, Split, Reset — and anything else starts or stops it.\nExample: do: lap",
+          "hint" : "from the label — Start, Stop, Lap, Reset — else toggle",
+          "key" : "do",
+          "kind" : "choice",
+          "title" : "Do"
+        }
+      ],
+      "keywords" : [
+        "Stopwatch"
+      ],
+      "takesText" : false,
+      "title" : "Stopwatch",
+      "type" : "stopwatch"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "A file in the templates folder to show, filled in when the key is pressed. Markdown, or an HTML document.\nExample: today.md",
+          "key" : "template",
+          "kind" : "text",
+          "title" : "Template"
+        },
+        {
+          "help" : "What to show, when there's no template: Markdown, or an HTML document starting <!DOCTYPE html>.\nExample: {{quote file=quotes.md}}",
+          "hint" : "empty shows the label — {{quote …}}, {{selection}}…",
+          "key" : "text",
+          "kind" : "text",
+          "title" : "Text"
+        },
+        {
+          "choices" : [
+            "ok",
+            "cancel",
+            "okCancel"
+          ],
+          "help" : "Buttons that close it: OK, Cancel, or both. With buttons it stays until one is chosen, and each can run an action of its own. Esc is Cancel.\nExample: okCancel",
+          "hint" : "none: it fades by itself",
+          "key" : "button",
+          "kind" : "choice",
+          "title" : "Buttons"
+        },
+        {
+          "help" : "How long it stays before fading, when it has no buttons. Esc closes it at once.\nExample: 15 sec",
+          "hint" : "15 sec — else long enough to read it",
+          "key" : "fade",
+          "kind" : "text",
+          "title" : "Fade after"
+        },
+        {
+          "help" : "An action to run when OK is chosen, as though its key were pressed. {{displayed}} is the text shown; Copy and Insert use it when they're given no text.\nExample: ok: Copy",
+          "key" : "ok",
+          "kind" : "action",
+          "title" : "When OK is chosen"
+        },
+        {
+          "help" : "An action to run when Cancel is chosen, or Esc pressed. Usually nothing.\nExample: cancel: Notes",
+          "key" : "cancel",
+          "kind" : "action",
+          "title" : "When Cancel is chosen"
+        }
+      ],
+      "keywords" : [
+        "Display",
+        "Show"
+      ],
+      "takesText" : true,
+      "title" : "Display",
+      "type" : "display"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "A file in the templates folder holding the question, filled in when the key is pressed.\nExample: search.md",
+          "key" : "template",
+          "kind" : "text",
+          "title" : "Template"
+        },
+        {
+          "help" : "The question, over the field: Markdown, or an HTML document.\nExample: Search Wikipedia for",
+          "hint" : "empty asks with the label",
+          "key" : "text",
+          "kind" : "text",
+          "title" : "Question"
+        },
+        {
+          "help" : "What's in the field to begin with, selected so typing replaces it.\nExample: {{selection|}}",
+          "hint" : "{{selection}}, {{clipboard}}…",
+          "key" : "initial",
+          "kind" : "text",
+          "title" : "Starts with"
+        },
+        {
+          "help" : "Words shown in the empty field, to say what goes in it.\nExample: a word or phrase",
+          "hint" : "grey words while it's empty",
+          "key" : "hint",
+          "kind" : "text",
+          "title" : "Hint"
+        },
+        {
+          "help" : "A taller field that takes new lines: Return starts one, ⌘Return is OK.\nExample: multiline: true",
+          "key" : "multiline",
+          "kind" : "flag",
+          "title" : "Several lines"
+        },
+        {
+          "help" : "The action given the answer, as though its key were pressed. {{answer}} is what was typed; Copy and Insert use it when they're given no text.\nExample: ok: Insert",
+          "key" : "ok",
+          "kind" : "action",
+          "title" : "When OK is chosen"
+        },
+        {
+          "help" : "An action to run when Cancel is chosen, or Esc pressed. Usually nothing.\nExample: cancel: Display",
+          "key" : "cancel",
+          "kind" : "action",
+          "title" : "When Cancel is chosen"
+        }
+      ],
+      "keywords" : [
+        "Ask",
+        "Prompt"
+      ],
+      "takesText" : true,
+      "title" : "Ask",
+      "type" : "ask"
+    },
+    {
+      "fields" : [
+        {
+          "choices" : [
+            "full",
+            "left",
+            "right",
+            "top",
+            "bottom",
+            "topLeft",
+            "topRight",
+            "bottomLeft",
+            "bottomRight"
+          ],
+          "help" : "Where on the screen: full, a half — left, right, top, bottom — or a quarter — topLeft, topRight, bottomLeft, bottomRight. Halves fill the height or the width. All within the screen less the menu bar and an always-shown Dock. Left out, a label like “Top left” says.\nExample: topLeft",
+          "hint" : "else the label — else where it is now",
+          "key" : "place",
+          "kind" : "choice",
+          "title" : "Place"
+        },
+        {
+          "help" : "Which screen to put it on: next or previous, main (the one with the menu bar), a number counting from the left, or part of a display's name. With no place, the window keeps its share of the screen.\nExample: next",
+          "hint" : "next, previous, main, 2, or a name — else its own",
+          "key" : "screen",
+          "kind" : "text",
+          "title" : "Screen"
+        }
+      ],
+      "keywords" : [
+        "Window",
+        "Arrange"
+      ],
+      "takesText" : false,
+      "title" : "Move a window",
+      "type" : "window"
+    },
+    {
+      "fields" : [
+        {
+          "choices" : [
+            "all",
+            "app",
+            "desktop"
+          ],
+          "help" : "What to show: all — Mission Control, every window — app, the windows of the app in front, or desktop. Left out, a label like “App windows” or “Desktop” says. Pressing the key again puts things back.\nExample: app",
+          "hint" : "else the label — else all",
+          "key" : "show",
+          "kind" : "choice",
+          "title" : "Show"
+        }
+      ],
+      "keywords" : [
+        "Exposé",
+        "Expose",
+        "Mission Control"
+      ],
+      "takesText" : false,
+      "title" : "Show all windows",
+      "type" : "expose"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "The desktop to show on screen 1, counting screens from the left, and that screen's desktops from 1, left to right as Mission Control shows them. no change leaves it as it is, even when a branch above sets it. Left out, the branch above decides — else it's left as it is.\nExample: 2",
+          "hint" : "a desktop, or no change",
+          "key" : "screen1",
+          "kind" : "text",
+          "title" : "Screen 1"
+        },
+        {
+          "help" : "The desktop to show on screen 2, counting screens from the left, and that screen's desktops from 1, left to right as Mission Control shows them. no change leaves it as it is, even when a branch above sets it. Left out, the branch above decides — else it's left as it is.\nExample: 2",
+          "hint" : "a desktop, or no change",
+          "key" : "screen2",
+          "kind" : "text",
+          "title" : "Screen 2"
+        },
+        {
+          "help" : "The desktop to show on screen 3, counting screens from the left, and that screen's desktops from 1, left to right as Mission Control shows them. no change leaves it as it is, even when a branch above sets it. Left out, the branch above decides — else it's left as it is.\nExample: 2",
+          "hint" : "a desktop, or no change",
+          "key" : "screen3",
+          "kind" : "text",
+          "title" : "Screen 3"
+        },
+        {
+          "help" : "The desktop to show on screen 4, counting screens from the left, and that screen's desktops from 1, left to right as Mission Control shows them. no change leaves it as it is, even when a branch above sets it. Left out, the branch above decides — else it's left as it is.\nExample: 2",
+          "hint" : "a desktop, or no change",
+          "key" : "screen4",
+          "kind" : "text",
+          "title" : "Screen 4"
+        },
+        {
+          "help" : "The desktop to show on screen 5, counting screens from the left, and that screen's desktops from 1, left to right as Mission Control shows them. no change leaves it as it is, even when a branch above sets it. Left out, the branch above decides — else it's left as it is.\nExample: 2",
+          "hint" : "a desktop, or no change",
+          "key" : "screen5",
+          "kind" : "text",
+          "title" : "Screen 5"
+        },
+        {
+          "help" : "The desktop to show on screen 6, counting screens from the left, and that screen's desktops from 1, left to right as Mission Control shows them. no change leaves it as it is, even when a branch above sets it. Left out, the branch above decides — else it's left as it is.\nExample: 2",
+          "hint" : "a desktop, or no change",
+          "key" : "screen6",
+          "kind" : "text",
+          "title" : "Screen 6"
+        }
+      ],
+      "keywords" : [
+        "Spaces",
+        "Space"
+      ],
+      "takesText" : false,
+      "title" : "Switch Spaces",
+      "type" : "spaces"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "What to control, by its entity ID — or several, separated by commas. The list is what Home Assistant has.\nExample: light.desk_lamp",
+          "hint" : "light.desk_lamp",
+          "key" : "entity",
+          "kind" : "text",
+          "title" : "Entity"
+        },
+        {
+          "help" : "What to do, as Home Assistant names it: turn_on, turn_off, toggle, or a whole name like climate.set_hvac_mode. Left out: a toggle; on, for a light given a brightness or colour; the temperature, for a thermostat given one; on, for a scene or script.\nExample: turn_off",
+          "hint" : "toggle — or turn_on, climate.set_temperature…",
+          "key" : "service",
+          "kind" : "text",
+          "title" : "Service"
+        },
+        {
+          "help" : "A light's brightness, 0 to 100.\nExample: 40",
+          "hint" : "percent",
+          "key" : "brightness",
+          "kind" : "number",
+          "title" : "Brightness"
+        },
+        {
+          "help" : "A light's colour: #rrggbb, or a name Home Assistant knows.\nExample: orange",
+          "hint" : "#ff8800, or a name: orange",
+          "key" : "color",
+          "kind" : "colour",
+          "title" : "Colour"
+        },
+        {
+          "help" : "A white light's warmth, in kelvin: 2700 is warm, 6500 daylight.\nExample: 2700",
+          "hint" : "2700",
+          "key" : "kelvin",
+          "kind" : "number",
+          "title" : "Colour temperature"
+        },
+        {
+          "help" : "What a thermostat is set to, in Home Assistant's units.\nExample: 21",
+          "key" : "temperature",
+          "kind" : "number",
+          "title" : "Temperature"
+        },
+        {
+          "help" : "A thermostat's mode, as Home Assistant names it.\nExample: heat",
+          "hint" : "heat, cool, auto, off",
+          "key" : "mode",
+          "kind" : "text",
+          "title" : "Mode"
+        },
+        {
+          "help" : "For a number, a select or a text entity: the value to set — or the option to choose.\nExample: 3",
+          "key" : "value",
+          "kind" : "text",
+          "title" : "Value"
+        },
+        {
+          "help" : "Anything else the service takes, as name: value pairs separated by commas — or as JSON.\nExample: transition: 2",
+          "hint" : "transition: 2, effect: colorloop",
+          "key" : "data",
+          "kind" : "text",
+          "title" : "More"
+        }
+      ],
+      "keywords" : [
+        "Home",
+        "Home Assistant"
+      ],
+      "takesText" : false,
+      "title" : "Home Assistant",
+      "type" : "home"
+    },
+    {
+      "fields" : [
+        {
+          "choices" : [
+            "now",
+            "next"
+          ],
+          "help" : "now — the meeting under way, or the next today; in a meeting's last five minutes, the next if it starts within ten. next — the next meeting to start, whatever's under way.\nExample: next",
+          "hint" : "now: the one under way, else the next today",
+          "key" : "which",
+          "kind" : "choice",
+          "title" : "Which meeting"
+        }
+      ],
+      "keywords" : [
+        "Join",
+        "Join Meeting"
+      ],
+      "takesText" : false,
+      "title" : "Join meeting",
+      "type" : "calendar.join"
+    },
+    {
+      "fields" : [
+        {
+          "choices" : [
+            "now",
+            "next"
+          ],
+          "help" : "now — the meeting under way, or the next today; in a meeting's last five minutes, the next if it starts within ten. next — the next meeting to start, whatever's under way.\nExample: next",
+          "hint" : "now: the one under way, else the next today",
+          "key" : "which",
+          "kind" : "choice",
+          "title" : "Which meeting"
+        },
+        {
+          "help" : "A file in the templates folder to add, filled in when the key is pressed.\nExample: decision.md",
+          "key" : "template",
+          "kind" : "text",
+          "title" : "Template"
+        },
+        {
+          "help" : "What to add to the meeting's notes, as its own paragraph.\nExample: {{time}} — {{selection}}",
+          "hint" : "empty adds the label — {{time}}, {{selection}}…",
+          "key" : "text",
+          "kind" : "text",
+          "title" : "Text"
+        }
+      ],
+      "keywords" : [
+        "Add to Event",
+        "Event Note"
+      ],
+      "takesText" : true,
+      "title" : "Add to the meeting's notes",
+      "type" : "calendar.addNote"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "Words from the title of the reminder to tick off. Left out, it's the one due next, or overdue — {{reminder}}.\nExample: Call the bank",
+          "hint" : "empty: the one due next",
+          "key" : "title",
+          "kind" : "text",
+          "title" : "Reminder"
+        },
+        {
+          "help" : "The Reminders list to look in. Left out, the lists chosen in Settings, else all.\nExample: Errands",
+          "hint" : "empty: the lists in Settings",
+          "key" : "list",
+          "kind" : "text",
+          "title" : "List"
+        }
+      ],
+      "keywords" : [
+        "Done",
+        "Complete Reminder",
+        "Tick Off"
+      ],
+      "takesText" : false,
+      "title" : "Reminder done",
+      "type" : "reminders.complete"
+    },
+    {
+      "fields" : [
+        {
+          "choices" : [
+            "up",
+            "down",
+            "mute",
+            "unmute",
+            "toggle"
+          ],
+          "help" : "What the key does: up, down, mute, unmute, or toggle — mute, or unmute if it's muted. Left out, the label says: Up, Louder, Down, Quieter, Mute (which toggles, as the key on the keyboard does), Unmute, or a level like 40%.\nExample: up",
+          "hint" : "else the label — Louder, Quieter, Mute — else toggle mute",
+          "key" : "do",
+          "kind" : "choice",
+          "title" : "Do"
+        },
+        {
+          "help" : "Sets the volume to this, in percent, and unmutes.\nExample: 30",
+          "hint" : "0–100",
+          "key" : "level",
+          "kind" : "number",
+          "title" : "Level"
+        },
+        {
+          "help" : "How far up or down one press goes, in percent. Left out, a sixteenth, as the volume keys go.\nExample: 10",
+          "hint" : "percent — 6.25, as the keys go",
+          "key" : "step",
+          "kind" : "number",
+          "title" : "Step"
+        }
+      ],
+      "keywords" : [
+        "Volume"
+      ],
+      "takesText" : false,
+      "title" : "Volume",
+      "type" : "volume"
+    },
+    {
+      "fields" : [
+        {
+          "choices" : [
+            "toggle",
+            "mute",
+            "unmute"
+          ],
+          "help" : "What the key does to the microphone: toggle, mute or unmute. Left out, a label saying Unmute unmutes, and anything else — Mute included — toggles.\nExample: mute",
+          "hint" : "else the label — Unmute — else toggle",
+          "key" : "do",
+          "kind" : "choice",
+          "title" : "Do"
+        }
+      ],
+      "keywords" : [
+        "Microphone",
+        "Mic"
+      ],
+      "takesText" : false,
+      "title" : "Microphone",
+      "type" : "microphone"
+    },
+    {
+      "fields" : [
+        {
+          "choices" : [
+            "up",
+            "down"
+          ],
+          "help" : "Brighter or dimmer: up or down. Left out, the label says — Brighter, Up, Dimmer, Darker, Down, or a level like 40%.\nExample: up",
+          "hint" : "else the label — Brighter, Dimmer",
+          "key" : "do",
+          "kind" : "choice",
+          "title" : "Do"
+        },
+        {
+          "help" : "Sets the brightness to this, in percent.\nExample: 30",
+          "hint" : "0–100",
+          "key" : "level",
+          "kind" : "number",
+          "title" : "Level"
+        },
+        {
+          "help" : "How far one press goes, in percent. Left out, a sixteenth, as the brightness keys go.\nExample: 10",
+          "hint" : "percent — 6.25, as the keys go",
+          "key" : "step",
+          "kind" : "number",
+          "title" : "Step"
+        },
+        {
+          "help" : "Which screen: all of them, built-in, main (the one with the menu bar), a number counting from the left, or part of a screen's name. Left out, the one the pointer is on. Apple's screens are set as the brightness keys set them; others over their cable (DDC/CI), on an Intel Mac, when the monitor allows it.\nExample: all",
+          "hint" : "all, built-in, main, 2, or a name — else the pointer's",
+          "key" : "screen",
+          "kind" : "text",
+          "title" : "Screen"
+        }
+      ],
+      "keywords" : [
+        "Brightness"
+      ],
+      "takesText" : false,
+      "title" : "Screen brightness",
+      "type" : "brightness"
+    },
+    {
+      "fields" : [
+        {
+          "choices" : [
+            "toggle",
+            "on",
+            "off"
+          ],
+          "help" : "Turns Wi‑Fi on or off, or toggles it. Left out, a label saying On or Off decides, and anything else toggles. \nExample: off",
+          "hint" : "else the label — On, Off — else toggle",
+          "key" : "do",
+          "kind" : "choice",
+          "title" : "Do"
+        }
+      ],
+      "keywords" : [
+        "Wi-Fi",
+        "WiFi"
+      ],
+      "takesText" : false,
+      "title" : "Wi‑Fi",
+      "type" : "wifi"
+    },
+    {
+      "fields" : [
+        {
+          "choices" : [
+            "toggle",
+            "on",
+            "off"
+          ],
+          "help" : "Turns Bluetooth on or off, or toggles it. Left out, a label saying On or Off decides, and anything else toggles. Off disconnects Bluetooth keyboards, mice and headphones until it's back on: the keypad, on USB, can turn it on again.\nExample: off",
+          "hint" : "else the label — On, Off — else toggle",
+          "key" : "do",
+          "kind" : "choice",
+          "title" : "Do"
+        }
+      ],
+      "keywords" : [
+        "Bluetooth"
+      ],
+      "takesText" : false,
+      "title" : "Bluetooth",
+      "type" : "bluetooth"
+    },
+    {
+      "fields" : [
+        {
+          "choices" : [
+            "toggle",
+            "on",
+            "off"
+          ],
+          "help" : "Turns Night Shift on or off, or toggles it, until its schedule next changes it. Left out, a label saying On or Off decides, and anything else toggles.\nExample: on",
+          "hint" : "else the label — On, Off — else toggle",
+          "key" : "do",
+          "kind" : "choice",
+          "title" : "Do"
+        }
+      ],
+      "keywords" : [
+        "Night Shift"
+      ],
+      "takesText" : false,
+      "title" : "Night Shift",
+      "type" : "nightShift"
+    },
+    {
+      "fields" : [
+        {
+          "choices" : [
+            "toggle",
+            "dark",
+            "light"
+          ],
+          "help" : "Dark, light, or the other one. Left out, a label saying just Dark or Light decides, and anything else toggles. macOS asks once whether KeybowNotes may control System Events, which makes the change.\nExample: dark",
+          "hint" : "else the label — Dark, Light — else toggle",
+          "key" : "do",
+          "kind" : "choice",
+          "title" : "Do"
+        }
+      ],
+      "keywords" : [
+        "Dark Mode"
+      ],
+      "takesText" : false,
+      "title" : "Dark mode",
+      "type" : "darkMode"
+    },
+    {
+      "fields" : [
+        {
+          "choices" : [
+            "toggle",
+            "on",
+            "off"
+          ],
+          "help" : "Keeps the Mac and its screens from sleeping, lets them sleep again, or toggles. Left out, a label saying On or Off decides, and anything else toggles.\nExample: on",
+          "hint" : "else the label — On, Off — else toggle",
+          "key" : "do",
+          "kind" : "choice",
+          "title" : "Do"
+        },
+        {
+          "help" : "How long to stay awake, or until when. Left out, a label like “1 hour” says, else until it's turned off. Pressing it again while it's on, with a duration, starts the time again.\nExamples: 45m · 2h · 17:30",
+          "hint" : "30m, 1h, 16:30 — else until it's turned off",
+          "key" : "duration",
+          "kind" : "text",
+          "title" : "For"
+        }
+      ],
+      "keywords" : [
+        "Stay Awake",
+        "Keep Awake"
+      ],
+      "takesText" : false,
+      "title" : "Stay awake",
+      "type" : "stayAwake"
+    },
+    {
+      "fields" : [
+        {
+          "help" : "Which Focus: Sleep unless this says another, by its name in System Settings → Focus.\nExample: Do Not Disturb",
+          "hint" : "Sleep",
+          "key" : "name",
+          "kind" : "text",
+          "title" : "Focus"
+        },
+        {
+          "help" : "The shortcut that switches it, made once in the Shortcuts app. Left out, “KeybowNotes <Focus> Focus”: Get Current Focus; If it's the Focus, Set Focus to turn it off; Otherwise, Set Focus to turn it on until turned off.\nExample: Toggle Sleep",
+          "hint" : "KeybowNotes Sleep Focus",
+          "key" : "shortcut",
+          "kind" : "text",
+          "title" : "Shortcut"
+        }
+      ],
+      "keywords" : [
+        "Focus"
+      ],
+      "takesText" : false,
+      "title" : "Focus",
+      "type" : "focus"
+    }
+  ],
+  "conditionOperators" : [
+    "does not contain",
+    "doesn't contain",
+    "doesn’t contain",
+    "is not empty",
+    "isn't empty",
+    "isn’t empty",
+    "is empty",
+    "starts with",
+    "begins with",
+    "ends with",
+    "contains",
+    "is not",
+    "isn't",
+    "isn’t",
+    "equals",
+    "is",
+    "==",
+    "!=",
+    ">=",
+    "<=",
+    "=",
+    ">",
+    "<"
+  ],
+  "values" : [
+    {
+      "example" : "{{leaf}}",
+      "group" : "This key",
+      "help" : "The label of the key pressed: the last in the path.",
+      "insertion" : "{{leaf}}",
+      "kind" : "value",
+      "name" : "leaf",
+      "sample" : "Standup",
+      "title" : "The key's label"
+    },
+    {
+      "example" : "{{parent}}",
+      "group" : "This key",
+      "help" : "The label pressed before it. A key on the tree's first row is its own parent.",
+      "insertion" : "{{parent}}",
+      "kind" : "value",
+      "name" : "parent",
+      "sample" : "Meetings",
+      "title" : "The label above it"
+    },
+    {
+      "example" : "{{path}}",
+      "group" : "This key",
+      "help" : "Every label pressed, separated by “ / ”.",
+      "insertion" : "{{path}}",
+      "kind" : "value",
+      "name" : "path",
+      "sample" : "Work / Meetings / Standup",
+      "title" : "The whole path"
+    },
+    {
+      "example" : "{{folderPath}}",
+      "group" : "This key",
+      "help" : "The labels separated by /, for a Notes folder or a file's path. A / inside a label becomes -.",
+      "insertion" : "{{folderPath}}",
+      "kind" : "value",
+      "name" : "folderPath",
+      "sample" : "Work/Meetings/Standup",
+      "title" : "The path as folders"
+    },
+    {
+      "example" : "{{parentPath}}",
+      "group" : "This key",
+      "help" : "The path as folders, without the key's own label.",
+      "insertion" : "{{parentPath}}",
+      "kind" : "value",
+      "name" : "parentPath",
+      "sample" : "Work/Meetings",
+      "title" : "The folders above it"
+    },
+    {
+      "example" : "{{level1}}",
+      "group" : "This key",
+      "help" : "The label pressed first, on the tree's first row.",
+      "insertion" : "{{level1}}",
+      "kind" : "value",
+      "name" : "level1",
+      "sample" : "Work",
+      "title" : "The first label"
+    },
+    {
+      "example" : "{{level2}}",
+      "group" : "This key",
+      "help" : "The second label pressed. Empty when the path is shorter.",
+      "insertion" : "{{level2}}",
+      "kind" : "value",
+      "name" : "level2",
+      "sample" : "Meetings",
+      "title" : "The second label"
+    },
+    {
+      "example" : "{{level3}}",
+      "group" : "This key",
+      "help" : "The third label pressed. Empty when the path is shorter.",
+      "insertion" : "{{level3}}",
+      "kind" : "value",
+      "name" : "level3",
+      "sample" : "Standup",
+      "title" : "The third label"
+    },
+    {
+      "example" : "{{level4}}",
+      "group" : "This key",
+      "help" : "The fourth label pressed. Empty when the path is shorter.",
+      "insertion" : "{{level4}}",
+      "kind" : "value",
+      "name" : "level4",
+      "title" : "The fourth label"
+    },
+    {
+      "example" : "{{tree}}",
+      "group" : "This key",
+      "help" : "The tree the key is in: main, row2, row3 or bottom.",
+      "insertion" : "{{tree}}",
+      "kind" : "value",
+      "name" : "tree",
+      "sample" : "main",
+      "title" : "Which tree"
+    },
+    {
+      "example" : "{{contact.name}}",
+      "group" : "Contact",
+      "help" : "The person this key is about: the deepest label on the path that's in # contacts, or the one a contact: value names. Empty when there's none.",
+      "insertion" : "{{contact.name}}",
+      "kind" : "value",
+      "name" : "contact.name",
+      "sample" : "Alex Example",
+      "title" : "The contact's name"
+    },
+    {
+      "example" : "{{contact.phone}}",
+      "group" : "Contact",
+      "help" : "From their entry in # contacts.",
+      "insertion" : "{{contact.phone}}",
+      "kind" : "value",
+      "name" : "contact.phone",
+      "sample" : "+44 7700 900123",
+      "title" : "Their phone number"
+    },
+    {
+      "example" : "{{contact.email}}",
+      "group" : "Contact",
+      "help" : "From their entry in # contacts.",
+      "insertion" : "{{contact.email}}",
+      "kind" : "value",
+      "name" : "contact.email",
+      "sample" : "alex@example.com",
+      "title" : "Their email address"
+    },
+    {
+      "example" : "{{contact.discord}}",
+      "group" : "Contact",
+      "help" : "Anything else their entry in # contacts holds, by its name.",
+      "insertion" : "{{contact.<field>}}",
+      "kind" : "value",
+      "name" : "contact.<field>",
+      "title" : "Another of their fields"
+    },
+    {
+      "example" : "{{project.name}}",
+      "group" : "Project",
+      "help" : "The project this key is about: the deepest label on the path that's in # projects, or the one a project: value names. Empty when there's none.",
+      "insertion" : "{{project.name}}",
+      "kind" : "value",
+      "name" : "project.name",
+      "sample" : "ProjectA",
+      "title" : "The project's name"
+    },
+    {
+      "example" : "{{project.path}}",
+      "group" : "Project",
+      "help" : "From its entry in # projects.",
+      "insertion" : "{{project.path}}",
+      "kind" : "value",
+      "name" : "project.path",
+      "sample" : "~/Projects/ProjectA",
+      "title" : "Its folder"
+    },
+    {
+      "example" : "{{project.url}}",
+      "group" : "Project",
+      "help" : "Anything else its entry in # projects holds, by its name.",
+      "insertion" : "{{project.<field>}}",
+      "kind" : "value",
+      "name" : "project.<field>",
+      "title" : "Another of its fields"
+    },
+    {
+      "example" : "{{date:EEEE d MMMM}}",
+      "formats" : [
+        {
+          "pattern" : "d MMM yyyy",
+          "sample" : "26 Sep 2026"
+        },
+        {
+          "pattern" : "d MMMM yyyy",
+          "sample" : "26 September 2026"
+        },
+        {
+          "pattern" : "EEEE d MMMM",
+          "sample" : "Saturday 26 September"
+        },
+        {
+          "pattern" : "EEE d MMM",
+          "sample" : "Sat 26 Sep"
+        },
+        {
+          "pattern" : "yyyy-MM-dd",
+          "sample" : "2026-09-26"
+        },
+        {
+          "pattern" : "dd/MM/yyyy",
+          "sample" : "26/09/2026"
+        },
+        {
+          "pattern" : "MMMM yyyy",
+          "sample" : "September 2026"
+        }
+      ],
+      "group" : "Date and time",
+      "help" : "When the key is pressed. A format after a colon changes how it's written, in Unicode's date patterns.",
+      "insertion" : "{{date}}",
+      "kind" : "value",
+      "name" : "date",
+      "sample" : "26 Sep 2026",
+      "title" : "The date"
+    },
+    {
+      "example" : "{{time:h:mm a}}",
+      "formats" : [
+        {
+          "pattern" : "HH:mm",
+          "sample" : "14:07"
+        },
+        {
+          "pattern" : "HH:mm:ss",
+          "sample" : "14:07:00"
+        },
+        {
+          "pattern" : "h:mm a",
+          "sample" : "2:07 pm"
+        }
+      ],
+      "group" : "Date and time",
+      "help" : "When the key is pressed. A format after a colon changes how it's written, in Unicode's date patterns.",
+      "insertion" : "{{time}}",
+      "kind" : "value",
+      "name" : "time",
+      "sample" : "14:07",
+      "title" : "The time"
+    },
+    {
+      "example" : "{{datetime:yyyy-MM-dd HH:mm}}",
+      "formats" : [
+        {
+          "pattern" : "d MMM yyyy, HH:mm",
+          "sample" : "26 Sep 2026, 14:07"
+        },
+        {
+          "pattern" : "yyyy-MM-dd HH:mm",
+          "sample" : "2026-09-26 14:07"
+        },
+        {
+          "pattern" : "EEEE d MMMM 'at' HH:mm",
+          "sample" : "Saturday 26 September at 14:07"
+        }
+      ],
+      "group" : "Date and time",
+      "help" : "When the key is pressed. A format after a colon changes how it's written, in Unicode's date patterns.",
+      "insertion" : "{{datetime}}",
+      "kind" : "value",
+      "name" : "datetime",
+      "sample" : "26 Sep 2026, 14:07",
+      "title" : "The date and time"
+    },
+    {
+      "example" : "{{weekday:EEE}}",
+      "formats" : [
+        {
+          "pattern" : "EEEE",
+          "sample" : "Saturday"
+        },
+        {
+          "pattern" : "EEE",
+          "sample" : "Sat"
+        }
+      ],
+      "group" : "Date and time",
+      "help" : "When the key is pressed. A format after a colon changes how it's written, in Unicode's date patterns.",
+      "insertion" : "{{weekday}}",
+      "kind" : "value",
+      "name" : "weekday",
+      "sample" : "Saturday",
+      "title" : "The day of the week"
+    },
+    {
+      "example" : "{{isoWeek}}",
+      "group" : "Date and time",
+      "help" : "The ISO week number when the key is pressed, 1 to 53.",
+      "insertion" : "{{isoWeek}}",
+      "kind" : "value",
+      "name" : "isoWeek",
+      "sample" : "39",
+      "title" : "The week of the year"
+    },
+    {
+      "example" : "{{selection}}",
+      "group" : "What you were doing",
+      "help" : "The text selected in the app in front when the key is pressed, trimmed. Read only when an action uses it. With nothing selected it's missing, which stops most actions: {{selection|}} makes empty fine.",
+      "insertion" : "{{selection}}",
+      "kind" : "value",
+      "name" : "selection",
+      "sample" : "the notes from today",
+      "title" : "The selected text"
+    },
+    {
+      "example" : "{{clipboard}}",
+      "group" : "What you were doing",
+      "help" : "What's on the clipboard when the key is pressed: its text, trimmed — or an image or a PDF, which a {{#ai}} block sends as itself, and anything else describes.",
+      "insertion" : "{{clipboard}}",
+      "kind" : "value",
+      "name" : "clipboard",
+      "sample" : "https://example.com/report",
+      "title" : "The clipboard"
+    },
+    {
+      "example" : "{{frontApp}}",
+      "group" : "What you were doing",
+      "help" : "The app in front when the key is pressed.",
+      "insertion" : "{{frontApp}}",
+      "kind" : "value",
+      "name" : "frontApp",
+      "sample" : "Safari",
+      "title" : "The app in front"
+    },
+    {
+      "attributes" : [
+        {
+          "example" : "file='team.csv'",
+          "help" : "A file to go through instead of a value: in the templates folder, or a full or ~/ path.",
+          "name" : "file"
+        },
+        {
+          "example" : "where='Paid = no and Amount > 100'",
+          "help" : "Only the rows that pass: a column, then = != < <= > >= ~ (contains) or !~, then a value; tests joined with “and”. A column alone means it has something in it.",
+          "name" : "where"
+        },
+        {
+          "example" : "sort='Due desc'",
+          "help" : "Columns to order the rows by, each asc or desc: numbers as numbers.",
+          "name" : "sort"
+        },
+        {
+          "example" : "limit=10",
+          "help" : "At most this many rows: after where and sort.",
+          "name" : "limit"
+        },
+        {
+          "example" : "separator=', '",
+          "help" : "Put between the rows: \\n for a new line.",
+          "name" : "separator"
+        },
+        {
+          "example" : "columns='Name, Phone'",
+          "help" : "Names for the columns, when the data has no header row; none to number them only.",
+          "name" : "columns"
+        },
+        {
+          "choices" : [
+            "csv",
+            "tsv",
+            "json",
+            "markdown",
+            "lines"
+          ],
+          "example" : "format=csv",
+          "help" : "How to read it, when guessing gets it wrong.",
+          "name" : "format"
+        }
+      ],
+      "example" : "{{#each clipboard where='Paid = no' sort='Due'}}…{{/each}}",
+      "group" : "Lists",
+      "help" : "Its contents once for each row of a value — {{#each clipboard}}, {{#each api.github}} — or of a file: {{#each file='team.csv'}}. Rows are read from CSV, cells copied from a spreadsheet, JSON, a Markdown table, or a line each; the first row of CSV names the columns. Inside, {{Name}} is the row's Name column, and {{1}} its first.",
+      "insertion" : "{{#each clipboard}}{{/each}}",
+      "kind" : "block",
+      "name" : "each",
+      "title" : "Each row"
+    },
+    {
+      "example" : "{{#header}}…{{/header}}",
+      "group" : "Lists",
+      "help" : "Inside {{#each}}: written once before the rows, when there are any.",
+      "insertion" : "{{#header}}{{/header}}",
+      "kind" : "block",
+      "name" : "header",
+      "title" : "Before the rows"
+    },
+    {
+      "example" : "{{#footer}}…{{/footer}}",
+      "group" : "Lists",
+      "help" : "Inside {{#each}}: written once after the rows, when there are any.",
+      "insertion" : "{{#footer}}{{/footer}}",
+      "kind" : "block",
+      "name" : "footer",
+      "title" : "After the rows"
+    },
+    {
+      "example" : "{{#empty}}…{{/empty}}",
+      "group" : "Lists",
+      "help" : "Inside {{#each}}: written in place of the rows when there are none.",
+      "insertion" : "{{#empty}}{{/empty}}",
+      "kind" : "block",
+      "name" : "empty",
+      "title" : "When there are none"
+    },
+    {
+      "example" : "{{@number}}",
+      "group" : "Lists",
+      "help" : "Inside {{#each}}: 1 for the first row shown, then 2, 3…",
+      "insertion" : "{{@number}}",
+      "kind" : "value",
+      "name" : "@number",
+      "sample" : "1",
+      "title" : "The row's number"
+    },
+    {
+      "example" : "{{@count}}",
+      "group" : "Lists",
+      "help" : "Inside {{#each}}: how many rows are shown, after where and limit.",
+      "insertion" : "{{@count}}",
+      "kind" : "value",
+      "name" : "@count",
+      "sample" : "3",
+      "title" : "How many rows"
+    },
+    {
+      "example" : "{{@row}}",
+      "group" : "Lists",
+      "help" : "Inside {{#each}}: the row's cells, separated by tabs — for a list of single items, the item.",
+      "insertion" : "{{@row}}",
+      "kind" : "value",
+      "name" : "@row",
+      "sample" : "Ann\tLead",
+      "title" : "The whole row"
+    },
+    {
+      "example" : "{{@columns}}",
+      "group" : "Lists",
+      "help" : "Inside {{#each}}: the columns' names, separated by tabs.",
+      "insertion" : "{{@columns}}",
+      "kind" : "value",
+      "name" : "@columns",
+      "sample" : "Name\tRole",
+      "title" : "The columns' names"
+    },
+    {
+      "example" : "{{@sum.Amount}}",
+      "group" : "Lists",
+      "help" : "Inside {{#each}}: the numbers in a column added up, over the rows shown.",
+      "insertion" : "{{@sum.<column>}}",
+      "kind" : "value",
+      "name" : "@sum.<column>",
+      "sample" : "1580.50",
+      "title" : "A column's total"
+    },
+    {
+      "example" : "{{@average.Amount}}",
+      "group" : "Lists",
+      "help" : "Inside {{#each}}: the average of the numbers in a column.",
+      "insertion" : "{{@average.<column>}}",
+      "kind" : "value",
+      "name" : "@average.<column>",
+      "sample" : "526.83",
+      "title" : "A column's average"
+    },
+    {
+      "example" : "{{@min.Amount}}",
+      "group" : "Lists",
+      "help" : "Inside {{#each}}: a column's smallest value: a number, a date, a word.",
+      "insertion" : "{{@min.<column>}}",
+      "kind" : "value",
+      "name" : "@min.<column>",
+      "sample" : "80.50",
+      "title" : "A column's least"
+    },
+    {
+      "example" : "{{@max.Due}}",
+      "group" : "Lists",
+      "help" : "Inside {{#each}}: a column's largest value: a number, a date, a word.",
+      "insertion" : "{{@max.<column>}}",
+      "kind" : "value",
+      "name" : "@max.<column>",
+      "sample" : "2026-10-20",
+      "title" : "A column's most"
+    },
+    {
+      "example" : "{{stopwatch}}",
+      "group" : "Stopwatch",
+      "help" : "The stopwatch's time, running or stopped.",
+      "insertion" : "{{stopwatch}}",
+      "kind" : "value",
+      "name" : "stopwatch",
+      "sample" : "3:12",
+      "title" : "Its time"
+    },
+    {
+      "example" : "{{stopwatch.seconds}}",
+      "group" : "Stopwatch",
+      "help" : "The stopwatch's time, in whole seconds.",
+      "insertion" : "{{stopwatch.seconds}}",
+      "kind" : "value",
+      "name" : "stopwatch.seconds",
+      "sample" : "192",
+      "title" : "Its time in seconds"
+    },
+    {
+      "example" : "{{stopwatch.laps}}",
+      "group" : "Stopwatch",
+      "help" : "How long each lap took, in order. Empty before the first lap.",
+      "insertion" : "{{stopwatch.laps}}",
+      "kind" : "value",
+      "name" : "stopwatch.laps",
+      "sample" : "1:05, 1:02",
+      "title" : "Each lap's length"
+    },
+    {
+      "example" : "{{stopwatch.splits}}",
+      "group" : "Stopwatch",
+      "help" : "The time since the start at each lap, in order.",
+      "insertion" : "{{stopwatch.splits}}",
+      "kind" : "value",
+      "name" : "stopwatch.splits",
+      "sample" : "1:05, 2:07",
+      "title" : "The time at each lap"
+    },
+    {
+      "attributes" : [
+        {
+          "choices" : [
+            "opus-5.5",
+            "opus-5",
+            "sonnet-5",
+            "haiku-4.5",
+            "fable-5.1"
+          ],
+          "example" : "model=\"sonnet-5\"",
+          "help" : "The model to ask, else the one in Settings → Claude.",
+          "name" : "model"
+        },
+        {
+          "choices" : [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "example" : "effort=\"high\"",
+          "help" : "How hard it thinks before replying, else as Settings → Claude says.",
+          "name" : "effort"
+        },
+        {
+          "choices" : [
+            "claude"
+          ],
+          "example" : "source=claude",
+          "help" : "Who's asked: Claude, the only one so far.",
+          "name" : "source"
+        }
+      ],
+      "example" : "{{#ai}}Summarise in one line: {{selection}}{{/ai}}",
+      "group" : "Claude",
+      "help" : "Its contents are filled in and sent to Claude, and the reply takes the block's place. Not in a link, a number or an app's name. Settings → Privacy says what it may be sent.",
+      "insertion" : "{{#ai}}{{/ai}}",
+      "kind" : "block",
+      "name" : "ai",
+      "title" : "Ask Claude"
+    },
+    {
+      "attributes" : [
+        {
+          "example" : "term={{selection}}",
+          "help" : "A value for one of the source's URL's placeholders, for this use only.",
+          "name" : "<name>"
+        }
+      ],
+      "example" : "{{api.weather}}",
+      "fetched" : true,
+      "group" : "Data Sources",
+      "help" : "What a source's rule finds in its response, fetched when a key uses it. Sources are set up with Edit Data Sources… in the menu bar.",
+      "insertion" : "{{api.<source>}}",
+      "kind" : "value",
+      "name" : "api.<source>",
+      "title" : "A data source's value"
+    },
+    {
+      "example" : "{{api.news.raw}}",
+      "fetched" : true,
+      "group" : "Data Sources",
+      "help" : "A source's whole response, for an {{#ai}} block to read. It needs no rule.",
+      "insertion" : "{{api.<source>.raw}}",
+      "kind" : "value",
+      "name" : "api.<source>.raw",
+      "title" : "Its whole response"
+    },
+    {
+      "example" : "https://maps.apple.com/?ll={{location}}",
+      "fetched" : true,
+      "group" : "Location",
+      "help" : "Its latitude and longitude, from Location Services, rounded as Settings → Location says. Found when a key uses it, and kept five minutes. A node's own location values are used instead.",
+      "insertion" : "{{location}}",
+      "kind" : "value",
+      "name" : "location",
+      "sample" : "51.50722,-0.1275",
+      "title" : "Where this Mac is"
+    },
+    {
+      "example" : "{{location.latitude}}",
+      "fetched" : true,
+      "group" : "Location",
+      "help" : "Degrees north; south is negative.",
+      "insertion" : "{{location.latitude}}",
+      "kind" : "value",
+      "name" : "location.latitude",
+      "sample" : "51.50722",
+      "title" : "Its latitude"
+    },
+    {
+      "example" : "{{location.longitude}}",
+      "fetched" : true,
+      "group" : "Location",
+      "help" : "Degrees east; west is negative.",
+      "insertion" : "{{location.longitude}}",
+      "kind" : "value",
+      "name" : "location.longitude",
+      "sample" : "-0.1275",
+      "title" : "Its longitude"
+    },
+    {
+      "example" : "{{location.altitude|unknown}}",
+      "fetched" : true,
+      "group" : "Location",
+      "help" : "Metres above sea level. Usually empty: Macs find their place from Wi-Fi, not GPS.",
+      "insertion" : "{{location.altitude}}",
+      "kind" : "value",
+      "name" : "location.altitude",
+      "title" : "Its height"
+    },
+    {
+      "example" : "{{location.accuracy}}",
+      "fetched" : true,
+      "group" : "Location",
+      "help" : "How far off the place may be, in metres.",
+      "insertion" : "{{location.accuracy}}",
+      "kind" : "value",
+      "name" : "location.accuracy",
+      "sample" : "35",
+      "title" : "How exact it is"
+    },
+    {
+      "attributes" : [
+        {
+          "example" : "file='quotes.md'",
+          "help" : "The file: in the templates folder, or a full or ~/ path.",
+          "name" : "file",
+          "required" : true
+        },
+        {
+          "example" : "heading='Stoics'",
+          "help" : "Markdown and HTML only: just the items under this heading.",
+          "name" : "heading"
+        },
+        {
+          "choices" : [
+            "random",
+            "sequential"
+          ],
+          "example" : "order=sequential",
+          "help" : "random — the default, never the same twice running — or sequential: each in turn, from the top again at the end.",
+          "name" : "order"
+        }
+      ],
+      "example" : "{{quote file='quotes.md' heading='Stoics'}}",
+      "fetched" : true,
+      "group" : "Quotes",
+      "help" : "A paragraph or list item from a file, each time a key uses it: a quote of the day, a writing prompt, the next on a reading list.",
+      "insertion" : "{{quote file=''}}",
+      "kind" : "call",
+      "name" : "quote",
+      "sample" : "The obstacle is the way.",
+      "title" : "A quote from a file"
+    },
+    {
+      "attributes" : [
+        {
+          "example" : "name='notes.txt'",
+          "help" : "The file: in the templates folder, or a full or ~/ path.",
+          "name" : "name",
+          "required" : true
+        }
+      ],
+      "example" : "{{file name='notes.txt'}}",
+      "fetched" : true,
+      "group" : "Files",
+      "help" : "The whole text of a file, read when a key uses it. {{#each file='team.csv'}} goes through its rows instead: a CSV or tab-separated file, JSON, a Markdown table, or a line each.",
+      "insertion" : "{{file name=''}}",
+      "kind" : "call",
+      "name" : "file",
+      "sample" : "Ann, Bob and Carol",
+      "title" : "A file's text"
+    },
+    {
+      "example" : "{{displayed}}",
+      "group" : "Display",
+      "help" : "In the action OK or Cancel runs, after a display: the text it showed, as plain text.",
+      "insertion" : "{{displayed}}",
+      "kind" : "value",
+      "name" : "displayed",
+      "title" : "The text shown"
+    },
+    {
+      "example" : "{{answer}}",
+      "group" : "Ask",
+      "help" : "In the action OK runs, after an Ask: what was typed. Empty after Cancel.",
+      "insertion" : "{{answer}}",
+      "kind" : "value",
+      "name" : "answer",
+      "title" : "What was typed"
+    },
+    {
+      "example" : "{{home.sensor.outdoor_temperature}}",
+      "fetched" : true,
+      "group" : "Home Assistant",
+      "help" : "Any entity in Home Assistant, by its ID, read fresh when a key uses it. One it doesn't have stops the action.",
+      "insertion" : "{{home.<domain>.<entity>}}",
+      "kind" : "value",
+      "name" : "home.<domain>.<entity>",
+      "sample" : "14.2",
+      "title" : "An entity's state"
+    },
+    {
+      "example" : "{{home.sensor.outdoor_temperature.text}}",
+      "fetched" : true,
+      "group" : "Home Assistant",
+      "help" : "Its state, with its unit after it.",
+      "insertion" : "{{home.<domain>.<entity>.text}}",
+      "kind" : "value",
+      "name" : "home.<domain>.<entity>.text",
+      "sample" : "14.2 °C",
+      "title" : "Its state and unit"
+    },
+    {
+      "example" : "{{home.sensor.outdoor_temperature.unit}}",
+      "fetched" : true,
+      "group" : "Home Assistant",
+      "help" : "The unit its state is in.",
+      "insertion" : "{{home.<domain>.<entity>.unit}}",
+      "kind" : "value",
+      "name" : "home.<domain>.<entity>.unit",
+      "sample" : "°C",
+      "title" : "Its unit"
+    },
+    {
+      "example" : "{{home.sensor.outdoor_temperature.name}}",
+      "fetched" : true,
+      "group" : "Home Assistant",
+      "help" : "Its friendly name in Home Assistant.",
+      "insertion" : "{{home.<domain>.<entity>.name}}",
+      "kind" : "value",
+      "name" : "home.<domain>.<entity>.name",
+      "sample" : "Outdoor temperature",
+      "title" : "Its name"
+    },
+    {
+      "example" : "{{home.sensor.outdoor_temperature.changed}}",
+      "fetched" : true,
+      "group" : "Home Assistant",
+      "help" : "The time its state last changed.",
+      "insertion" : "{{home.<domain>.<entity>.changed}}",
+      "kind" : "value",
+      "name" : "home.<domain>.<entity>.changed",
+      "sample" : "09:15",
+      "title" : "When it last changed"
+    },
+    {
+      "example" : "{{home.climate.study.current_temperature}}",
+      "fetched" : true,
+      "group" : "Home Assistant",
+      "help" : "Any of its attributes, by name. Empty when it hasn't that one.",
+      "insertion" : "{{home.<domain>.<entity>.<attribute>}}",
+      "kind" : "value",
+      "name" : "home.<domain>.<entity>.<attribute>",
+      "sample" : "19.5",
+      "title" : "One of its attributes"
+    },
+    {
+      "example" : "{{event|Meeting}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "The meeting under way — in its last five minutes, one starting within ten instead — else the next today: its title. Empty when there's none.",
+      "insertion" : "{{event}}",
+      "kind" : "value",
+      "name" : "event",
+      "sample" : "Design review",
+      "title" : "The meeting"
+    },
+    {
+      "example" : "{{event.title}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "The meeting's title.",
+      "insertion" : "{{event.title}}",
+      "kind" : "value",
+      "name" : "event.title",
+      "sample" : "Design review",
+      "title" : "Its title"
+    },
+    {
+      "example" : "{{event.start}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "The meeting's start time.",
+      "insertion" : "{{event.start}}",
+      "kind" : "value",
+      "name" : "event.start",
+      "sample" : "14:00",
+      "title" : "When it starts"
+    },
+    {
+      "example" : "{{event.end}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "The meeting's end time.",
+      "insertion" : "{{event.end}}",
+      "kind" : "value",
+      "name" : "event.end",
+      "sample" : "14:45",
+      "title" : "When it ends"
+    },
+    {
+      "example" : "{{event.time}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "When the meeting starts and ends.",
+      "insertion" : "{{event.time}}",
+      "kind" : "value",
+      "name" : "event.time",
+      "sample" : "14:00–14:45",
+      "title" : "Its times"
+    },
+    {
+      "example" : "{{event.date}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "The day of the meeting.",
+      "insertion" : "{{event.date}}",
+      "kind" : "value",
+      "name" : "event.date",
+      "sample" : "26 Sep 2026",
+      "title" : "Its date"
+    },
+    {
+      "example" : "{{event.location}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "The meeting's location.",
+      "insertion" : "{{event.location}}",
+      "kind" : "value",
+      "name" : "event.location",
+      "sample" : "Room 4",
+      "title" : "Where it is"
+    },
+    {
+      "example" : "{{event.link}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "The link to join it, as Join meeting finds it.",
+      "insertion" : "{{event.link}}",
+      "kind" : "value",
+      "name" : "event.link",
+      "sample" : "https://meet.example.com/abc-defg",
+      "title" : "Its video call"
+    },
+    {
+      "example" : "{{event.attendees}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "Everyone invited but you, rooms left out.",
+      "insertion" : "{{event.attendees}}",
+      "kind" : "value",
+      "name" : "event.attendees",
+      "sample" : "Alex Example, Sam Sample",
+      "title" : "Who's invited"
+    },
+    {
+      "example" : "{{event.organizer}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "Empty when it's you.",
+      "insertion" : "{{event.organizer}}",
+      "kind" : "value",
+      "name" : "event.organizer",
+      "sample" : "Alex Example",
+      "title" : "Who organised it"
+    },
+    {
+      "example" : "{{event.notes}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "The meeting's notes.",
+      "insertion" : "{{event.notes}}",
+      "kind" : "value",
+      "name" : "event.notes",
+      "title" : "Its notes"
+    },
+    {
+      "example" : "{{event.calendar}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "The calendar it's on.",
+      "insertion" : "{{event.calendar}}",
+      "kind" : "value",
+      "name" : "event.calendar",
+      "sample" : "Work",
+      "title" : "Its calendar"
+    },
+    {
+      "example" : "{{event.next|nothing}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "The next meeting to start, today or tomorrow: its title.",
+      "insertion" : "{{event.next}}",
+      "kind" : "value",
+      "name" : "event.next",
+      "sample" : "Planning",
+      "title" : "The next meeting"
+    },
+    {
+      "example" : "{{event.next.start}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "Any part of the next meeting, as for the meeting: start, end, time, date, location, link, attendees, organizer, notes or calendar.",
+      "insertion" : "{{event.next.<part>}}",
+      "kind" : "value",
+      "name" : "event.next.<part>",
+      "sample" : "15:30",
+      "title" : "The next meeting's details"
+    },
+    {
+      "example" : "{{agenda|Nothing more today.}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "Today's events still to come, and reminders due or overdue, as a Markdown list. Empty when there's nothing.",
+      "insertion" : "{{agenda}}",
+      "kind" : "value",
+      "name" : "agenda",
+      "title" : "The rest of today"
+    },
+    {
+      "example" : "{{agenda.today}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "All of today's events, and reminders due or overdue, as a Markdown list.",
+      "insertion" : "{{agenda.today}}",
+      "kind" : "value",
+      "name" : "agenda.today",
+      "title" : "All of today"
+    },
+    {
+      "example" : "{{agenda.tomorrow}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "Tomorrow's events and reminders, as a Markdown list.",
+      "insertion" : "{{agenda.tomorrow}}",
+      "kind" : "value",
+      "name" : "agenda.tomorrow",
+      "title" : "Tomorrow"
+    },
+    {
+      "example" : "{{reminder}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "The reminder due next, overdue first. Empty when there's none.",
+      "insertion" : "{{reminder}}",
+      "kind" : "value",
+      "name" : "reminder",
+      "sample" : "Call the bank",
+      "title" : "The reminder due next"
+    },
+    {
+      "example" : "{{reminder.title}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "The reminder's title.",
+      "insertion" : "{{reminder.title}}",
+      "kind" : "value",
+      "name" : "reminder.title",
+      "sample" : "Call the bank",
+      "title" : "Its title"
+    },
+    {
+      "example" : "{{reminder.due}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "When the reminder is due.",
+      "insertion" : "{{reminder.due}}",
+      "kind" : "value",
+      "name" : "reminder.due",
+      "sample" : "26 Sep 2026, 17:00",
+      "title" : "When it's due"
+    },
+    {
+      "example" : "{{reminder.list}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "The list it's on.",
+      "insertion" : "{{reminder.list}}",
+      "kind" : "value",
+      "name" : "reminder.list",
+      "sample" : "Errands",
+      "title" : "Its list"
+    },
+    {
+      "example" : "{{reminder.notes}}",
+      "fetched" : true,
+      "group" : "Meetings and Agenda",
+      "help" : "The reminder's notes.",
+      "insertion" : "{{reminder.notes}}",
+      "kind" : "value",
+      "name" : "reminder.notes",
+      "title" : "Its notes"
+    }
+  ]
+}

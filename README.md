@@ -234,18 +234,22 @@ key's settings, so it only needs what's different. A step can be a condition,
 display's OK, is there for the steps after it:
 
 ```
-1. Standup [Calendar, title: Standup, start: tomorrow 9:30]
+1. Standup [Calendar, title: Standup, start: tomorrow 9:30, duration: 15m]
    - The event
    - Notes for it [Notes, folder: Standups]
-2. Jot [Ask, text: "What's on your mind?"]
+2. Jot [colour: ffb000, Ask, text: "What's on your mind?"]
    - Ask
    - If {{answer}} contains tomorrow
-      - [Reminders, title: "{{answer}}", due: tomorrow]
+      - Remind me [Reminders, title: "{{answer}}", due: tomorrow]
    - Else
-      - [append, find.byName: Inbox, entry: "{{answer}}"]
+      - File it [append, find.byName: Inbox, entry: "{{answer}}"]
 ```
 
-In the editor, ⇧Return adds a step to the selected key.
+In the editor, ⇧Return adds a step to the selected key, and an If's *Add Else*
+adds the steps for when it doesn't hold. *Pressing this* lists what the key will
+run, in turn:
+
+![The tree editor with Work › Jot selected: under it, its steps — Ask, then If {{answer}} contains tomorrow with a Remind me step, and Else with a File it step — and in the inspector, Pressing this runs, in turn: Ask, a new reminder if the answer contains tomorrow, else adding to the note Inbox](docs/images/tree-editor-steps.png)
 
 ### Apps, links, music and timers
 

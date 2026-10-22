@@ -361,6 +361,39 @@ final class StepsTests: XCTestCase {
         XCTAssertEqual(doc.roots(.main)[0]?.steps.map(\.text), ["If {{answer}}", "Else", "Then"])
     }
 
+    func testAddingAnElse() throws {
+        var doc = document("""
+            1. Key
+               - If {{answer}} is yes
+                  - [Copy]
+               - Else if {{answer}} is no
+                  - [Maps]
+               - [Insert]
+               - If {{answer}}
+                  - [Copy]
+               - Else
+                  - [Maps]
+            """)
+        let steps = try XCTUnwrap(doc.roots(.main)[0]?.steps)
+        func labels() -> [String] { doc.roots(.main)[0]?.steps.map(\.label) ?? [] }
+        XCTAssertFalse(doc.hasElse(steps[0].id))
+        XCTAssertFalse(doc.hasElse(steps[1].id), "the same If, from its Else if")
+        XCTAssertTrue(doc.hasElse(steps[3].id))
+        XCTAssertTrue(doc.hasElse(steps[4].id))
+
+        let (otherwise, inside) = try doc.addElse(to: steps[1].id)
+        XCTAssertEqual(labels(), ["If {{answer}} is yes", "Else if {{answer}} is no", "Else", "", "If {{answer}}", "Else"],
+                       "after the Else if that goes with it")
+        XCTAssertEqual(doc.node(otherwise)?.steps.map(\.id), [inside], "with a step under it to type into")
+        XCTAssertThrowsError(try doc.addElse(to: steps[0].id)) { XCTAssertEqual($0 as? OutlineEditError, .alreadyHasElse) }
+        XCTAssertThrowsError(try doc.addElse(to: steps[3].id)) { XCTAssertEqual($0 as? OutlineEditError, .alreadyHasElse) }
+        XCTAssertThrowsError(try doc.addElse(to: steps[2].id)) { XCTAssertEqual($0 as? OutlineEditError, .elseNeedsAnIf) }
+
+        let elseIf = try doc.addElseIf(to: steps[3].id)
+        try doc.setText(elseIf, "Else if {{answer}} is maybe")
+        XCTAssertEqual(labels().suffix(3), ["If {{answer}}", "Else if {{answer}} is maybe", "Else"], "before its Else")
+    }
+
     func testAKeyWithStepsTakesNoKeys() throws {
         var doc = document("""
             1. Key

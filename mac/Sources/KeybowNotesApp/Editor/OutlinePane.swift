@@ -164,7 +164,12 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     private var lastContainer: OutlineContainer?
     private var collapsed = Set<UUID>()
     private var afterEdit: AfterEdit?
+    /// The row being typed in — set only once its edit has really begun.
     private var editingRow: OutlineRow?
+    /// While a row's edit is ending: an edit begun now — the next row's, after
+    /// Return — waits until it has, or AppKit, still finishing the last,
+    /// takes the field editor back and the new edit never starts.
+    private var endingEdit = false
     /// A node just made with Return: left empty, it's removed again.
     private var justCreated: UUID?
     /// The step made with it: a key's own action, kept as its first step
@@ -685,6 +690,14 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
             menu.addItem(ActionMenuItem("Paste After", key: "v", enabled: canPaste) { [weak self] in self?.paste(.after(id)) })
             menu.addItem(.separator())
             menu.addItem(ActionMenuItem("Add Step") { [weak self] in self?.startStep(after: id) })
+            if case .success(let condition)? = model.node(id)?.condition {
+                if condition.branch != .otherwise {
+                    menu.addItem(ActionMenuItem("Add Else If") { [weak self] in self?.addElseIf(to: id) })
+                }
+                menu.addItem(ActionMenuItem("Add Else", enabled: !model.document.hasElse(id)) { [weak self] in
+                    self?.addElse(to: id)
+                })
+            }
         case .node(let id)?:
             menu.addItem(ActionMenuItem("Paste After", key: "v", enabled: canPaste) { [weak self] in self?.paste(.after(id)) })
             menu.addItem(ActionMenuItem("Paste Under", enabled: canPaste && canHaveChildren(id)) { [weak self] in
@@ -722,7 +735,7 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     /// ⌘Return: start a child of the selected node — or of the one being
     /// edited, once its edit is in.
     func addChild() {
-        if editingRow != nil {
+        if isEditing {
             afterEdit = .newChild
             endEditing()
         } else if let id = selectedRow?.nodeID {
@@ -735,7 +748,7 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     /// ⇧Return: a step for the selected key — or after the selected step —
     /// once a row being edited is in.
     func addStep() {
-        if editingRow != nil {
+        if isEditing {
             afterEdit = .newStep
             endEditing()
         } else if let id = selectedRow?.nodeID {
@@ -743,6 +756,30 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         } else {
             model.flash("Select a key to give it a step.")
         }
+    }
+
+    /// An Else for the If a step belongs to, with a step under it to type
+    /// the Else's action into. Left empty, both go again.
+    func addElse(to id: UUID) {
+        endEditing()
+        var made: (otherwise: UUID, step: UUID)?
+        guard model.edit("Add Else", { made = try $0.addElse(to: id) }), let made else { return }
+        justCreated = made.step
+        justKept = made.otherwise
+        for ancestor in ancestorIDs(of: made.step) { collapsed.remove(ancestor) }
+        reload()
+        if let row = rows[.node(made.step)] { beginEditing(row) }
+    }
+
+    /// An Else if for the If a step belongs to, started for typing its test.
+    func addElseIf(to id: UUID) {
+        endEditing()
+        var made: UUID?
+        guard model.edit("Add Else If", { made = try $0.addElseIf(to: id) }), let made else { return }
+        justCreated = made
+        justKept = nil
+        reload()
+        if let row = rows[.node(made)] { beginEditing(row, replacingWith: "Else if ") }
     }
 
     /// A new, empty step to type into: at the end of a key's steps, or after
@@ -848,13 +885,21 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
 
     func beginEditing(_ row: OutlineRow, replacingWith initial: String? = nil) {
         guard let outline else { return }
+        if endingEdit {
+            DispatchQueue.main.async { [weak self] in self?.beginEditing(row, replacingWith: initial) }
+            return
+        }
         completionSources = nil
         select(row.kind)
         let index = outline.row(forItem: row)
         guard index >= 0 else { return }
         editingRow = row
         outline.editColumn(0, row: index, with: nil, select: initial == nil)
-        guard let editor = fieldEditor(row: index) else { return }
+        guard let editor = fieldEditor(row: index) else {
+            // It didn't begin: nothing's being typed in, so nothing to commit.
+            editingRow = nil
+            return
+        }
         if let initial {
             editor.string = initial
             editor.setSelectedRange(NSRange(location: (initial as NSString).length, length: 0))
@@ -874,8 +919,27 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     }
 
     private func endEditing() {
-        guard let outline, editingRow != nil else { return }
+        guard let outline, isEditing else { return }
         outline.window?.makeFirstResponder(outline)
+    }
+
+    /// Whether a row is being typed in now.
+    private var isEditing: Bool {
+        editingRow != nil && outline?.window?.firstResponder is OutlineFieldEditor
+    }
+
+    /// The row a cell's text field shows.
+    private func row(showing field: NSView) -> OutlineRow? {
+        guard let outline else { return nil }
+        let index = outline.row(for: field)
+        return index >= 0 ? outline.item(atRow: index) as? OutlineRow : nil
+    }
+
+    /// An edit begun some other way than through `beginEditing` — a click
+    /// on a selected row's text — is that row's.
+    func controlTextDidBeginEditing(_ notification: Notification) {
+        guard let field = notification.object as? NSView, let row = row(showing: field) else { return }
+        if editingRow !== row { editingRow = row }
     }
 
     func controlTextDidChange(_ notification: Notification) {
@@ -920,8 +984,11 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     }
 
     func controlTextDidEndEditing(_ notification: Notification) {
-        guard let row = editingRow, let field = notification.object as? NSTextField else { return }
+        // What was typed belongs to the row whose field it was typed in.
+        guard let field = notification.object as? NSTextField, let row = row(showing: field) ?? editingRow else { return }
         editingRow = nil
+        endingEdit = true
+        defer { endingEdit = false }
         completionSources = nil
         let text = field.stringValue.trimmingCharacters(in: .whitespaces)
         let action = afterEdit

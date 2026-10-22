@@ -158,6 +158,11 @@ On a step:
   If, Else if or Else, so an If isn't parted from its Else.
 - **Tab** puts it under the step above, which must be an If, Else if or Else;
   **Shift-Tab** takes it out, to after the If and any Else that goes with it.
+- **Add Else** and **Add Else If** — in the inspector for an If or an Else
+  if, and its right-click menu — put one in its place: an Else after the If
+  and its Else ifs, with a step under it ready to type the action into; an
+  Else if before the Else, ready to type its test. Add Else is off once the If
+  has one. Left empty, what they made goes again.
 - **⌃⌘↑ / ⌃⌘↓** move it earlier or later among its neighbours; order is what
   steps run in.
 - **Delete**, **⌘X**, **⌘C** work as on keys, a step with the steps under it.

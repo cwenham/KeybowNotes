@@ -221,6 +221,15 @@ final class TreeEditorViewController: NSViewController {
             let text = items.map { $0.isSeparatorItem ? "—" : $0.title + ($0.isEnabled ? "" : " (off)") }
             try? text.joined(separator: "\n").write(toFile: bits.count > 1 ? bits[1] : "/dev/null",
                                                      atomically: true, encoding: .utf8)
+        case "choose":
+            // Picks an item of a row's right-click menu, as "row:title".
+            let bits = argument.split(separator: ":", maxSplits: 1).map(String.init)
+            if let item = coordinator.menuItems(clickedRow: Int(bits[0]) ?? -1).first(where: { $0.title == bits.last }),
+               item.isEnabled, let action = item.action {
+                NSApp.sendAction(action, to: item.target, from: item)
+            } else {
+                model.flash("No “\(bits.last ?? "")” to choose there.")
+            }
         case "send":
             // An Edit menu command — copy, cut, paste — the way the
             // menu sends it: along the responder chain.

@@ -6,6 +6,9 @@ struct InspectorPane: View {
     let model: EditorModel
     /// ⇧Return's work: a step for the selected key, or after the selected step.
     var addStep: () -> Void = {}
+    /// An Else, or an Else if, for the If a step belongs to.
+    var addElse: (UUID) -> Void = { _ in }
+    var addElseIf: (UUID) -> Void = { _ in }
 
     var body: some View {
         ScrollView {
@@ -19,7 +22,7 @@ struct InspectorPane: View {
                 } else if let id = model.selectedNodeID, let node = model.node(id),
                           let address = model.document.stepAddress(of: id) {
                     NodeInspector(model: model, id: id, node: node, location: address.key, step: address.path,
-                                  addStep: addStep)
+                                  addStep: addStep, addElse: addElse, addElseIf: addElseIf)
                         .id(id)
                 } else if case .empty(let location)? = model.selection {
                     Text("Key \(location.slot + 1) is empty. Type to put a node on it.")
@@ -109,6 +112,8 @@ private struct NodeInspector: View {
     /// steps down to it.
     var step: [Int]?
     let addStep: () -> Void
+    var addElse: (UUID) -> Void = { _ in }
+    var addElseIf: (UUID) -> Void = { _ in }
 
     private var tree: TreeKind? {
         if case .tree(let kind, _) = location.container { return kind }
@@ -270,11 +275,30 @@ private struct NodeInspector: View {
     @ViewBuilder
     private var preview: some View {
         if isStep, node.isCondition {
+            let branch: StepCondition.Branch? = {
+                if case .success(let condition)? = node.condition { return condition.branch }
+                return nil
+            }()
+            let hasElse = model.document.hasElse(id)
             VStack(alignment: .leading, spacing: 6) {
                 Text(node.label).font(.system(size: 13, weight: .semibold)).foregroundStyle(.indigo)
-                Text("The steps indented under it run only then. ⇧↩ adds one under it; Tab moves the step below it in, and ⇧⇥ moves one out.")
+                Text(branch == .otherwise
+                     ? "The steps indented under it run when nothing before it held. ⇧↩ adds one under it."
+                     : "The steps indented under it run only when it holds. ⇧↩ adds one under it; Tab moves the step below it in, and ⇧⇥ moves one out.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                addStepButton
+                HStack(spacing: 8) {
+                    addStepButton
+                    if branch != nil, branch != .otherwise {
+                        Button("Add Else If") { addElseIf(id) }
+                            .controlSize(.small)
+                            .help("Another test, tried when nothing before it held: Else if {{answer}} is no.")
+                        Button("Add Else") { addElse(id) }
+                            .controlSize(.small)
+                            .disabled(hasElse)
+                            .help(hasElse ? "This If already has an Else."
+                                  : "Steps to run when nothing before it held, after this If and its Else ifs.")
+                    }
+                }
             }
         } else if isStep, let config, let selection = model.resolved(id) {
             let summary = ActionSummary(selection: selection, config: config, environment: ActionSummary.stepStandIns)

@@ -63,6 +63,10 @@ public enum OutlineEditError: Error, Equatable, CustomStringConvertible {
     case onlyAConditionTakesSteps
     /// Outdenting a step that's already among its key's own.
     case alreadyOutermost
+    /// An Else for a step that isn't an If or an Else if.
+    case elseNeedsAnIf
+    /// A second Else for one If.
+    case alreadyHasElse
 
     public var description: String {
         switch self {
@@ -93,6 +97,10 @@ public enum OutlineEditError: Error, Equatable, CustomStringConvertible {
             return "Only an If, Else if or Else has steps under it: start the step above with “If …”."
         case .alreadyOutermost:
             return "Already one of the key's own steps."
+        case .elseNeedsAnIf:
+            return "An Else goes with an If, or an Else if."
+        case .alreadyHasElse:
+            return "This If already has an Else."
         }
     }
 }
@@ -820,6 +828,61 @@ extension OutlineDocument {
             }
             steps.insert(step, at: after)
         }
+    }
+
+    /// Where an If's chain is among its neighbours — the If, then each Else if
+    /// and Else that goes with it — for any step in it.
+    private func chain(of id: UUID) throws -> (address: StepAddress, range: Range<Int>, otherwise: Int?) {
+        guard let address = stepAddress(of: id), let key = node(at: address.key),
+              let step = key.step(at: address.path) else { throw OutlineEditError.notFound }
+        guard case .success(let condition)? = step.condition else { throw OutlineEditError.elseNeedsAnIf }
+        let parentPath = Array(address.path.dropLast())
+        let steps = parentPath.isEmpty ? key.steps : key.step(at: parentPath)?.steps ?? []
+        func branch(_ index: Int) -> StepCondition.Branch? {
+            if case .success(let condition)? = steps[index].condition { return condition.branch }
+            return nil
+        }
+        var start = address.path.last!
+        if condition.branch != .ifTrue {
+            while start > 0, let before = branch(start - 1), before != .otherwise {
+                start -= 1
+                if before == .ifTrue { break }
+            }
+        }
+        var end = address.path.last! + 1
+        while end < steps.count, let next = branch(end), next != .ifTrue {
+            end += 1
+            if next == .otherwise { break }
+        }
+        let otherwise = (start..<end).first { branch($0) == .otherwise }
+        return (address, start..<end, otherwise)
+    }
+
+    /// Whether the If a step belongs to has an Else.
+    public func hasElse(_ id: UUID) -> Bool {
+        (try? chain(of: id))?.otherwise != nil
+    }
+
+    /// An Else for an If — after it, and any Else if that goes with it — with
+    /// an empty step under it to type into. Says which they are.
+    @discardableResult
+    public mutating func addElse(to id: UUID) throws -> (otherwise: UUID, step: UUID) {
+        let (address, range, otherwise) = try chain(of: id)
+        guard otherwise == nil else { throw OutlineEditError.alreadyHasElse }
+        let step = OutlineNode.step("")
+        let added = OutlineNode.step("Else", steps: [step])
+        try changeSteps(holding: address) { $0.insert(added, at: range.upperBound) }
+        return (added.id, step.id)
+    }
+
+    /// An empty step where an If's next Else if goes — after its last, before
+    /// its Else — for the editor to start with "Else if ".
+    @discardableResult
+    public mutating func addElseIf(to id: UUID) throws -> UUID {
+        let (address, range, otherwise) = try chain(of: id)
+        let step = OutlineNode.step("")
+        try changeSteps(holding: address) { $0.insert(step, at: otherwise ?? range.upperBound) }
+        return step.id
     }
 
     /// Moves a step one place earlier (-1) or later (+1) among its neighbours.

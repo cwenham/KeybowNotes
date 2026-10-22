@@ -80,7 +80,8 @@ struct EditorRootView: View {
                     .frame(minWidth: 380, idealWidth: 560)
                     .overlay(alignment: .bottom) { flash }
                 VStack(spacing: 0) {
-                    InspectorPane(model: model, addStep: { coordinator.addStep() })
+                    InspectorPane(model: model, addStep: { coordinator.addStep() },
+                                  addElse: { coordinator.addElse(to: $0) }, addElseIf: { coordinator.addElseIf(to: $0) })
                         .frame(minHeight: 240, maxHeight: .infinity)
                     Divider()
                     KeypadPane(model: model)

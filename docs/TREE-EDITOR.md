@@ -107,6 +107,11 @@ Each row is one node:
 - a **problem marker** when the node has one, with the message as a tooltip and
   in the inspector.
 
+A key's **steps** — what it does, in turn, when it has more than one action —
+appear under it as rows with a bullet instead of a number, and the steps under
+an If are under that. An If, Else if or Else is in bold, its {{values}}
+coloured. See [CONFIG-LANGUAGE.md](CONFIG-LANGUAGE.md#steps).
+
 **Empty keys** between occupied ones appear as faint placeholder rows — "key 3 —
 empty" — so that a node's position is never ambiguous and never shifts
 silently. Typing into a placeholder creates a node on that key. Empty keys after
@@ -121,6 +126,7 @@ long as it's selected, so typing always has somewhere to go.
 | typing | starts editing the selected row, replacing its text with what's typed | edits |
 | Return | edits the selected row | ends the edit; starts a **new node on the next free key** of the same row and edits it — or, when every key on the row is taken, the node's **first child** |
 | ⌘Return | starts a **child** of the selected node, on its first free key | ends the edit, then the same |
+| ⇧Return | adds a **step**: at the end of a key's steps, after a step, or under an If (below) | ends the edit, then the same |
 | Return on an empty new node | — | removes it again |
 | Tab | **indent**: the node becomes a child of the node above it | ends the edit, indents, carries on editing |
 | Shift-Tab | **outdent**: the node moves up a level, after its parent | ends the edit, outdents, carries on editing |
@@ -135,7 +141,32 @@ long as it's selected, so typing always has somewhere to go.
 | ⌘S | save | end the edit and save |
 
 A new node isn't made until something is typed: Esc, or Return on the empty
-row, leaves nothing behind. So Return on a full row can offer a child without
+row, leaves nothing behind.
+
+### Steps
+
+⇧Return, or **Add Step** in the inspector or the right-click menu, gives the
+selected key a step, ready to type: `[Reminders]`, `Log it [append]`, or
+`If {{answer}} is yes`. A key that had no steps keeps what it did as its first,
+named for what it does — "New event" — since a key with steps runs only them; the
+new one goes after it. Esc or Return on the new step, left empty, takes both
+away again.
+
+On a step:
+
+- **Return** ends the edit and starts the next step after it — under it, for an
+  If, Else if or Else, so an If isn't parted from its Else.
+- **Tab** puts it under the step above, which must be an If, Else if or Else;
+  **Shift-Tab** takes it out, to after the If and any Else that goes with it.
+- **⌃⌘↑ / ⌃⌘↓** move it earlier or later among its neighbours; order is what
+  steps run in.
+- **Delete**, **⌘X**, **⌘C** work as on keys, a step with the steps under it.
+  Steps go on the clipboard as bulleted lines, and **⌘V** with a step selected
+  pastes after it; on a key, **Paste as Steps** in the right-click menu adds
+  them to its steps.
+
+A key with steps can't have keys under it, and a branch can't have steps:
+⌘Return, indenting under it and pasting under it are refused, with the reason. So Return on a full row can offer a child without
 risk, which is how a branch's fourth node gets children — the Return, Tab way
 needs a free key beside it first. *Add Child* is in the Edit menu too.
 
@@ -236,7 +267,15 @@ For the selected node:
   the overlay would show it: "New event · Meeting · Sun 27 Sep, 09:00 · alert 5
   min before". For a branch, what its leaves will do by default. Missing values
   are shown in orange: "needs contact.phone".
-- **Label** — a text field.
+- **Label** — a text field. For a step, a name for it, shown as it runs; for a
+  condition, **Condition**: the If itself.
+- **Steps** — for a key with steps, *Pressing this runs, in turn* lists them,
+  as the overlay would sum each up, with its Ifs. For a step, *This step* says
+  what it does, and the header where it runs: "Step 2 of “Standup”: runs once
+  the one before has finished". Each has **Add Step**, as ⇧Return. A step has
+  no colour, contact or project of its own, and *Run at once* is the key's;
+  everything else — its type, fields, values, and where each comes from, the
+  key or an If above it — is as for a key.
 - **Action** — the type, and the fields that type uses, each showing its value
   and **where it comes from**: *set here*, *from Meeting* (an ancestor), or *from
   the defaults*. Setting a field writes a pair into this node's brackets;
@@ -428,8 +467,10 @@ tree then becomes something you can feel as well as see.
 - `OutlineCompiler.swift` — the compiler, with its per-node analysis: each
   annotation's role, each node's problems, and the action type in force.
 - `OutlineEditing.swift` — the edit operations and their rules: insert, indent,
-  outdent, move, delete, set the text, set or remove a pair. Each returns the new
-  document or the reason it's refused.
+  outdent, move, delete, set the text, set or remove a pair — and for steps,
+  add, indent, outdent, move and paste. Each returns the new document or the
+  reason it's refused. A step is an `OutlineNode` in its key's `steps`; the
+  editor selects it by ID as it does a key, and `stepAddress(of:)` finds it.
 
 **The app:**
 

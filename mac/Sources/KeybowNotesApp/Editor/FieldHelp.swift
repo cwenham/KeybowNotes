@@ -14,6 +14,24 @@ enum FieldHelp {
         Example: Standup
         """
 
+    static let stepLabel = """
+        What the step is called, shown on the overlay as it runs; it isn't a value — {{leaf}} is still the key's. \
+        Start it with If, Else if or Else to make it a condition instead.
+        Example: Log it
+        """
+
+    static let condition = """
+        When the steps under it run. If tests a value: is, is not, contains, starts with, ends with, \
+        > and <, is empty — or just If {{value}}, for anything there. Else if tries another when nothing \
+        before it held; Else runs when nothing did.
+        Example: If {{answer}} is yes
+        """
+
+    static let addStep = """
+        Runs another action after this one, when the key is pressed. Each step inherits this key's settings, \
+        as a key does its branch's: [Reminders] makes a step a reminder. ⇧↩ in the outline does the same.
+        """
+
     static let colour = """
         The key's light, on the Keybow and the overlay. Set here, it colours this node \
         and everything under it that doesn't set its own. Click a swatch, or the well for any colour.

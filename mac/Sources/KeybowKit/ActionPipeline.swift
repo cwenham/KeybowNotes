@@ -569,8 +569,13 @@ public final class ActionPipeline {
             report?(.failure("Cancelled", ends.isEmpty ? nil : "after \(ends.count) of its steps"))
             return
         case .declined?:
-            // Cancel on an Ask or a display: said, so nothing more to say.
-            display.stepAside()
+            // Cancel on an Ask or a display: nothing more to say — unless
+            // its own Cancel action did something.
+            if let last = ends.last, !last.end.outcome.isQuiet, let summary = last.end.summary {
+                display.showFinished(last.end.outcome, summary: summary, warnings: last.end.warnings)
+            } else {
+                display.stepAside()
+            }
             report?(.success("Stopped at Cancel", "after \(ends.count) of its steps"))
             return
         case .failed?:

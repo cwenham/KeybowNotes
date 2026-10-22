@@ -4,6 +4,8 @@ import SwiftUI
 
 struct InspectorPane: View {
     let model: EditorModel
+    /// ⇧Return's work: a step for the selected key, or after the selected step.
+    var addStep: () -> Void = {}
 
     var body: some View {
         ScrollView {
@@ -12,8 +14,13 @@ struct InspectorPane: View {
                     SeveralSelected(model: model)
                 } else if let id = model.selectedNodeID, let node = model.node(id),
                    let location = model.document.location(of: id) {
-                    NodeInspector(model: model, id: id, node: node, location: location)
+                    NodeInspector(model: model, id: id, node: node, location: location, addStep: addStep)
                         .id(id)          // fresh drafts for each node
+                } else if let id = model.selectedNodeID, let node = model.node(id),
+                          let address = model.document.stepAddress(of: id) {
+                    NodeInspector(model: model, id: id, node: node, location: address.key, step: address.path,
+                                  addStep: addStep)
+                        .id(id)
                 } else if case .empty(let location)? = model.selection {
                     Text("Key \(location.slot + 1) is empty. Type to put a node on it.")
                         .foregroundStyle(.secondary)
@@ -96,27 +103,46 @@ private struct NodeInspector: View {
     let model: EditorModel
     let id: UUID
     let node: OutlineNode
+    /// The key's place — for a step, its key's.
     let location: OutlineLocation
+    /// For one of a key's steps: its place among them, and in each If's
+    /// steps down to it.
+    var step: [Int]?
+    let addStep: () -> Void
 
     private var tree: TreeKind? {
         if case .tree(let kind, _) = location.container { return kind }
         return nil
     }
 
-    /// The nodes from the top of the tree down to this one.
+    private var isStep: Bool { step != nil }
+
+    /// The nodes from the top of the tree down to this one — for a step,
+    /// down to its key, then the Ifs it's under, then itself.
     private var chain: [OutlineNode] {
-        (1...location.path.count).compactMap {
+        let keys = (1...location.path.count).compactMap {
             model.document.node(at: OutlineLocation(location.container, Array(location.path.prefix($0))))
         }
+        return isStep ? keys + model.document.stepChain(of: id) : keys
     }
 
     private var config: KeybowConfig? { model.keypadConfig }
 
     /// Everything down to and including this node — for a branch, what its
-    /// leaves inherit.
+    /// leaves inherit; for a step, what it runs.
     private var action: ActionSpec? {
         guard let tree else { return nil }
+        if let step { return config?.inheritedAction(tree: tree, path: location.path, step: step) }
         return config?.inheritedAction(tree: tree, path: location.path)
+    }
+
+    /// What's above it gives it: a key's branch — or, for a step, its key
+    /// and the Ifs it's under.
+    private var actionAbove: ActionSpec? {
+        guard let tree else { return nil }
+        if let step { return config?.inheritedAction(tree: tree, path: location.path, step: step, above: true) }
+        guard location.path.count > 1 else { return nil }
+        return config?.inheritedAction(tree: tree, path: Array(location.path.dropLast()))
     }
 
     /// The annotations with what the compiler made of each.
@@ -150,26 +176,54 @@ private struct NodeInspector: View {
             header
             preview
             Divider()
-            DraftField(title: "Label", value: node.label, help: FieldHelp.label) { label in
+            DraftField(title: node.isCondition ? "Condition" : "Label", value: node.label,
+                       help: isStep ? (node.isCondition ? FieldHelp.condition : FieldHelp.stepLabel) : FieldHelp.label) { label in
                 model.edit("Rename") { try $0.setLabel(id, label) }
             }
-            colourSection
+            if !isStep { colourSection }
             actionSection
             leftoversSection
             valuesSection
-            entrySection
+            if !isStep { entrySection }
             problemsSection
         }
     }
 
     // MARK: - Where and what
 
+    /// A step's name in the path: its label, or its number among its neighbours.
+    private func name(_ node: OutlineNode) -> String {
+        guard node.label.isEmpty else { return node.label }
+        let address = model.document.stepAddress(of: node.id)
+        return "Step \((address?.path.last ?? 0) + 1)"
+    }
+
+    /// Where a step is, and when it runs.
+    private var stepPlace: String {
+        let key = chain[location.path.count - 1].label
+        let index = (step?.last ?? 0) + 1
+        if case .success(let condition)? = node.condition {
+            return condition.branch == .otherwise
+                ? "Its steps run when nothing before it held"
+                : "Its steps run when it holds"
+        }
+        if let step, step.count > 1, let above = chain.dropLast().last {
+            return "Step \(index) under “\(above.label)”" + (index == 1 ? ": runs when it holds" : "")
+        }
+        return index == 1 ? "Step 1 of “\(key)”: runs when it's pressed"
+            : "Step \(index) of “\(key)”: runs once the one before has finished"
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(chain.map(\.label).joined(separator: " › "))
+            Text(chain.map(name).joined(separator: " › "))
                 .font(.headline)
                 .lineLimit(2)
-            if let tree, model.isPaged(tree) {
+            if isStep {
+                Text(stepPlace)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if let tree, model.isPaged(tree) {
                 let place = location.path.count == 1
                     ? "a page, on row \(tree.startRow + 1) · key \(location.slot + 1)"
                     : "row \(tree.key(onPage: location.slot) / KeybowProtocol.columns + 1) · "
@@ -188,9 +242,85 @@ private struct NodeInspector: View {
         }
     }
 
+    /// Each step, summed up as the overlay would: "New event · Standup",
+    /// and an If's steps under it.
+    private func stepLines(_ steps: [ResolvedStep], of selection: ResolvedSelection, config: KeybowConfig,
+                           depth: Int = 0) -> [(id: String, depth: Int, text: String, isCondition: Bool)] {
+        var lines: [(id: String, depth: Int, text: String, isCondition: Bool)] = []
+        for (index, step) in steps.enumerated() {
+            switch step.kind {
+            case .action:
+                let summary = ActionSummary(selection: selection.doing(step), config: config,
+                                            environment: ActionSummary.stepStandIns)
+                lines.append(("\(depth).\(index).\(lines.count)", depth, "\(summary.verb) · \(summary.subject)", false))
+            case .condition(let condition):
+                lines.append(("\(depth).\(index).\(lines.count)", depth, condition.label, true))
+                lines += stepLines(step.steps, of: selection, config: config, depth: depth + 1)
+            }
+        }
+        return lines
+    }
+
+    private var addStepButton: some View {
+        Button("Add Step") { addStep() }
+            .controlSize(.small)
+            .help(FieldHelp.addStep)
+    }
+
     @ViewBuilder
     private var preview: some View {
-        if let tree, let config, node.isLeaf, let selection = config.resolve(tree: tree, path: location.path) {
+        if isStep, node.isCondition {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(node.label).font(.system(size: 13, weight: .semibold)).foregroundStyle(.indigo)
+                Text("The steps indented under it run only then. ⇧↩ adds one under it; Tab moves the step below it in, and ⇧⇥ moves one out.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                addStepButton
+            }
+        } else if isStep, let config, let selection = model.resolved(id) {
+            let summary = ActionSummary(selection: selection, config: config, environment: ActionSummary.stepStandIns)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("This step").font(.caption).foregroundStyle(.secondary)
+                Text("\(summary.verb) · \(summary.subject)").font(.system(size: 13, weight: .semibold))
+                if !summary.details.isEmpty {
+                    Text(summary.details.joined(separator: " · ")).font(.callout).foregroundStyle(.secondary)
+                }
+                if !summary.missing.isEmpty {
+                    Label("Needs \(summary.missing.joined(separator: ", "))", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+                addStepButton.padding(.top, 4)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        } else if isStep {
+            addStepButton
+        } else if let tree, let config, node.isLeaf, let selection = config.resolve(tree: tree, path: location.path),
+                  !selection.steps.isEmpty {
+            let summary = ActionSummary(selection: selection, config: config)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Pressing this runs, in turn").font(.caption).foregroundStyle(.secondary)
+                ForEach(stepLines(selection.steps, of: selection, config: config), id: \.id) { line in
+                    Text(line.text)
+                        .font(.system(size: 13, weight: line.isCondition ? .regular : .semibold))
+                        .foregroundStyle(line.isCondition ? Color.indigo : Color.primary)
+                        .padding(.leading, CGFloat(line.depth) * 14)
+                        .lineLimit(1)
+                }
+                if !summary.missing.isEmpty {
+                    Label("Needs \(summary.missing.joined(separator: ", "))", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+                if config.commitDelay > 0, config.commitDelay(for: selection) == 0 {
+                    Label("Runs the moment it's pressed", systemImage: "bolt.fill")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                addStepButton.padding(.top, 4)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        } else if let tree, let config, node.isLeaf, let selection = config.resolve(tree: tree, path: location.path) {
             let summary = ActionSummary(selection: selection, config: config)
             VStack(alignment: .leading, spacing: 3) {
                 Text("Pressing this")
@@ -207,6 +337,9 @@ private struct NodeInspector: View {
                 if config.commitDelay > 0, config.commitDelay(for: selection) == 0 {
                     Label("Runs the moment it's pressed", systemImage: "bolt.fill")
                         .font(.caption).foregroundStyle(.secondary)
+                }
+                if !(tree.canHavePages && model.isPaged(tree) && location.path.count == 1) {
+                    addStepButton.padding(.top, 4)
                 }
             }
             .padding(10)
@@ -267,7 +400,8 @@ private struct NodeInspector: View {
                     outcomeSection(spec)
                 }
             }
-            if action != nil {
+            // A key's first step decides whether it waits: set on the key.
+            if action != nil, !isStep {
                 fieldRow(ModuleField(key: "instant", title: "Run at once", kind: .flag))
             }
             if action?.type == "clock.timer" {
@@ -282,10 +416,7 @@ private struct NodeInspector: View {
         }
     }
 
-    private var inheritedTypeAbove: String? {
-        guard let tree, location.path.count > 1 else { return nil }
-        return config?.inheritedAction(tree: tree, path: Array(location.path.dropLast()))?.type
-    }
+    private var inheritedTypeAbove: String? { actionAbove?.type }
 
     /// A field set here, by a pair or by a word: `[Rider]` sets the app,
     /// `[worklog.md]` the template, `[5 min alert]` the alert.
@@ -362,8 +493,7 @@ private struct NodeInspector: View {
     /// What the branches above give a field — nil when they give nothing, or
     /// give it to another type of action, whose fields this one doesn't take.
     private func inheritedValue(_ key: String) -> String? {
-        guard let tree, location.path.count > 1, let type = action?.type,
-              let above = config?.inheritedAction(tree: tree, path: Array(location.path.dropLast())),
+        guard let type = action?.type, let above = actionAbove,
               above.type == type, let value = above.fields[key]?.stringValue, !value.isEmpty else { return nil }
         return value
     }
@@ -598,7 +728,7 @@ private struct NodeInspector: View {
     /// against: those for its key, with what the tree sets above and below it.
     private func valueContext(_ place: TemplatePlace) -> ValueContext {
         let catalog = ValueCatalog(registry: .shared)
-        guard let tree, let config, let selection = config.resolve(tree: tree, path: location.path) else {
+        guard let config, let selection = model.resolved(id) else {
             return ValueContext(catalog: catalog, params: [:], place: place)
         }
         return ValueContext(catalog: catalog.atKey(selection, config: config), params: selection.params, place: place)

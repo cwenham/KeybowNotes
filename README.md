@@ -226,6 +226,27 @@ its own type and fields:
 
 <img src="docs/images/inspector-display.png" width="420" alt="The inspector for Look up › Explain: a Display with OK and Cancel buttons, and under When OK is chosen, a new note with the title {{selection}} in the folder Explained">
 
+### Several actions on one key
+
+Bullets under a key are its steps, run one after another — each inherits the
+key's settings, so it only needs what's different. A step can be a condition,
+`If {{answer}} is yes`, with the steps it guards under it; an Ask's answer, or a
+display's OK, is there for the steps after it:
+
+```
+1. Standup [Calendar, title: Standup, start: tomorrow 9:30]
+   - The event
+   - Notes for it [Notes, folder: Standups]
+2. Jot [Ask, text: "What's on your mind?"]
+   - Ask
+   - If {{answer}} contains tomorrow
+      - [Reminders, title: "{{answer}}", due: tomorrow]
+   - Else
+      - [append, find.byName: Inbox, entry: "{{answer}}"]
+```
+
+In the editor, ⇧Return adds a step to the selected key.
+
 ### Apps, links, music and timers
 
 - **Apps, files and links**: open an app, a file in an app, a web page, or any

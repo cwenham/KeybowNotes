@@ -387,8 +387,12 @@ Version 1 files, with a single `"tree"`, still load as the main tree.
 | `params` | Template values, inherited downwards, deeper nodes overriding |
 | `action` | Some or all of an action — inherited by every leaf beneath |
 | `children` | Up to four nodes, or `"@name"` for a list under `lists` |
+| `steps` | A leaf's actions, run in turn — some of them conditions guarding steps of their own |
 
 A node with no children is a leaf. **A leaf does not need an action of its own.**
+With steps, it runs them instead of one action: each is worked out as though it
+were one more node on the path, under the leaf (and under any condition it's in).
+In the outline they're bullets under the key; see CONFIG-LANGUAGE.md, *Steps*.
 
 ### How a leaf's action is worked out
 
@@ -458,7 +462,11 @@ What happens between the press and the action — the values it fetches, the
 replies its blocks ask for, the selected text it reads, the checks that refuse
 it, the action, then the one its outcome runs next — is `ActionPipeline`, in
 KeybowKit. It shows each step through the overlay and reaches the Mac through
-stand-ins it's given, so its rules are tested without a keypad or a screen.
+stand-ins it's given, so its rules are tested without a keypad or a screen. A
+leaf's steps go through it one at a time, each waiting for the last to finish —
+an Ask for its answer — and taking what it gave; conditions are tested as they're
+reached, with the values in hand then. `Steps.swift` holds the conditions and
+the resolved steps.
 
 Deliberately excluded: an "arbitrary AppleScript" action. It would let a config
 file run any code; revisit only if a real need appears.

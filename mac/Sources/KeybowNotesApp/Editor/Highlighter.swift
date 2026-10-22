@@ -9,20 +9,24 @@ struct Highlighter {
     let model: EditorModel
     var font = NSFont.systemFont(ofSize: 13)
 
-    func attributed(_ text: String, inheritedType: String?, roles known: [AnnotationRole]? = nil) -> NSAttributedString {
+    func attributed(_ text: String, inheritedType: String?, roles known: [AnnotationRole]? = nil,
+                    step: Bool = false) -> NSAttributedString {
         let result = NSMutableAttributedString(string: text, attributes: [
             .font: font, .foregroundColor: NSColor.labelColor,
         ])
-        apply(to: result, inheritedType: inheritedType, roles: known)
+        apply(to: result, inheritedType: inheritedType, roles: known, step: step)
         return result
     }
 
-    /// Colours `storage` in place — the field editor's text while typing.
-    func apply(to storage: NSMutableAttributedString, inheritedType: String?, roles known: [AnnotationRole]? = nil) {
+    /// Colours `storage` in place — the field editor's text while typing. A
+    /// step's If, Else if or Else is bold, and its test's {{values}} coloured.
+    func apply(to storage: NSMutableAttributedString, inheritedType: String?, roles known: [AnnotationRole]? = nil,
+               step: Bool = false) {
         let whole = NSRange(location: 0, length: storage.length)
         storage.setAttributes([.font: font, .foregroundColor: NSColor.labelColor], range: whole)
 
         let tokens = OutlineSyntax.tokens(in: storage.string)
+        if step { styleCondition(in: storage, label: tokens.label) }
         guard let brackets = tokens.brackets else { return }
         storage.addAttribute(.foregroundColor, value: NSColor.tertiaryLabelColor, range: brackets)
 
@@ -34,6 +38,21 @@ struct Highlighter {
 
         for (item, role) in zip(tokens.items, roles) {
             style(item, role: role, in: storage)
+        }
+    }
+
+    private static let conditionWord = try! NSRegularExpression(
+        pattern: #"^\s*(else if|otherwise if|elif|if|else|otherwise)\b"#, options: .caseInsensitive)
+    private static let valueTag = try! NSRegularExpression(pattern: #"\{\{.*?\}\}"#)
+
+    private func styleCondition(in storage: NSMutableAttributedString, label: NSRange) {
+        guard let word = Self.conditionWord.firstMatch(in: storage.string, range: label) else { return }
+        let keyword = word.range(at: 1)
+        storage.addAttributes([.foregroundColor: NSColor.systemIndigo,
+                               .font: NSFont.boldSystemFont(ofSize: font.pointSize)], range: keyword)
+        let rest = NSRange(location: keyword.upperBound, length: label.upperBound - keyword.upperBound)
+        for tag in Self.valueTag.matches(in: storage.string, range: rest) {
+            storage.addAttribute(.foregroundColor, value: NSColor.systemPurple, range: tag.range)
         }
     }
 

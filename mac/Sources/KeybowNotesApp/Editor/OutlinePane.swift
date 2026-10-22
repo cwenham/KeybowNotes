@@ -154,7 +154,7 @@ struct OutlinePane: NSViewRepresentable {
 final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate, NSTextFieldDelegate,
                                 NSMenuDelegate {
     private enum AfterEdit {
-        case newSibling, newChild, indent, outdent, cancel, selectPrevious, selectNext
+        case newSibling, newChild, newStep, indent, outdent, cancel, selectPrevious, selectNext
     }
 
     let model: EditorModel
@@ -167,6 +167,9 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     private var editingRow: OutlineRow?
     /// A node just made with Return: left empty, it's removed again.
     private var justCreated: UUID?
+    /// The step made with it: a key's own action, kept as its first step
+    /// when it was given a second. Goes with it, if it goes.
+    private var justKept: UUID?
     private var updatingSelection = false
     /// The placeholder row the outline was last built with, for an empty key
     /// that has no row of its own.
@@ -220,7 +223,7 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         lastContainer = model.container
         shownPending = pendingPlaceholder
         rows = rows.filter { key, _ in
-            if case .node(let id) = key { return model.document.location(of: id) != nil }
+            if case .node(let id) = key { return model.document.contains(id) }
             return false
         }
         outline.reloadData()
@@ -248,18 +251,13 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         case .empty(let location): kind = .empty(location)
         }
         // Make sure it's visible: expand whatever it's inside.
-        let location: OutlineLocation?
+        let ancestors: [UUID]
         switch kind {
-        case .node(let id): location = model.document.location(of: id)
-        case .empty(let empty): location = empty
+        case .node(let id): ancestors = ancestorIDs(of: id)
+        case .empty(let empty): ancestors = keyIDs(above: empty, including: false)
         }
-        if let location {
-            for depth in 1..<max(1, location.path.count) {
-                let ancestor = OutlineLocation(location.container, Array(location.path.prefix(depth)))
-                if let node = model.document.node(at: ancestor), let row = rows[.node(node.id)] {
-                    outline.expandItem(row)
-                }
-            }
+        for ancestor in ancestors {
+            if let row = rows[.node(ancestor)] { outline.expandItem(row) }
         }
         guard let target = rows[kind] else { return }
         let index = outline.row(forItem: target)
@@ -270,6 +268,22 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         outline.scrollRowToVisible(index)
         updatingSelection = false
         model.selectedIDs = target.nodeID.map { [$0] } ?? []
+    }
+
+    /// The keys above a place, top down — and the one there, `including` it.
+    private func keyIDs(above location: OutlineLocation, including: Bool) -> [UUID] {
+        let depths = including ? Array(1...max(1, location.path.count)) : Array(1..<max(1, location.path.count))
+        return depths.compactMap { depth in
+            model.document.node(at: OutlineLocation(location.container, Array(location.path.prefix(depth))))?.id
+        }
+    }
+
+    /// What a key or a step is inside, top down: for a step, its key and
+    /// the keys above it, then the Ifs it's under.
+    private func ancestorIDs(of id: UUID) -> [UUID] {
+        if let location = model.document.location(of: id) { return keyIDs(above: location, including: false) }
+        guard let address = model.document.stepAddress(of: id) else { return [] }
+        return keyIDs(above: address.key, including: true) + model.document.stepChain(of: id).dropLast().map(\.id)
     }
 
     /// Several nodes selected at once — those just pasted.
@@ -292,15 +306,22 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
 
     // MARK: - Rows
 
-    /// The rows under an item: its occupied keys, with the empty keys between
-    /// them shown as placeholders. An empty tree offers its first key.
+    /// The rows under an item: a key's steps, then its occupied keys, with
+    /// the empty keys between them shown as placeholders; or the steps under
+    /// an If. An empty tree offers its first key.
     private func children(of item: Any?) -> [OutlineRow] {
         let container = model.container
         let level: [OutlineNode?]
         let path: [Int]
+        var steps: [OutlineRow] = []
         if let row = item as? OutlineRow {
-            guard case .node(let id) = row.kind, let location = model.document.location(of: id),
-                  let node = model.document.node(at: location), node.listReference == nil else { return [] }
+            guard case .node(let id) = row.kind else { return [] }
+            guard let location = model.document.location(of: id), let node = model.document.node(at: location) else {
+                // A step: the steps under it.
+                return (model.node(id)?.steps ?? []).map { self.row(.node($0.id)) }
+            }
+            steps = node.steps.map { self.row(.node($0.id)) }
+            guard node.listReference == nil else { return steps }
             level = node.children
             path = location.path
         } else {
@@ -312,9 +333,9 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
             last = max(last ?? pending.slot, pending.slot)
         }
         guard let last else {
-            return item == nil ? [row(.empty(OutlineLocation(container, [0])))] : []
+            return item == nil ? [row(.empty(OutlineLocation(container, [0])))] : steps
         }
-        return (0...last).map { slot in
+        return steps + (0...last).map { slot in
             if let node = level[slot] { return row(.node(node.id)) }
             return row(.empty(OutlineLocation(container, path + [slot])))
         }
@@ -329,8 +350,9 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     }
 
     func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
-        guard let row = item as? OutlineRow, let id = row.nodeID, let node = model.node(id),
-              node.listReference == nil else { return false }
+        guard let row = item as? OutlineRow, let id = row.nodeID, let node = model.node(id) else { return false }
+        if !node.steps.isEmpty { return true }
+        guard node.listReference == nil else { return false }
         if node.hasChildren { return true }
         // A first child being started.
         guard let pending = pendingPlaceholder, let location = model.document.location(of: id) else { return false }
@@ -354,6 +376,18 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         text.delegate = self
         (text.cell as? OutlineTextCell)?.fieldEditorProvider = { [weak self] in self?.fieldEditor }
         switch row.kind {
+        case .node(let id) where model.document.isStep(id):
+            guard let step = model.node(id) else { return }
+            cell.badge.stringValue = "•"
+            cell.badge.textColor = .secondaryLabelColor
+            cell.badge.layer?.backgroundColor = NSColor.clear.cgColor
+            text.placeholderString = "[action] — or If {{value}} is …"
+            text.attributedStringValue = highlighter.attributed(
+                step.text, inheritedType: model.inheritedType(of: id), roles: model.info(id)?.roles, step: true)
+            showProblems(of: id, in: cell)
+            cell.toolTip = step.isCondition
+                ? "A condition: the steps under it run when it holds; an Else's when nothing before it did."
+                : "A step: runs once the one above it has finished."
         case .node(let id):
             guard let location = model.document.location(of: id), let node = model.document.node(at: location) else { return }
             cell.badge.stringValue = "\(location.slot + 1)"
@@ -362,16 +396,7 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
             text.placeholderString = "Label [annotations]"
             text.attributedStringValue = highlighter.attributed(
                 node.text, inheritedType: model.inheritedType(above: location), roles: model.info(id)?.roles)
-            let problems = model.info(id)?.diagnostics ?? []
-            if let worst = problems.min(by: { rank($0.severity) < rank($1.severity) }) {
-                let (symbol, colour) = marker(worst.severity)
-                cell.problem.image = NSImage(systemSymbolName: symbol, accessibilityDescription: "problem")
-                cell.problem.contentTintColor = colour
-                cell.problem.toolTip = problems.map(\.message).joined(separator: "\n")
-                cell.problem.isHidden = false
-            } else {
-                cell.problem.isHidden = true
-            }
+            showProblems(of: id, in: cell)
             if node.listReference != nil {
                 cell.toolTip = "Its children come from the list @\(node.listReference!)"
             } else {
@@ -386,6 +411,19 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
             cell.problem.isHidden = true
             cell.toolTip = nil
         }
+    }
+
+    private func showProblems(of id: UUID, in cell: OutlineCell) {
+            let problems = model.info(id)?.diagnostics ?? []
+            if let worst = problems.min(by: { rank($0.severity) < rank($1.severity) }) {
+                let (symbol, colour) = marker(worst.severity)
+                cell.problem.image = NSImage(systemSymbolName: symbol, accessibilityDescription: "problem")
+                cell.problem.contentTintColor = colour
+                cell.problem.toolTip = problems.map(\.message).joined(separator: "\n")
+                cell.problem.isHidden = false
+            } else {
+                cell.problem.isHidden = true
+            }
     }
 
     private func rank(_ severity: OutlineDiagnostic.Severity) -> Int {
@@ -442,8 +480,12 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     private func keyDown(_ event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         switch event.keyCode {
-        case 36, 76:                                            // Return, Enter
-            if let row = selectedRow { beginEditing(row) }
+        case 36, 76:                                            // Return, Enter; ⇧ for a step
+            if flags.contains(.shift) {
+                addStep()
+            } else if let row = selectedRow {
+                beginEditing(row)
+            }
             return true
         case 48:                                                // Tab
             if let id = selectedRow?.nodeID {
@@ -479,7 +521,8 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     func move(by offset: Int) {
         endEditing()
         guard let id = selectedRow?.nodeID else { return }
-        if model.edit("Move", { try $0.move(id, by: offset) }) {
+        let isStep = model.document.isStep(id)
+        if model.edit(isStep ? "Move Step" : "Move", { try isStep ? $0.moveStep(id, by: offset) : $0.move(id, by: offset) }) {
             reload()
             select(.node(id))
         }
@@ -488,15 +531,17 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     // MARK: - Structure
 
     private func indent(_ id: UUID) {
-        if model.edit("Indent", { try $0.indent(id) }) {
-            if let parent = parentID(of: id) { collapsed.remove(parent) }
+        let isStep = model.document.isStep(id)
+        if model.edit("Indent", { try isStep ? $0.indentStep(id) : $0.indent(id) }) {
+            if let parent = ancestorIDs(of: id).last { collapsed.remove(parent) }
             reload()
             select(.node(id))
         }
     }
 
     private func outdent(_ id: UUID) {
-        if model.edit("Outdent", { try $0.outdent(id) }) {
+        let isStep = model.document.isStep(id)
+        if model.edit("Outdent", { try isStep ? $0.outdentStep(id) : $0.outdent(id) }) {
             reload()
             select(.node(id))
         }
@@ -538,6 +583,11 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
             model.flash("There's nothing on the clipboard to paste.")
             return
         }
+        // After a step: steps.
+        if case .after(let id) = place, model.document.isStep(id) {
+            pasteSteps(text, after: id)
+            return
+        }
         let nodes = OutlineClipboard.nodes(from: text)
         guard !nodes.isEmpty else {
             model.flash("Nothing to paste: the clipboard has no items like “1. Label [annotations]”.")
@@ -546,6 +596,24 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         if case .inside(let id) = place { collapsed.remove(id) }
         var placed: [UUID] = []
         if model.edit(nodes.count == 1 ? "Paste" : "Paste \(nodes.count) Nodes", { placed = try $0.paste(nodes, place) }) {
+            reload()
+            selectNodes(placed)
+        }
+    }
+
+    /// Pastes outline text as steps: after a step, or at the end of a key's.
+    private func pasteSteps(_ text: String, after id: UUID) {
+        endEditing()
+        let steps = OutlineClipboard.steps(from: text)
+        guard !steps.isEmpty else {
+            model.flash("Nothing to paste: the clipboard has no items like “- Label [annotations]”.")
+            return
+        }
+        var placed: [UUID] = []
+        if model.edit(steps.count == 1 ? "Paste Step" : "Paste \(steps.count) Steps", {
+            placed = try $0.pasteSteps(steps, after: id)
+        }) {
+            collapsed.remove(id)
             reload()
             selectNodes(placed)
         }
@@ -613,11 +681,22 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
             menu.addItem(ActionMenuItem("Copy" + many, key: "c") { [weak self] in self?.copy(targets) })
         }
         switch row?.kind {
+        case .node(let id)? where model.document.isStep(id):
+            menu.addItem(ActionMenuItem("Paste After", key: "v", enabled: canPaste) { [weak self] in self?.paste(.after(id)) })
+            menu.addItem(.separator())
+            menu.addItem(ActionMenuItem("Add Step") { [weak self] in self?.startStep(after: id) })
         case .node(let id)?:
             menu.addItem(ActionMenuItem("Paste After", key: "v", enabled: canPaste) { [weak self] in self?.paste(.after(id)) })
             menu.addItem(ActionMenuItem("Paste Under", enabled: canPaste && canHaveChildren(id)) { [weak self] in
                 self?.paste(.inside(id))
             })
+            let leaf = model.node(id).map { !$0.hasChildren && $0.listReference == nil } ?? false
+            menu.addItem(ActionMenuItem("Paste as Steps", enabled: canPaste && leaf) { [weak self] in
+                guard let self, let text = pasteboard.string(forType: .string) else { return }
+                pasteSteps(text, after: id)
+            })
+            menu.addItem(.separator())
+            menu.addItem(ActionMenuItem("Add Step", enabled: leaf) { [weak self] in self?.startStep(after: id) })
         case .empty(let location)?:
             menu.addItem(ActionMenuItem("Paste Here", key: "v", enabled: canPaste) { [weak self] in self?.paste(.at(location)) })
         case nil:
@@ -637,12 +716,7 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     /// nor taking them from a list.
     private func canHaveChildren(_ id: UUID) -> Bool {
         guard let location = model.document.location(of: id), let node = model.node(id) else { return false }
-        return node.listReference == nil && location.path.count < model.document.levels(location.container)
-    }
-
-    private func parentID(of id: UUID) -> UUID? {
-        guard let location = model.document.location(of: id), location.path.count > 1 else { return nil }
-        return model.document.node(at: OutlineLocation(location.container, location.parentPath))?.id
+        return node.listReference == nil && node.steps.isEmpty && location.path.count < model.document.levels(location.container)
     }
 
     /// ⌘Return: start a child of the selected node — or of the one being
@@ -658,6 +732,46 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         }
     }
 
+    /// ⇧Return: a step for the selected key — or after the selected step —
+    /// once a row being edited is in.
+    func addStep() {
+        if editingRow != nil {
+            afterEdit = .newStep
+            endEditing()
+        } else if let id = selectedRow?.nodeID {
+            startStep(after: id)
+        } else {
+            model.flash("Select a key to give it a step.")
+        }
+    }
+
+    /// A new, empty step to type into: at the end of a key's steps, or after
+    /// a step. Left empty, it's taken away again. A key's first: what it did
+    /// until now is kept as a step before it — with steps, only they run —
+    /// named for what it does, and inheriting all of it.
+    private func startStep(after id: UUID) {
+        var kept: String?
+        if model.document.location(of: id) != nil, let key = model.node(id), key.steps.isEmpty,
+           !key.hasChildren, key.listReference == nil {
+            if let config = model.keypadConfig, let selection = model.resolved(id) {
+                kept = ActionSummary(selection: selection, config: config).verb
+            } else {
+                kept = "Its own action"
+            }
+        }
+        var newID: UUID?
+        var keptID: UUID?
+        guard model.edit("New Step", { document in
+            if let kept { keptID = try document.addStep(after: id, label: kept) }
+            newID = try document.addStep(after: id)
+        }), let newID else { return }
+        justCreated = newID
+        justKept = keptID
+        for ancestor in ancestorIDs(of: newID) { collapsed.remove(ancestor) }
+        reload()
+        if let row = rows[.node(newID)] { beginEditing(row) }
+    }
+
     /// Selects the node's first free child key, with a placeholder row to type
     /// into. Nothing is made until something's typed.
     @discardableResult
@@ -667,6 +781,10 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         }
         if let list = node.listReference {
             model.flash("“\(node.label)” takes its children from @\(list).")
+            return false
+        }
+        if !node.steps.isEmpty {
+            model.flash("“\(node.label)” has steps, so it can't have keys under it too. ⇧↩ adds another step.")
             return false
         }
         guard location.path.count < model.document.levels(location.container) else {
@@ -711,20 +829,19 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
 
     private func makeCompletionSources() -> OutlineCompletionSources {
         let vocabulary = ModuleRegistry.shared.vocabulary
-        var location: OutlineLocation?
+        var inherited: String?
         switch editingRow?.kind {
-        case .node(let id)?: location = model.document.location(of: id)
-        case .empty(let empty)?: location = empty
-        case nil: location = nil
+        case .node(let id)?: inherited = model.inheritedType(of: id)
+        case .empty(let empty)?: inherited = model.inheritedType(above: empty)
+        case nil: inherited = nil
         }
-        // The {{values}} for its key, when it has one in the tree as it stands.
+        // The {{values}} for its key — or step — when it has one in the tree as it stands.
         var values = ValueCatalog(registry: .shared)
-        if case .node? = editingRow?.kind, let location, case .tree(let tree, _) = location.container,
-           let config = model.keypadConfig, let selection = config.resolve(tree: tree, path: location.path) {
+        if case .node(let id)? = editingRow?.kind, let config = model.keypadConfig, let selection = model.resolved(id) {
             values = values.atKey(selection, config: config)
         }
         return OutlineCompletionSources(
-            vocabulary: vocabulary, inheritedType: location.flatMap { model.inheritedType(above: $0) },
+            vocabulary: vocabulary, inheritedType: inherited,
             lists: model.document.lists.map(\.name), templates: model.templateFiles(), apps: AppCatalog.all.map(\.name),
             valueKeys: model.document.valueKeys(vocabulary: vocabulary), values: values)
     }
@@ -768,14 +885,18 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
 
     private func rehighlight(_ editor: NSTextView) {
         guard let storage = editor.textStorage, let row = editingRow else { return }
-        let location: OutlineLocation?
+        let inherited: String?
+        var step = false
         switch row.kind {
-        case .node(let id): location = model.document.location(of: id)
-        case .empty(let empty): location = empty
+        case .node(let id):
+            inherited = model.inheritedType(of: id)
+            step = model.document.isStep(id)
+        case .empty(let empty):
+            inherited = model.inheritedType(above: empty)
         }
         let selected = editor.selectedRanges
         storage.beginEditing()
-        highlighter.apply(to: storage, inheritedType: location.flatMap { model.inheritedType(above: $0) })
+        highlighter.apply(to: storage, inheritedType: inherited, step: step)
         storage.endEditing()
         editor.selectedRanges = selected
         editor.typingAttributes = [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor.labelColor]
@@ -785,7 +906,8 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         // While completion's list is showing, the keys are its.
         if (textView as? OutlineFieldEditor)?.isCompleting == true { return false }
         switch selector {
-        case #selector(NSResponder.insertNewline(_:)): afterEdit = .newSibling
+        case #selector(NSResponder.insertNewline(_:)):
+            afterEdit = NSApp.currentEvent?.modifierFlags.contains(.shift) == true ? .newStep : .newSibling
         case #selector(NSResponder.insertTab(_:)): afterEdit = .indent
         case #selector(NSResponder.insertBacktab(_:)): afterEdit = .outdent
         case #selector(NSResponder.cancelOperation(_:)): afterEdit = .cancel
@@ -806,7 +928,13 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         afterEdit = nil
 
         if action == .cancel {
-            if let created = justCreated, row.nodeID == created { model.edit("New Node") { try $0.delete(created) } }
+            if let created = justCreated, row.nodeID == created {
+                let kept = justKept
+                model.edit(model.document.isStep(created) ? "New Step" : "New Node") {
+                    try $0.delete([created] + (kept.map { [$0] } ?? []))
+                }
+            }
+            justKept = nil
             justCreated = nil
             reload()
             return
@@ -818,7 +946,11 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
         case .node(let id):
             if text.isEmpty && id == justCreated {
                 // Return on an empty new node takes it away again.
-                model.edit("New Node") { try $0.delete(id) }
+                let kept = justKept
+                justKept = nil
+                model.edit(model.document.isStep(id) ? "New Step" : "New Node") {
+                    try $0.delete([id] + (kept.map { [$0] } ?? []))
+                }
                 justCreated = nil
                 reload()
                 return
@@ -836,11 +968,17 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
             current = newID
         }
         justCreated = nil
+        justKept = nil
         reload()
         guard let id = current else { return }
         select(.node(id))
 
+        let isStep = model.document.isStep(id)
         switch action {
+        case .newSibling? where isStep, .newStep?:
+            startStep(after: id)
+        case .newChild? where isStep:
+            model.flash("A step has no keys under it. ⇧↩ adds a step after it; Tab puts one under an If.")
         case .newSibling?:
             // With every key on the row taken, the next node can only go
             // underneath: start a child instead of stopping at a warning.

@@ -765,8 +765,10 @@ extension OutlineDocument {
         setLevel(address.key.container, parent: address.key.parentPath, to: row)
     }
 
-    /// A new, empty step: at the end of a key's steps, or right after a step.
-    /// Refused on a key with keys under it — steps are what a key does.
+    /// A new, empty step: at the end of a key's steps, or right after a step
+    /// — or, for an If, Else if or Else, at the end of the steps under it, so
+    /// an If and its Else aren't parted. Refused on a key with keys under it:
+    /// steps are what a key does.
     @discardableResult
     public mutating func addStep(after id: UUID, label: String = "") throws -> UUID {
         let step = OutlineNode.step(label)
@@ -775,8 +777,14 @@ extension OutlineDocument {
             try changeSteps(holding: StepAddress(key: location, path: [key.steps.count])) { $0.append(step) }
             return step.id
         }
-        guard let address = stepAddress(of: id) else { throw OutlineEditError.notFound }
-        try changeSteps(holding: address) { $0.insert(step, at: address.path.last! + 1) }
+        guard let address = stepAddress(of: id), let existing = node(id) else { throw OutlineEditError.notFound }
+        if existing.isCondition {
+            try changeSteps(holding: StepAddress(key: address.key, path: address.path + [existing.steps.count])) {
+                $0.append(step)
+            }
+        } else {
+            try changeSteps(holding: address) { $0.insert(step, at: address.path.last! + 1) }
+        }
         return step.id
     }
 
@@ -797,15 +805,20 @@ extension OutlineDocument {
         }
     }
 
-    /// Takes a step out of the condition it's under, to just after it.
+    /// Takes a step out of the condition it's under, to just after it — and
+    /// after any Else if or Else that goes with it.
     public mutating func outdentStep(_ id: UUID) throws {
         guard let address = stepAddress(of: id), let key = node(at: address.key),
               let step = key.step(at: address.path) else { throw OutlineEditError.notFound }
         guard address.path.count > 1 else { throw OutlineEditError.alreadyOutermost }
         let conditionPath = Array(address.path.dropLast())
         try changeSteps(holding: address) { $0.remove(at: address.path.last!) }
-        try changeSteps(holding: StepAddress(key: address.key, path: conditionPath)) {
-            $0.insert(step, at: conditionPath.last! + 1)
+        try changeSteps(holding: StepAddress(key: address.key, path: conditionPath)) { steps in
+            var after = conditionPath.last! + 1
+            while after < steps.count, case .success(let next)? = steps[after].condition, next.branch != .ifTrue {
+                after += 1
+            }
+            steps.insert(step, at: after)
         }
     }
 

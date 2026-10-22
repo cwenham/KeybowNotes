@@ -344,6 +344,23 @@ final class StepsTests: XCTestCase {
         XCTAssertEqual(texts(), ["[Insert]", "[Copy, text: hi]", "[Maps]"])
     }
 
+    func testAnIfAndItsElseStayTogether() throws {
+        var doc = document("""
+            1. Key
+               - If {{answer}}
+                  - [Copy]
+               - Else
+                  - [Maps]
+            """)
+        let steps = try XCTUnwrap(doc.roots(.main)[0]?.steps)
+        // A step added at an If goes under it, not between it and its Else.
+        let added = try doc.addStep(after: steps[0].id, label: "Then")
+        XCTAssertEqual(doc.roots(.main)[0]?.steps[0].steps.map(\.text), ["[Copy]", "Then"])
+        // Out of the If: after its Else, too.
+        try doc.outdentStep(added)
+        XCTAssertEqual(doc.roots(.main)[0]?.steps.map(\.text), ["If {{answer}}", "Else", "Then"])
+    }
+
     func testAKeyWithStepsTakesNoKeys() throws {
         var doc = document("""
             1. Key

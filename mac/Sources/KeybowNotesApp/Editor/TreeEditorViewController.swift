@@ -77,8 +77,20 @@ final class TreeEditorViewController: NSViewController {
                 self.coordinator.addChild()
                 return nil
             }
+            // ⇧Return: a step — while the outline has the keyboard, so a
+            // field in the inspector keeps its own.
+            if [36, 76].contains(event.keyCode), flags == .shift, self.outlineHasKeyboard {
+                self.coordinator.addStep()
+                return nil
+            }
             return event
         }
+    }
+
+    /// Whether the keyboard is in the outline: a row, or a row being typed in.
+    private var outlineHasKeyboard: Bool {
+        let responder = view.window?.firstResponder
+        return responder is KeyOutlineView || responder is OutlineFieldEditor
     }
 
     // MARK: - The menu's commands
@@ -99,6 +111,8 @@ final class TreeEditorViewController: NSViewController {
     @objc func moveNodeDown(_ sender: Any?) { coordinator.move(by: 1) }
     /// ⌘Return from the menu.
     @objc func addChildNode(_ sender: Any?) { coordinator.addChild() }
+    /// ⇧Return from the menu, or the inspector's Add Step.
+    @objc func addStepNode(_ sender: Any?) { coordinator.addStep() }
 
     // MARK: - Development builds
 

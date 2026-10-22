@@ -122,6 +122,25 @@ final class EditorModel {
         return info(parent.id)?.actionType
     }
 
+    /// The type in force where a key or a step sits — what its own bracket
+    /// words are read against: for a step, its If's, or its key's.
+    func inheritedType(of id: UUID) -> String? {
+        if let location = document.location(of: id) { return inheritedType(above: location) }
+        let chain = document.stepChain(of: id)
+        if chain.count > 1 { return info(chain[chain.count - 2].id)?.actionType }
+        guard let address = document.stepAddress(of: id), let key = document.node(at: address.key) else { return nil }
+        return info(key.id)?.actionType
+    }
+
+    /// The selection, as one of its key's steps: what that step runs, with
+    /// its values — or the key's own, for a key.
+    func resolved(_ id: UUID) -> ResolvedSelection? {
+        guard let location = document.keyLocation(of: id), case .tree(let tree, _) = location.container,
+              let config = keypadConfig, let selection = config.resolve(tree: tree, path: location.path) else { return nil }
+        guard let step = info(id)?.step else { return selection }
+        return selection.steps.step(at: step).map(selection.doing)
+    }
+
     func listNames() -> Set<String> { Set(document.lists.map(\.name)) }
 
     func role(of annotation: Annotation, inheritedType: String?) -> AnnotationRole {
@@ -182,8 +201,8 @@ final class EditorModel {
         document = newDocument
         compilation = OutlineCompiler.compile(document, locateApp: locateApp)
         // A selection that no longer exists (undone away) is dropped.
-        if case .node(let id)? = selection, document.location(of: id) == nil { selection = nil }
-        selectedIDs = selectedIDs.filter { document.location(of: $0) != nil }
+        if case .node(let id)? = selection, !document.contains(id) { selection = nil }
+        selectedIDs = selectedIDs.filter { document.contains($0) }
         isDirty = OutlineWriter.text(document) != savedText
         revision += 1
         saveStatus = nil

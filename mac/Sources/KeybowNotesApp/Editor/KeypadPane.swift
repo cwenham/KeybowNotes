@@ -107,7 +107,8 @@ struct KeypadPane: View {
         var isNode = false
         switch model.selection {
         case .node(let id)?:
-            if let location = model.document.location(of: id), location.container == container {
+            // A step lights its key.
+            if let location = model.document.keyLocation(of: id), location.container == container {
                 path = location.path
                 isNode = true
             }

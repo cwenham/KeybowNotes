@@ -73,6 +73,7 @@ private final class Showcase: KeybowModule, @unchecked Sendable {
     let manifest = ModuleManifest(id: "showcase", name: "Showcase", actionTypes: [
         ModuleActionType(type: "showcase", title: "Showcase", keywords: ["Showcase"], symbol: "eye", fields: [
             ModuleField(key: "ok", title: "On OK", kind: .action),
+            ModuleField(key: "cancel", title: "On Cancel", kind: .action),
         ], takesText: true),
     ])
     func start(host: ModuleHost) {}
@@ -365,6 +366,19 @@ extension ActionPipelineTests {
         XCTAssertEqual(copied, [])
         XCTAssertEqual(outcome.message, "Stopped at Cancel")
         XCTAssertEqual(overlay.shown, ["running", "aside"], "Cancel was answer enough")
+    }
+
+    func testCancelRunsItsOwnActionThenStops() async throws {
+        registry.register(Showcase(), host: MemoryModuleHost())
+        mac.outcomes = [.then("cancel", values: ["answer": ""]), .success("Copied it")]
+        let outcome = try await fireSteps("""
+            1. Jot [Copy]
+               - [Showcase, cancel: Copy, cancel.text: dropped]
+               - [text: after]
+            """)
+        XCTAssertEqual(copied, ["dropped"])
+        XCTAssertEqual(outcome.message, "Stopped at Cancel")
+        XCTAssertEqual(overlay.shown.last, "finished: Copied it", "what its Cancel did")
     }
 
     func testTheSelectionIsReadOnce() async throws {

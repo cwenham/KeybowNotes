@@ -50,6 +50,11 @@ action (a calendar event) and "Tomorrow" supplies a value (the date). So an
 action is normally declared on a branch and **inherited** by every leaf beneath
 it; the leaf's label, and anything else along the path, fills in the details.
 
+**Steps.** A leaf can run more than one action: bulleted items under it are its
+steps, run one after another, each inheriting from the leaf. A step can be a
+condition — `If {{answer}} is yes` — with the steps it guards under it. See
+[Steps](#steps).
+
 ---
 
 ## 2. The outline
@@ -210,6 +215,86 @@ through choices:
 
 A page takes its keys from the items under it, not from a list. An empty page
 is noted, and does nothing.
+
+### Steps
+
+Bulleted items under a key are its **steps**: what it does, one after another,
+when it's chosen. Numbered items stay keys.
+
+```
+1. Standup [Calendar, title: Standup, start: tomorrow 9:30]
+   - The event                                ← runs what the key says: an event
+   - Notes for it [Notes, folder: Standups]   ← then a note
+2. Jot [Ask, text: "What's on your mind?"]
+   - Ask                                      ← asks; then {{answer}} is what was typed
+   - If {{answer}} contains tomorrow
+      - [Reminders, title: "{{answer}}", due: tomorrow]
+   - Else
+      - [append, find.byName: Inbox, entry: "{{answer}}"]
+```
+
+- **A step inherits from its key** as a key inherits from its branch: the key's
+  brackets, and everything above it, are laid under the step's own. A step with
+  nothing in brackets runs what the key would; `[Reminders]` makes it a
+  reminder, starting afresh as any change of type does (§4); `[title: Other]`
+  keeps the type and changes the title.
+- **Its label names it**, for the overlay and the editor, and may be left out:
+  `- [Copy]`. It isn't a value: `{{leaf}}` is still the key's label, and a
+  calendar key's label still gives its `when`.
+- **A key with steps runs only its steps.** Its own brackets are what they
+  inherit; to keep what it did and add something, make the first step a bare
+  `- The event`, as above — the editor does that for you when it adds a key's
+  first step.
+- **Steps go on a key with nothing under it.** On a branch, or a page, they're
+  a mistake; a key can't go under a step. In a `# list`, a key's steps come
+  with it wherever the list is used.
+
+**Running.** Each step starts once the one before has finished, so:
+
+- **What a step gives, the steps after it can use:** an Ask's `{{answer}}`,
+  a display's `{{displayed}}`. An Ask, and a display with buttons, wait for an
+  answer; a display without buttons is shown and the next step runs at once.
+- **`{{selection}}` is read once**, the first time a step needs it, since a
+  step that types replaces it. `{{clipboard}}` and `{{frontApp}}` are read as
+  each step runs, so a step can use what one before it copied.
+- **One that fails, or is refused, stops the rest**, and the overlay says which;
+  so does Cancel on an Ask or a display — after its own `cancel:` action, if it
+  has one. Waiting can be cancelled as for one action, which stops the rest too.
+- **The time to cancel** comes once, before the first step; `instant: true` on
+  the key skips it, and a module that runs at once — the stopwatch — does too
+  when it's the first step.
+- **The overlay** shows each step as it runs, then how they went: what the
+  last one did, with what the steps before it did beneath.
+
+#### Conditions
+
+A step with steps under it is a **condition**, written in its label:
+
+| Label | Its steps run |
+|---|---|
+| `If {{answer}}` | when there's something there: not empty, `false`, `no`, `off` or `0` |
+| `If {{answer}} is yes` — or `==`, `=`, `equals` | when they're the same, ignoring case and spaces at the ends |
+| `If {{answer}} is not yes` — or `!=`, `isn't` | when they're different |
+| `If {{answer}} contains soon` — or `doesn't contain` | |
+| `If {{answer}} starts with Re:` — or `ends with` | |
+| `If {{home.sensor.study}} > 21` — and `<`, `>=`, `<=` | numbers compared as numbers, `21.5` and `21 °` included; anything else as text |
+| `If {{selection}} is empty` — or `is not empty` | |
+| `Else if …` | when no If or Else if before it in the chain held, and it does |
+| `Else`, `Otherwise` | when none before it held |
+
+- **Either side can be a value or words.** Quotes — `"…"` or `'…'` — keep
+  spaces at the ends, or words like `is`: `If {{answer}} is "is it"`.
+  `If {{answer}} == ""` is the same as `is empty`. One test to an If: for two,
+  put one If under another.
+- **Values** are those the steps can use: the tree's, the key's, what's
+  selected, fetched — `{{api.weather}}` — or given by the steps before it. A
+  value that's missing counts as empty. `{{#ai}}` can't go in a condition: a
+  reply mustn't decide what runs.
+- **Else if and Else** go right after an If, or another Else if, at the same
+  level; on their own they're a mistake.
+- **Brackets on a condition** are inherited by the steps under it, as a key's
+  are: `- If {{answer}} is work [folder: Work]`.
+- A trailing colon is fine: `If {{answer}} is yes:`.
 
 ### Brackets
 
@@ -417,8 +502,15 @@ tree.
 | `params` | Values for templates, inherited by everything beneath; deeper nodes override. |
 | `action` | Some or all of an action, inherited by every leaf beneath (§4). |
 | `children` | Up to four nodes, or `"@name"` to use a list from `lists`. |
+| `steps` | A leaf's steps, in order (below). |
 
 A node without children is a leaf. **A leaf needs no action of its own.**
+
+A step is `{"label": …, "params": …, "action": …}`, each part optional, or a
+condition with `"steps": [ … ]` under it: `{"if": "{{answer}} is yes"}`,
+`{"elseIf": …}` or `{"else": true}`. Its `action` and `params` are laid over
+its key's, and a condition's over the steps under it, as a node's are over its
+children's.
 
 ### Lists
 
@@ -930,6 +1022,8 @@ opening an app.
   is Cancel. It never takes the focus from what you're doing; click it first to
   use Return for OK.
 - **One at a time:** a new display replaces the last.
+- **Without buttons, nothing waits for it:** as one of a key's steps, the next
+  runs as soon as it's shown. With buttons, the next waits for one.
 - **Its size** follows the text: as wide as the longest line, up to 620 points
   (or half the screen), and as tall as it needs, up to 70% of the screen — and
   it scrolls beyond that. It appears on the overlay's screen, above the middle.
@@ -1938,6 +2032,9 @@ compiler knows.
 **Outline pairs with a meaning of their own:** `colour`/`color`, `type`, and the
 action fields listed in §2.
 
+**Step conditions:** a step's label beginning `If`, `Else if`, `Otherwise if`
+or `Elif`, or that is `Else` or `Otherwise`.
+
 **Section headings:** `main`, `row 2`, `row 3`, `bottom` (and their variants),
 `keypad …`, `list …`, `contacts`, `projects`, `defaults`; `[pages]` on a tree's.
 
@@ -1966,7 +2063,7 @@ and `{{#empty}}`; `{{#ai}}` and other modules' blocks.
 
 - **Asking for a value inline**, in any action's text, rather than with an
   `ask` action before it. Reserved syntax: `{{?Label}}`.
-- **More than one action** per leaf — a note *and* a reminder pointing to it.
+- **Steps on a branch**, for every key under it, rather than on each key.
 - **Channel URLs** for apps like Discord and Meshtastic, which the compiler can
   only list as needing one.
 - **Comments** between items, which the outline's writer doesn't keep yet.

@@ -25,6 +25,10 @@ public struct ActionSummary: Equatable, Sendable {
         self.missing = missing
     }
 
+    /// What a step can be given by the steps before it — an Ask's answer, a
+    /// display's text — shown in its preview as what they'll be.
+    public static let stepStandIns = ["answer": "‹what's typed›", "displayed": "‹what's shown›"]
+
     /// The same, captioned otherwise: "3 steps".
     public func titled(_ verb: String) -> ActionSummary {
         ActionSummary(type: type, verb: verb, subject: subject, details: details, missing: missing)
@@ -39,7 +43,8 @@ public struct ActionSummary: Equatable, Sendable {
                 steps.flatMap { step in
                     step.isAction
                         ? [ActionSummary(selection: selection.doing(step), config: config, now: now, calendar: calendar,
-                                         environment: environment, registry: registry)]
+                                         environment: Self.stepStandIns.merging(environment) { _, given in given },
+                                         registry: registry)]
                         : summaries(step.steps)
                 }
             }

@@ -15,11 +15,20 @@ final class DisplayModuleTests: XCTestCase {
         ModuleRequest(type: DisplayModule.type, fields: fields, labels: ["Show", leaf])
     }
 
+    /// What the host was asked to show: without buttons, the display is
+    /// put up without waiting for it, so it may take a moment to arrive.
+    private func shown(on host: MemoryModuleHost) async throws -> ModuleDisplay {
+        for _ in 0..<100 where host.displayed.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        return try XCTUnwrap(host.displayed.first)
+    }
+
     func testItShowsMarkdownAndFadesByItself() async throws {
         let (display, host) = module()
         let outcome = await display.run(request(["text": "*Carpe* diem", "fade": "15 sec"]), now: Date())
-        XCTAssertEqual(outcome, .quiet, "it showed itself: nothing more for the overlay")
-        let shown = try XCTUnwrap(host.displayed.first)
+        XCTAssertTrue(outcome.isQuiet, "it showed itself: nothing more for the overlay")
+        XCTAssertEqual(outcome.values, ["displayed": "*Carpe* diem"], "for the steps after it")
+        XCTAssertNil(outcome.followUp)
+        let shown = try await shown(on: host)
         XCTAssertEqual(shown, ModuleDisplay(content: .markdown("*Carpe* diem"), buttons: [], fadeAfter: 15))
     }
 
@@ -27,7 +36,8 @@ final class DisplayModuleTests: XCTestCase {
         let (display, host) = module()
         let page = "<!DOCTYPE html><html><body><p>Hi &amp; bye</p></body></html>"
         _ = await display.run(request(["text": page]), now: Date())
-        XCTAssertEqual(host.displayed.first?.content, .html(page))
+        let shown = try await shown(on: host)
+        XCTAssertEqual(shown.content, .html(page))
     }
 
     func testWithoutAFadeItStaysLongEnoughToRead() {

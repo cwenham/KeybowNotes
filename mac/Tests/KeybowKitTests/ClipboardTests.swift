@@ -50,8 +50,9 @@ final class ClipboardTests: XCTestCase {
             """)
         XCTAssertEqual(nodes.map(\.label), ["Work", "Home"])
         XCTAssertEqual(nodes[0].annotations, [.word("Copy")])
-        XCTAssertEqual(nodes[0].children.map { $0?.label }, ["Again", "Bulleted", "Review", nil],
+        XCTAssertEqual(nodes[0].children.map { $0?.label }, ["Again", nil, "Review", nil],
                        "3 twice: the second takes the next free key")
+        XCTAssertEqual(nodes[0].steps.map(\.label), ["Bulleted"], "a bullet under a numbered item is a step")
         XCTAssertNotEqual(OutlineClipboard.nodes(from: "1. A\n")[0].id, OutlineClipboard.nodes(from: "1. A\n")[0].id)
     }
 

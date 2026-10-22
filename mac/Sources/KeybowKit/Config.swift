@@ -166,19 +166,44 @@ public final class TreeNode: @unchecked Sendable {
     public let actionFields: [String: JSONValue]?
     /// Four slots; nil where no option occupies that key.
     public let children: [TreeNode?]
+    /// A leaf's steps: actions run one after another when it's chosen,
+    /// each inheriting from it. Empty for a leaf with one action.
+    public let steps: [TreeStep]
 
     init(label: String, colour: KeyColour?, params: [String: String],
-         actionFields: [String: JSONValue]?, children: [TreeNode?]) {
+         actionFields: [String: JSONValue]?, children: [TreeNode?], steps: [TreeStep] = []) {
         self.label = label
         self.colour = colour
         self.params = params
         self.actionFields = actionFields
         self.children = children
+        self.steps = steps
     }
 
     /// A leaf is anything without children. It needs no action of its own:
     /// it inherits one, or falls back to the configured default.
     public var isLeaf: Bool { children.allSatisfy { $0 == nil } }
+}
+
+/// One of a leaf's steps: an action of its own, or a condition guarding the
+/// steps under it. Like a node, it gives fields and values to what's under
+/// it, and inherits what's above.
+public final class TreeStep: @unchecked Sendable {
+    public let label: String
+    /// Nil for an action.
+    public let condition: StepCondition?
+    public let params: [String: String]
+    public let actionFields: [String: JSONValue]?
+    public let steps: [TreeStep]
+
+    init(label: String, condition: StepCondition?, params: [String: String], actionFields: [String: JSONValue]?,
+         steps: [TreeStep]) {
+        self.label = label
+        self.condition = condition
+        self.params = params
+        self.actionFields = actionFields
+        self.steps = steps
+    }
 }
 
 /// Settings for turning words like "tomorrow" into dates.
@@ -333,23 +358,45 @@ public struct KeybowConfig: Sendable {
         guard !path.isEmpty, let chain = nodes(in: tree, along: path), let node = chain.last else { return nil }
         let labels = chain.map(\.label)
 
-        var params = computedParams(labels: labels, tree: tree)
         var explicit: [String: String] = [:]
         for step in chain {
             // Deeper nodes override shallower ones.
             explicit.merge(step.params) { _, deeper in deeper }
         }
-        params.merge(entityParams(labels: labels, explicit: explicit)) { _, entity in entity }
-        params.merge(explicit) { _, given in given }
+        let fields = chain.map(\.actionFields)
 
         return ResolvedSelection(
             tree: tree,
             path: path,
             labels: labels,
-            params: params,
-            action: node.isLeaf ? effectiveAction(for: chain) : nil,
-            node: node
+            params: params(labels: labels, tree: tree, explicit: explicit),
+            action: node.isLeaf ? effectiveAction(for: fields) : nil,
+            node: node,
+            steps: node.isLeaf ? resolve(node.steps, labels: labels, tree: tree, explicit: explicit, fields: fields) : []
         )
+    }
+
+    /// The values a path gives: its labels, the people and projects on it,
+    /// and what's set along it — `explicit`, over the rest.
+    private func params(labels: [String], tree: TreeKind, explicit: [String: String]) -> [String: String] {
+        var params = computedParams(labels: labels, tree: tree)
+        params.merge(entityParams(labels: labels, explicit: explicit)) { _, entity in entity }
+        params.merge(explicit) { _, given in given }
+        return params
+    }
+
+    /// Steps, each with the fields and values of everything above it laid
+    /// under its own, as a leaf's are.
+    private func resolve(_ steps: [TreeStep], labels: [String], tree: TreeKind, explicit: [String: String],
+                         fields: [[String: JSONValue]?]) -> [ResolvedStep] {
+        steps.map { step in
+            let explicit = explicit.merging(step.params) { _, deeper in deeper }
+            let fields = fields + [step.actionFields]
+            let inner = resolve(step.steps, labels: labels, tree: tree, explicit: explicit, fields: fields)
+            return ResolvedStep(kind: step.condition.map(ResolvedStep.Kind.condition) ?? .action, label: step.label,
+                                action: effectiveAction(for: fields),
+                                params: params(labels: labels, tree: tree, explicit: explicit), steps: inner)
+        }
     }
 
     /// How long a chosen leaf waits for a press that cancels it. `instant: true`
@@ -359,7 +406,8 @@ public struct KeybowConfig: Sendable {
     public func commitDelay(for selection: ResolvedSelection, registry: ModuleRegistry = .shared) -> TimeInterval {
         // A page's keys are the action, pressed: there's nothing to cancel.
         if isPaged(selection.tree), selection.path.count == 2 { return 0 }
-        guard let action = selection.action else { return commitDelay }
+        // With steps, the first decides: it's what runs on the press.
+        guard let action = selection.firstStep.action else { return commitDelay }
         if case .bool(let instant)? = action.fields["instant"] { return instant ? 0 : commitDelay }
         if let module = registry.module(handling: action.type) {
             let request = ModuleRequest(type: action.type, fields: action.fields.compactMapValues(\.stringValue),
@@ -374,7 +422,22 @@ public struct KeybowConfig: Sendable {
     /// action. For showing, not running: `resolve` is what runs.
     public func inheritedAction(tree: TreeKind = .main, path: [Int]) -> ActionSpec? {
         guard let chain = nodes(in: tree, along: path), !chain.isEmpty else { return nil }
-        return effectiveAction(for: chain)
+        return effectiveAction(for: chain.map(\.actionFields))
+    }
+
+    /// The same, for one of a leaf's steps — and with `above`, for what the
+    /// steps above it give it: those it's under, without its own.
+    public func inheritedAction(tree: TreeKind = .main, path: [Int], step: [Int], above: Bool = false) -> ActionSpec? {
+        guard let chain = nodes(in: tree, along: path), let leaf = chain.last else { return nil }
+        var fields = chain.map(\.actionFields)
+        var steps = leaf.steps
+        for (depth, index) in step.enumerated() {
+            guard index >= 0, index < steps.count else { return nil }
+            if above && depth == step.count - 1 { break }
+            fields.append(steps[index].actionFields)
+            steps = steps[index].steps
+        }
+        return effectiveAction(for: fields)
     }
 
     /// Inheritance, in increasing priority:
@@ -383,11 +446,11 @@ public struct KeybowConfig: Sendable {
     ///   3. each node's fields, shallow to deep
     /// A node naming a *different* type from the one inherited starts afresh:
     /// fields meant for another kind of action are dropped rather than leaking in.
-    private func effectiveAction(for chain: [TreeNode]) -> ActionSpec {
+    private func effectiveAction(for chain: [[String: JSONValue]?]) -> ActionSpec {
         var type: String?
         var fields: [String: JSONValue] = [:]
-        for node in chain {
-            guard var own = node.actionFields else { continue }
+        for given in chain {
+            guard var own = given else { continue }
             if let declared = own.removeValue(forKey: "type")?.stringValue {
                 if let current = type, current != declared { fields = [:] }
                 type = declared
@@ -450,19 +513,32 @@ public struct ResolvedSelection: Equatable, @unchecked Sendable {
     public let path: [Int]
     public let labels: [String]
     public let params: [String: String]
-    /// Present for leaves only.
+    /// Present for leaves only. For a leaf with steps, what it gives them.
     public let action: ActionSpec?
     public let node: TreeNode
+    /// What runs, in turn, when a leaf has steps; empty when it runs `action`.
+    public let steps: [ResolvedStep]
+
+    init(tree: TreeKind, path: [Int], labels: [String], params: [String: String], action: ActionSpec?,
+         node: TreeNode, steps: [ResolvedStep] = []) {
+        self.tree = tree
+        self.path = path
+        self.labels = labels
+        self.params = params
+        self.action = action
+        self.node = node
+        self.steps = steps
+    }
 
     public static func == (lhs: ResolvedSelection, rhs: ResolvedSelection) -> Bool {
         lhs.tree == rhs.tree && lhs.path == rhs.path && lhs.labels == rhs.labels
-            && lhs.params == rhs.params && lhs.action == rhs.action
+            && lhs.params == rhs.params && lhs.action == rhs.action && lhs.steps == rhs.steps
     }
 
     /// "Work / Meeting / 1:1"
     public var pathDescription: String { labels.joined(separator: " / ") }
 
-    /// The same choice, doing something else: a display's follow-up.
+    /// The same choice, doing something else, once: a display's follow-up.
     public func with(action: ActionSpec) -> ResolvedSelection {
         ResolvedSelection(tree: tree, path: path, labels: labels, params: params, action: action, node: node)
     }
@@ -488,6 +564,11 @@ public enum ConfigError: Error, CustomStringConvertible {
     case doesNotCompile(String)
     /// Everything under a branch was left out, so it is too.
     case nothingLeftUnder(at: String)
+    /// Steps on a branch: they're what a leaf does.
+    case stepsOnBranch(at: String)
+    /// A step that can't be: a condition that can't be read, an Else with no
+    /// If before it, or steps under an action.
+    case badStep(at: String, String)
 
     public var description: String {
         switch self {
@@ -522,6 +603,10 @@ public enum ConfigError: Error, CustomStringConvertible {
             return "the tree doesn't compile: \(detail)"
         case .nothingLeftUnder(let location):
             return "\(location): everything under it was left out, so it is too"
+        case .stepsOnBranch(let location):
+            return "\(location): has keys under it, so its steps were left out — steps are what a key with nothing under it does"
+        case .badStep(let location, let problem):
+            return "\(location): \(problem)"
         }
     }
 }
@@ -572,6 +657,19 @@ private struct RawNode: Decodable {
     var params: [String: JSONValue]?
     var children: RawChildren?
     var action: [String: JSONValue]?
+    var steps: [RawStep]?
+}
+
+/// `{"label": …, "action": …}`, or a condition: `{"if": "{{answer}} is yes",
+/// "steps": […]}`, `{"elseIf": …}`, `{"else": true}`.
+private struct RawStep: Decodable {
+    var label: String?
+    var `if`: String?
+    var elseIf: String?
+    var `else`: Bool?
+    var params: [String: JSONValue]?
+    var action: [String: JSONValue]?
+    var steps: [RawStep]?
 }
 
 extension KeybowConfig {
@@ -826,6 +924,63 @@ private struct TreeBuilder {
             throw ConfigError.nothingLeftUnder(at: location)
         }
 
-        return TreeNode(label: raw.label, colour: colour, params: params, actionFields: action, children: children)
+        var steps: [TreeStep] = []
+        if let rawSteps = raw.steps, !rawSteps.isEmpty {
+            if childNodes.isEmpty {
+                steps = try self.steps(from: rawSteps, at: "\(location).steps")
+            } else if let skipped {
+                skipped(ConfigError.stepsOnBranch(at: location).description)
+            } else {
+                throw ConfigError.stepsOnBranch(at: location)
+            }
+        }
+
+        return TreeNode(label: raw.label, colour: colour, params: params, actionFields: action, children: children,
+                        steps: steps)
+    }
+
+    /// A leaf's steps. One that can't be — a condition that can't be read,
+    /// an Else with no If before it — is left out, with what's under it.
+    private func steps(from raws: [RawStep], at location: String) throws -> [TreeStep] {
+        var steps: [TreeStep] = []
+        var afterIf = false
+        for (index, raw) in raws.enumerated() {
+            let here = "\(location)[\(index)]"
+            do {
+                var condition: StepCondition?
+                if let text = raw.if ?? raw.elseIf {
+                    switch StepTest.parse(text) {
+                    case .success(let test): condition = StepCondition(branch: raw.if != nil ? .ifTrue : .elseIf, test: test)
+                    case .failure(let problem): throw ConfigError.badStep(at: here, problem.description)
+                    }
+                    if TemplateBlocks.contains(text), let block = TemplateBlocks.names(in: text).first {
+                        throw ConfigError.badStep(at: here, StepConditionError.block(block).description)
+                    }
+                } else if raw.else == true {
+                    condition = StepCondition(branch: .otherwise, test: nil)
+                }
+                if let condition, condition.branch != .ifTrue, !afterIf {
+                    afterIf = false
+                    throw ConfigError.badStep(at: here, "an Else goes after an If")
+                }
+                afterIf = condition != nil && condition?.branch != .otherwise
+                let inner = raw.steps ?? []
+                if condition == nil, !inner.isEmpty {
+                    throw ConfigError.badStep(at: here, "only a condition — If, Else if, Else — has steps under it")
+                }
+                var params: [String: String] = [:]
+                for (key, value) in raw.params ?? [:] {
+                    if let text = value.stringValue { params[key] = text }
+                }
+                steps.append(TreeStep(label: raw.label ?? condition?.label ?? "", condition: condition, params: params,
+                                      actionFields: (raw.action?.isEmpty ?? true) ? nil : raw.action,
+                                      steps: try self.steps(from: inner, at: "\(here).steps")))
+            } catch let error as ConfigError {
+                afterIf = false
+                guard let skipped else { throw error }
+                skipped(error.description)
+            }
+        }
+        return steps
     }
 }

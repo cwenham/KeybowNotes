@@ -206,6 +206,21 @@ func describe(_ event: NavigatorEvent) -> String {
            let date = DateExpression.resolve(when, now: Date(), rules: currentRules) {
             line += "\n     \"\(when)\" resolves to \(displayFormatter.string(from: date))"
         }
+        func describe(_ steps: [ResolvedStep], indent: String) {
+            for step in steps {
+                switch step.kind {
+                case .action:
+                    line += "\n\(indent)- \(step.action.type)" + (step.label.isEmpty ? "" : " (\(step.label))")
+                case .condition(let condition):
+                    line += "\n\(indent)- \(condition.label)"
+                    describe(step.steps, indent: indent + "  ")
+                }
+            }
+        }
+        if !selection.steps.isEmpty {
+            line += "\n     steps:"
+            describe(selection.steps, indent: "       ")
+        }
         return line
     case .cleared(let reason):
         return "cleared (\(reason.rawValue))"

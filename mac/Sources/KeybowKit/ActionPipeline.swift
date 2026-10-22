@@ -111,6 +111,8 @@ public final class ActionPipeline {
     /// Values being fetched and replies worked out for an action: one at a
     /// time, cancellable.
     private var pendingWork: Task<Void, Never>?
+    /// Keys' steps under way, each running one after another.
+    private var sequences: [UUID: Task<Void, Never>] = [:]
     /// For testing the Cancel button: pressed by itself after this long.
     public var cancelAfter: TimeInterval?
 
@@ -127,9 +129,10 @@ public final class ActionPipeline {
     /// Whether it's waiting on values or replies.
     public var isWaiting: Bool { pendingWork != nil }
 
-    /// Stops waiting, and runs nothing.
+    /// Stops waiting, and runs nothing — nor any step still to come.
     public func cancel() {
         pendingWork?.cancel()
+        for task in sequences.values { task.cancel() }
     }
 
     /// Runs a leaf's action. `chosenAt` is when the key was pressed: the
@@ -140,18 +143,35 @@ public final class ActionPipeline {
     /// ends.
     public func fire(_ selection: ResolvedSelection, chosenAt: Date = Date(), values: [String: String] = [:],
                      report: ((ActionOutcome) -> Void)? = nil) {
+        guard selection.steps.isEmpty else {
+            runSteps(selection, chosenAt: chosenAt, values: values, report: report)
+            return
+        }
+        fireOne(selection, chosenAt: chosenAt, values: values, report: report)
+    }
+
+    /// One action, from its press to its outcome. As one of a key's steps,
+    /// `done` hears how it ended — once, whichever way — and the overlay
+    /// hears of a success at the end of the steps rather than now; `path`
+    /// says which step it is, and `read` is the selection as already read.
+    private func fireOne(_ selection: ResolvedSelection, chosenAt: Date = Date(), values: [String: String] = [:],
+                         path shownPath: String? = nil, read: SelectionReading? = nil,
+                         report: ((ActionOutcome) -> Void)? = nil, done: ((StepEnd) -> Void)? = nil) {
         let config = config()
         let settings = settings()
-        let path = selection.pathDescription
+        let path = shownPath ?? selection.pathDescription
         func refuse(_ message: String) {
             display.showRefused(message, summary: ActionSummary(selection: selection, config: config, registry: registry))
             report?(.failure(message))
+            done?(StepEnd(outcome: .failure(message), stop: .failed, shown: true))
         }
 
         if settings.dryRun {
             let summary = ActionSummary(selection: selection, config: config, registry: registry)
             display.showPreview(summary, path: path)
-            report?(.success("Dry run: nothing done", "It would: \(summary.verb) \(summary.subject)"))
+            let outcome = ActionOutcome.success("Dry run: nothing done", "It would: \(summary.verb) \(summary.subject)")
+            report?(outcome)
+            done?(StepEnd(outcome: outcome, shown: true))
             return
         }
 
@@ -196,9 +216,13 @@ public final class ActionPipeline {
             return
         }
 
-        let needsSelection = needed.contains("selection")
+        // A key's later steps use the selection as it was read for the first
+        // that wanted it: typing replaces it.
+        var selectionRead = read
+        if case .text(let text)? = read, needed.contains("selection") { context.environment["selection"] = text }
+        let needsSelection = needed.contains("selection") && read == nil
         guard needsSelection || waits else {
-            run(selection, context: context, report: report)
+            run(selection, context: context, values: values, path: path, read: selectionRead, report: report, done: done)
             return
         }
         // The app to type into, if it comes to that: waiting leaves time to
@@ -207,11 +231,13 @@ public final class ActionPipeline {
         let work = Task { @MainActor in
             defer { if waits { self.pendingWork = nil } }
             if needsSelection {
-                switch await surroundings.readSelection() {
+                let reading = await surroundings.readSelection()
+                switch reading {
                 case .text(let text):
                     context.environment["selection"] = text
+                    selectionRead = reading
                 case .nothingSelected:
-                    break
+                    selectionRead = reading
                 case .notAllowed:
                     surroundings.log("  can't run: no Accessibility access for {{selection}}")
                     refuse("KeybowNotes needs Accessibility access to read the selected text. "
@@ -222,13 +248,16 @@ public final class ActionPipeline {
             }
             if waits {
                 guard let prepared = await prepare(fetchedNames, blockTexts, selection: selection, context: context,
-                                                   config: config) else {
-                    report?(.failure("It didn't run: cancelled, or what it needed couldn't be had — the overlay said which."))
+                                                   config: config, path: path) else {
+                    let message = "It didn't run: cancelled, or what it needed couldn't be had — the overlay said which."
+                    report?(.failure(message))
+                    done?(StepEnd(outcome: .failure(message), stop: Task.isCancelled ? .cancelled : .failed, shown: true))
                     return
                 }
                 context = prepared
             }
-            run(selection, context: context, typingInto: waits ? frontApp : nil, report: report)
+            run(selection, context: context, values: values, typingInto: waits ? frontApp : nil, path: path,
+                read: selectionRead, report: report, done: done)
         }
         if waits { pendingWork = work }
     }
@@ -238,7 +267,7 @@ public final class ActionPipeline {
     /// and a Cancel button on the overlay. Nil if cancelled or refused,
     /// having said so.
     private func prepare(_ fetchedNames: [String], _ texts: [String], selection: ResolvedSelection,
-                         context: ActionContext, config: KeybowConfig) async -> ActionContext? {
+                         context: ActionContext, config: KeybowConfig, path: String) async -> ActionContext? {
         var context = context
         let summary = ActionSummary(selection: selection, config: config, environment: context.environment, registry: registry)
         let askers = Set(texts.flatMap(TemplateBlocks.names(in:)).compactMap { name in
@@ -253,7 +282,7 @@ public final class ActionPipeline {
         let showing = Task { @MainActor [weak self, display] in
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
-            display.showWorking(summary, path: selection.pathDescription, title: title.text) { self?.cancel() }
+            display.showWorking(summary, path: path, title: title.text) { self?.cancel() }
         }
         defer {
             showing.cancel()
@@ -305,14 +334,15 @@ public final class ActionPipeline {
         return nil
     }
 
-    private func run(_ selection: ResolvedSelection, context: ActionContext, typingInto frontApp: pid_t? = nil,
-                     report: ((ActionOutcome) -> Void)? = nil) {
+    private func run(_ selection: ResolvedSelection, context: ActionContext, values: [String: String],
+                     typingInto frontApp: pid_t? = nil, path: String, read: SelectionReading?,
+                     report: ((ActionOutcome) -> Void)?, done: ((StepEnd) -> Void)?) {
         let config = config()
         let summary = ActionSummary(selection: selection, config: config, environment: context.environment, registry: registry)
-        let path = selection.pathDescription
         func refuse(_ message: String) {
             display.showRefused(message, summary: summary)
             report?(.failure(message))
+            done?(StepEnd(outcome: .failure(message), stop: .failed, shown: true))
         }
 
         var isPrivate = !ActionPlanner.placeholders(for: selection, context: context, vocabulary: registry.vocabulary)
@@ -364,7 +394,19 @@ public final class ActionPipeline {
             for warning in planned.warnings where !isPrivate { surroundings.log("  warning: \(warning)") }
             report?(outcome)
             if let next = outcome.followUp {
-                follow(next, of: selection, values: outcome.values, text: outcome.followUpText)
+                // OK's or Cancel's own action is part of this one: the steps
+                // after it wait for it, and see what was typed or shown.
+                let given = values.merging(outcome.values) { _, now in now }
+                follow(next, of: selection, values: given, text: outcome.followUpText, path: path, read: read,
+                       done: done.map { done in { end in
+                           var end = end
+                           end.values = outcome.values.merging(end.values) { _, later in later }
+                           if next == "cancel", end.stop == nil { end.stop = .declined }
+                           done(end)
+                       } })
+            } else if let done {
+                done(StepEnd(outcome: outcome, values: outcome.values, selection: read, warnings: planned.warnings,
+                             summary: summary, stop: outcome.succeeded ? nil : .failed))
             } else if !outcome.isQuiet {
                 display.showFinished(outcome, summary: summary, warnings: planned.warnings)
             } else {
@@ -375,13 +417,244 @@ public final class ActionPipeline {
 
     /// Runs the node's own `ok` or `cancel` action, as though its key had just
     /// been pressed — or nothing, when it has none.
-    private func follow(_ key: String, of selection: ResolvedSelection, values: [String: String], text: String?) {
-        guard let next = selection.action?.nestedAction(key) else { return }
+    private func follow(_ key: String, of selection: ResolvedSelection, values: [String: String], text: String?,
+                        path: String, read: SelectionReading?, done: ((StepEnd) -> Void)?) {
+        guard let next = selection.action?.nestedAction(key) else {
+            done?(StepEnd(outcome: .quiet, selection: read))
+            return
+        }
         surroundings.log("  then \(key): \(next.type)")
         var fields = next.fields
         // Copy, Insert and the like, given no text: what was shown, or typed.
         if fields["text"] == nil, fields["template"] == nil, let text { fields["text"] = .string(text) }
-        fire(selection.with(action: ActionSpec(type: next.type, fields: fields)), values: values)
+        fireOne(selection.with(action: ActionSpec(type: next.type, fields: fields)), values: values, path: path,
+                read: read, done: done)
+    }
+
+    // MARK: - Steps
+
+    /// A key's steps, one after another: each waits for the one before to
+    /// finish — an Ask for its answer, a display for its button — and sees
+    /// what it gave. One that fails, is refused or is cancelled stops the
+    /// rest. The overlay shows each as it runs, and how they went at the end.
+    private func runSteps(_ selection: ResolvedSelection, chosenAt: Date, values: [String: String],
+                          report: ((ActionOutcome) -> Void)?) {
+        let config = config()
+        if settings().dryRun {
+            let summary = ActionSummary(selection: selection, config: config, registry: registry)
+            display.showPreview(summary, path: selection.pathDescription)
+            let each = Self.describe(selection.steps) { step in
+                let summary = ActionSummary(selection: selection.doing(step), config: config, registry: registry)
+                return "\(summary.verb) \(summary.subject)"
+            }
+            report?(.success("Dry run: nothing done", "It would: " + each))
+            return
+        }
+        let id = UUID()
+        let run = StepRun(values: values, chosenAt: chosenAt)
+        let task = Task { @MainActor [weak self] in
+            await self?.perform(selection.steps, of: selection, run: run)
+            self?.sequences[id] = nil
+            self?.finish(run, of: selection, report: report)
+        }
+        sequences[id] = task
+    }
+
+    /// "Copy “Hello”, then if {{answer}} is yes: Show …" — for a dry run.
+    static func describe(_ steps: [ResolvedStep], _ action: (ResolvedStep) -> String) -> String {
+        steps.map { step in
+            switch step.kind {
+            case .action: return action(step)
+            case .condition(let condition):
+                let inner = describe(step.steps, action)
+                return condition.label.prefix(1).lowercased() + condition.label.dropFirst() + ": " + (inner.isEmpty ? "nothing" : inner)
+            }
+        }.joined(separator: ", then ")
+    }
+
+    private func perform(_ steps: [ResolvedStep], of selection: ResolvedSelection, run: StepRun) async {
+        // Whether the If before has had a branch taken: nil outside a chain.
+        var taken: Bool?
+        for step in steps {
+            if Task.isCancelled, run.stop == nil { run.stop = .cancelled }
+            guard run.stop == nil else { return }
+            switch step.kind {
+            case .action:
+                taken = nil
+                run.number += 1
+                let label = step.label.isEmpty ? "step \(run.number)" : step.label
+                surroundings.log("  step \(run.number): \(step.action.type)")
+                let now = run.number == 1 ? run.chosenAt : Date()
+                let end = await withCheckedContinuation { continuation in
+                    fireOne(selection.doing(step), chosenAt: now, values: run.values,
+                            path: selection.pathDescription + " · " + label, read: run.selection,
+                            done: { end in continuation.resume(returning: end) })
+                }
+                run.ended(end, number: run.number)
+            case .condition(let condition):
+                let holds: Bool
+                switch condition.branch {
+                case .ifTrue:
+                    holds = await self.holds(condition, step, of: selection, run: run)
+                    taken = holds
+                case .elseIf:
+                    guard taken == false else { continue }
+                    holds = await self.holds(condition, step, of: selection, run: run)
+                    taken = holds
+                case .otherwise:
+                    holds = taken == false
+                    taken = nil
+                }
+                guard run.stop == nil else { return }
+                surroundings.log("  \(condition.branch == .otherwise ? "else" : "if"): \(holds ? "yes" : "no")")
+                if holds { await perform(step.steps, of: selection, run: run) }
+            }
+        }
+    }
+
+    /// Whether a condition holds, now: its values are those of the steps
+    /// before it, the key's, and what's selected, copied or fetched.
+    private func holds(_ condition: StepCondition, _ step: ResolvedStep, of selection: ResolvedSelection,
+                       run: StepRun) async -> Bool {
+        guard let test = condition.test else { return true }
+        var values = registry.values(now: Date())
+        values.merge(surroundings.values()) { _, mac in mac }
+        values.merge(run.values) { _, given in given }
+        let names = Template.names(in: test.left).union(Template.names(in: test.right))
+        if names.contains("selection") {
+            if run.selection == nil {
+                let reading = await surroundings.readSelection()
+                if reading == .notAllowed {
+                    surroundings.askForAccessibility()
+                    display.showRefused("KeybowNotes needs Accessibility access to read the selected text. "
+                                        + "Allow it in System Settings, then press again.",
+                                        summary: ActionSummary(selection: selection.doing(step), config: config(),
+                                                               registry: registry))
+                    run.stop = .failed
+                    run.shown = true
+                    return false
+                }
+                run.selection = reading
+            }
+            if case .text(let text)? = run.selection { values["selection"] = text }
+        }
+        values.merge(step.params) { _, fromTree in fromTree }
+        let fetched = registry.fetchedNames(in: names).filter { values[$0] == nil }
+        if !fetched.isEmpty {
+            do {
+                let found = try await registry.fetch(fetched, params: values, now: Date())
+                values.merge(found) { _, fetched in fetched }
+            } catch {
+                let message = (error as? ModuleError)?.message ?? "\(error)"
+                surroundings.logError("  FAILED while fetching for a condition: \(message)")
+                display.showFinished(.failure(message, (error as? ModuleError)?.detail),
+                                     summary: ActionSummary(selection: selection.doing(step), config: config(),
+                                                            registry: registry),
+                                     warnings: ["“\(condition.label)” couldn't be tested, so the steps after it didn't run."])
+                run.stop = .failed
+                run.shown = true
+                return false
+            }
+        }
+        let now = Date()
+        return test.holds { Template.expand($0, params: values, now: now).text }
+    }
+
+    /// What the overlay says once the steps are over, and what `report` hears.
+    private func finish(_ run: StepRun, of selection: ResolvedSelection, report: ((ActionOutcome) -> Void)?) {
+        let ends = run.ends
+        switch run.stop {
+        case .cancelled?:
+            if !run.shown { display.showCancelled() }
+            report?(.failure("Cancelled", ends.isEmpty ? nil : "after \(ends.count) of its steps"))
+            return
+        case .declined?:
+            // Cancel on an Ask or a display: said, so nothing more to say.
+            display.stepAside()
+            report?(.success("Stopped at Cancel", "after \(ends.count) of its steps"))
+            return
+        case .failed?:
+            guard let last = ends.last else {
+                report?(.failure("It didn't run: the overlay said why."))
+                return
+            }
+            if !last.end.shown, let summary = last.end.summary {
+                display.showFinished(last.end.outcome, summary: summary,
+                                     warnings: last.end.warnings + ["Stopped at step \(last.number): nothing after it ran."])
+            }
+            report?(last.end.outcome)
+            return
+        case nil:
+            break
+        }
+        let said = ends.filter { !$0.end.outcome.isQuiet }
+        let warnings = ends.flatMap(\.end.warnings)
+        guard let last = said.last, let summary = last.end.summary else {
+            display.stepAside()
+            report?(.success("Done", ends.count == 1 ? "1 step" : "\(ends.count) steps"))
+            return
+        }
+        if ends.count == 1 {
+            display.showFinished(last.end.outcome, summary: summary, warnings: warnings)
+            report?(last.end.outcome)
+            return
+        }
+        let earlier = said.dropLast().map(\.end.outcome.message)
+        let outcome = ActionOutcome.success(last.end.outcome.message,
+                                            earlier.isEmpty ? last.end.outcome.detail : earlier.joined(separator: " · "))
+        display.showFinished(outcome, summary: summary.titled("\(ends.count) steps"), warnings: warnings)
+        report?(outcome)
+    }
+}
+
+/// How one of a key's steps ended, for those after it.
+struct StepEnd {
+    enum Stop {
+        /// It failed, or was refused.
+        case failed
+        /// Cancel was chosen on an Ask or a display.
+        case declined
+        /// The waiting was cancelled — the overlay's button, the menu's.
+        case cancelled
+    }
+
+    var outcome: ActionOutcome
+    /// What it gives the steps after it: `{{answer}}`, `{{displayed}}`.
+    var values: [String: String] = [:]
+    /// The selection, as read for it.
+    var selection: SelectionReading?
+    var warnings: [String] = []
+    /// What ran, for the overlay.
+    var summary: ActionSummary?
+    var stop: Stop?
+    /// Already on the overlay: a refusal, a cancellation.
+    var shown = false
+}
+
+/// Where a key's steps have got to.
+@MainActor
+private final class StepRun {
+    var values: [String: String]
+    let chosenAt: Date
+    var selection: SelectionReading?
+    var number = 0
+    var ends: [(number: Int, end: StepEnd)] = []
+    var stop: StepEnd.Stop?
+    var shown = false
+
+    init(values: [String: String], chosenAt: Date) {
+        self.values = values
+        self.chosenAt = chosenAt
+    }
+
+    func ended(_ end: StepEnd, number: Int) {
+        ends.append((number, end))
+        values.merge(end.values) { _, later in later }
+        if let reading = end.selection, reading != .notAllowed { selection = reading }
+        if let stop = end.stop {
+            self.stop = stop
+            shown = end.shown
+        }
     }
 }
 

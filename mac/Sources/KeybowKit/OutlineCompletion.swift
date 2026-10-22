@@ -191,7 +191,7 @@ extension OutlineDocument {
             where !vocabulary.isActionField(key) && key != "colour" && key != "color" && seen.insert(key).inserted {
                 keys.append(key)
             }
-            pending += node.children.compactMap { $0 }.reversed()
+            pending += (node.children.compactMap { $0 } + node.steps).reversed()
         }
         return keys
     }

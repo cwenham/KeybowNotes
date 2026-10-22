@@ -34,6 +34,9 @@ public struct OutlineNodeInfo: Sendable {
     public let diagnostics: [OutlineDiagnostic]
     /// The action type in force here, after this node's own annotations.
     public let actionType: String?
+    /// For a step: its place among its key's steps, and in each condition's
+    /// steps down to it. `path` is its key's. Nil for a key.
+    public var step: [Int]?
 }
 
 public struct OutlineCompilation: Sendable {
@@ -210,8 +213,179 @@ private struct Compiler {
 
     // MARK: Nodes
 
+    /// What a node's — or a step's — brackets come to.
+    struct Annotated {
+        var context: Context
+        var action: [(String, OrderedJSON)] = []
+        var params: [(String, OrderedJSON)] = []
+        var colour: String?
+        var declaredType: String?
+        var roles: [AnnotationRole] = []
+        var diagnostics: [OutlineDiagnostic] = []
+    }
+
     private mutating func compile(_ node: OutlineNode, slot: Int, path: [Int], tree: TreeKind?, keypad: Int = 0,
                                   list: String?, context inherited: Context, colour paletteColour: String?) -> OrderedJSON? {
+        let annotated = annotate(node, context: inherited, colour: paletteColour)
+        let context = annotated.context
+        let action = annotated.action
+        var params = annotated.params
+        let colour = annotated.colour
+        let declaredType = annotated.declaredType
+        let roles = annotated.roles
+        var diagnostics = annotated.diagnostics
+
+        func note(_ severity: OutlineDiagnostic.Severity, _ message: String) {
+            diagnostics.append(.init(severity, line: node.line, message, node: node.id))
+        }
+
+        let listReference = node.listReference
+        if listReference != nil && node.hasChildren {
+            note(.error, "Takes its children from @\(listReference!) and has its own; one or the other.")
+        }
+
+        // A page: its keys are the items under it, and it runs nothing itself.
+        let isPage = tree.map { document.isPaged($0, keypad: keypad) } == true && path.count == 1
+        var unusablePage = false
+        if isPage, let listReference {
+            note(.error, "A page's keys can't come from a list (@\(listReference)): write them under it.")
+            unusablePage = true
+        } else if isPage, !node.hasChildren {
+            note(.warning, "An empty page: its keys are the items under it.")
+        }
+
+        // Steps: what a key with nothing under it does, in turn.
+        var steps: [OrderedJSON] = []
+        if !node.steps.isEmpty {
+            if node.isLeaf, !isPage {
+                steps = compileSteps(node.steps, of: node, tree: tree, keypad: keypad, list: list, path: path, under: [],
+                                     context: context)
+            } else {
+                note(.error, isPage
+                     ? "A page runs nothing itself, so it has no steps: put them under one of its keys."
+                     : "Has keys under it, so its steps do nothing: steps go on a key with nothing under it.")
+            }
+        }
+
+        // What a leaf means, given what it inherits — and given each type
+        // its steps run.
+        if node.isLeaf, !isPage {
+            leafValues(node, context: context, declaredHere: declaredType != nil, action: action, params: &params,
+                       inList: list != nil, note: note)
+            for type in stepTypes(node.steps) where type != context.type {
+                leafValues(node, context: Context(type: type), declaredHere: false, action: action, params: &params,
+                           inList: list != nil, note: note)
+            }
+        }
+
+        var fields: [(String, OrderedJSON)] = [("label", .string(node.label)), ("key", .number(Double(slot)))]
+        if let colour { fields.append(("colour", .string(colour))) }
+        if !params.isEmpty { fields.append(("params", .object(params))) }
+        if !action.isEmpty { fields.append(("action", .object(action))) }
+        if !steps.isEmpty { fields.append(("steps", .array(steps))) }
+        // A branch with nothing left under it — its list doesn't exist, or a
+        // mistake took every item under it — is left out, rather than become a
+        // leaf running an action it was never meant to.
+        var emptied = document.lostChildren.contains(node.id) && !node.hasChildren
+        if let listReference {
+            fields.append(("children", .string("@" + listReference)))
+            if !listNames.contains(listReference) { emptied = true }
+        } else if node.hasChildren {
+            let children = node.children.enumerated().compactMap { childSlot, child -> OrderedJSON? in
+                guard let child else { return nil }
+                return compile(child, slot: childSlot, path: path + [childSlot], tree: tree, keypad: keypad, list: list,
+                               context: context, colour: nil)
+            }
+            fields.append(("children", .array(children)))
+            if children.isEmpty { emptied = true }
+        }
+
+        infos[node.id] = OutlineNodeInfo(tree: tree, keypad: keypad, listName: list, path: path, roles: roles,
+                                         diagnostics: diagnostics, actionType: context.type)
+        return emptied || unusablePage ? nil : .object(fields)
+    }
+
+    /// The types a key's steps run, in order, at any depth.
+    private func stepTypes(_ steps: [OutlineNode]) -> [String] {
+        var types: [String] = []
+        for step in steps {
+            for annotation in step.annotations {
+                let type: String?
+                switch annotation {
+                case .pair("type", let value): type = vocabulary.knownType(value) ?? value
+                case .word(let word): type = vocabulary.knownType(word)
+                default: type = nil
+                }
+                if let type, !types.contains(type) { types.append(type) }
+            }
+            for type in stepTypes(step.steps) where !types.contains(type) { types.append(type) }
+        }
+        return types
+    }
+
+    /// A key's steps, for the JSON: each an action or a condition, with the
+    /// fields and values it gives what's under it.
+    private mutating func compileSteps(_ steps: [OutlineNode], of key: OutlineNode, tree: TreeKind?, keypad: Int,
+                                       list: String?, path: [Int], under prefix: [Int], context: Context) -> [OrderedJSON] {
+        var compiled: [OrderedJSON] = []
+        var afterIf = false
+        for (index, step) in steps.enumerated() {
+            var annotated = annotate(step, context: context, colour: nil)
+            func note(_ severity: OutlineDiagnostic.Severity, _ message: String) {
+                annotated.diagnostics.append(.init(severity, line: step.line, message, node: step.id))
+            }
+            var fields: [(String, OrderedJSON)] = []
+            var usable = true
+            switch step.condition {
+            case nil:
+                if !step.label.isEmpty { fields.append(("label", .string(step.label))) }
+                if !step.steps.isEmpty {
+                    note(.error, "Only an If, Else if or Else has steps under it: start this one “If …”, or move "
+                         + "the steps under it out a level.")
+                    usable = false
+                }
+                afterIf = false
+            case .failure(let problem)?:
+                note(.error, problem.description)
+                usable = false
+                afterIf = false
+            case .success(let condition)?:
+                switch condition.branch {
+                case .ifTrue: fields.append(("if", .string(condition.test?.text ?? "")))
+                case .elseIf: fields.append(("elseIf", .string(condition.test?.text ?? "")))
+                case .otherwise: fields.append(("else", .bool(true)))
+                }
+                if condition.branch != .ifTrue, !afterIf {
+                    note(.error, "An Else goes right after an If, or an Else if, at the same level.")
+                    usable = false
+                }
+                afterIf = usable && condition.branch != .otherwise
+                if step.steps.isEmpty {
+                    note(.warning, "Nothing under it: the steps it guards go under it, indented.")
+                }
+            }
+            if annotated.colour != nil {
+                note(.warning, "A step has no key of its own, so no colour.")
+            }
+            if !annotated.params.isEmpty { fields.append(("params", .object(annotated.params))) }
+            if !annotated.action.isEmpty { fields.append(("action", .object(annotated.action))) }
+            if step.isCondition, case .success? = step.condition, !step.steps.isEmpty {
+                fields.append(("steps", .array(compileSteps(step.steps, of: key, tree: tree, keypad: keypad, list: list,
+                                                            path: path, under: prefix + [index],
+                                                            context: annotated.context))))
+            }
+            var info = OutlineNodeInfo(tree: tree, keypad: keypad, listName: list, path: path, roles: annotated.roles,
+                                       diagnostics: annotated.diagnostics, actionType: annotated.context.type)
+            info.step = prefix + [index]
+            infos[step.id] = info
+            if usable { compiled.append(.object(fields)) }
+        }
+        return compiled
+    }
+
+    /// Reads a node's brackets, in its place in the tree.
+    private mutating func annotate(_ node: OutlineNode, context inherited: Context,
+                                   colour paletteColour: String?) -> Annotated {
         var context = inherited
         var action: [(String, OrderedJSON)] = []
         var nested: [(String, [(String, OrderedJSON)])] = []
@@ -366,51 +540,8 @@ private struct Compiler {
         for (name, fields) in nested { set(name, .object(fields)) }
         if let declaredType { action.removeAll { $0.0 == "type" }; action.insert(("type", .string(declaredType)), at: 0) }
 
-        let listReference = node.listReference
-        if listReference != nil && node.hasChildren {
-            note(.error, "Takes its children from @\(listReference!) and has its own; one or the other.")
-        }
-
-        // A page: its keys are the items under it, and it runs nothing itself.
-        let isPage = tree.map { document.isPaged($0, keypad: keypad) } == true && path.count == 1
-        var unusablePage = false
-        if isPage, let listReference {
-            note(.error, "A page's keys can't come from a list (@\(listReference)): write them under it.")
-            unusablePage = true
-        } else if isPage, !node.hasChildren {
-            note(.warning, "An empty page: its keys are the items under it.")
-        }
-
-        // What a leaf means, given what it inherits.
-        if node.isLeaf, !isPage {
-            leafValues(node, context: context, declaredHere: declaredType != nil, action: action, params: &params,
-                       inList: list != nil, note: note)
-        }
-
-        var fields: [(String, OrderedJSON)] = [("label", .string(node.label)), ("key", .number(Double(slot)))]
-        if let colour { fields.append(("colour", .string(colour))) }
-        if !params.isEmpty { fields.append(("params", .object(params))) }
-        if !action.isEmpty { fields.append(("action", .object(action))) }
-        // A branch with nothing left under it — its list doesn't exist, or a
-        // mistake took every item under it — is left out, rather than become a
-        // leaf running an action it was never meant to.
-        var emptied = document.lostChildren.contains(node.id) && !node.hasChildren
-        if let listReference {
-            fields.append(("children", .string("@" + listReference)))
-            if !listNames.contains(listReference) { emptied = true }
-        } else if node.hasChildren {
-            let children = node.children.enumerated().compactMap { childSlot, child -> OrderedJSON? in
-                guard let child else { return nil }
-                return compile(child, slot: childSlot, path: path + [childSlot], tree: tree, keypad: keypad, list: list,
-                               context: context, colour: nil)
-            }
-            fields.append(("children", .array(children)))
-            if children.isEmpty { emptied = true }
-        }
-
-        infos[node.id] = OutlineNodeInfo(tree: tree, keypad: keypad, listName: list, path: path, roles: roles,
-                                         diagnostics: diagnostics, actionType: context.type)
-        return emptied || unusablePage ? nil : .object(fields)
+        return Annotated(context: context, action: action, params: params, colour: colour, declaredType: declaredType,
+                         roles: roles, diagnostics: diagnostics)
     }
 
     private mutating func leafValues(_ node: OutlineNode, context: Context, declaredHere: Bool,

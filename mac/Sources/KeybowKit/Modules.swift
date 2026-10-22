@@ -844,7 +844,9 @@ extension KeybowConfig {
 
     private func leads(to types: Set<String>, node: TreeNode, tree: TreeKind, path: [Int]) -> Bool {
         if node.isLeaf {
-            return resolve(tree: tree, path: path)?.action.map { types.contains($0.type) } ?? false
+            guard let selection = resolve(tree: tree, path: path) else { return false }
+            guard selection.steps.isEmpty else { return selection.steps.actions.contains { types.contains($0.action.type) } }
+            return selection.action.map { types.contains($0.type) } ?? false
         }
         return node.children.enumerated().contains { slot, child in
             guard let child else { return false }

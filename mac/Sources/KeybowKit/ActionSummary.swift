@@ -17,8 +17,42 @@ public struct ActionSummary: Equatable, Sendable {
 
     /// `environment` holds values fetched when the key was pressed — the
     /// selected text, the clipboard. Without them, stand-ins show where they'll go.
+    public init(type: String, verb: String, subject: String, details: [String] = [], missing: [String] = []) {
+        self.type = type
+        self.verb = verb
+        self.subject = subject
+        self.details = details
+        self.missing = missing
+    }
+
+    /// The same, captioned otherwise: "3 steps".
+    public func titled(_ verb: String) -> ActionSummary {
+        ActionSummary(type: type, verb: verb, subject: subject, details: details, missing: missing)
+    }
+
     public init(selection: ResolvedSelection, config: KeybowConfig, now: Date = Date(),
                 calendar: Calendar = .current, environment: [String: String] = [:], registry: ModuleRegistry = .shared) {
+        // A key with steps: its first, and how many more — needing whatever
+        // any of them needs.
+        if !selection.steps.isEmpty {
+            func summaries(_ steps: [ResolvedStep]) -> [ActionSummary] {
+                steps.flatMap { step in
+                    step.isAction
+                        ? [ActionSummary(selection: selection.doing(step), config: config, now: now, calendar: calendar,
+                                         environment: environment, registry: registry)]
+                        : summaries(step.steps)
+                }
+            }
+            let all = summaries(selection.steps)
+            let first = all.first ?? ActionSummary(type: "none", verb: "Nothing", subject: selection.labels.last ?? "")
+            var missing: [String] = []
+            for name in all.flatMap(\.missing) where !missing.contains(name) { missing.append(name) }
+            let more = all.count - 1
+            self = ActionSummary(type: first.type, verb: first.verb, subject: first.subject,
+                                 details: first.details + (more > 0 ? ["and \(more) more step\(more == 1 ? "" : "s")"] : []),
+                                 missing: missing)
+            return
+        }
         let action = selection.action ?? ActionSpec(type: "none", fields: [:])
         var missing: [String] = []
         let params = Self.previewParams(environment.merging(selection.params) { _, fromTree in fromTree },

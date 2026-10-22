@@ -195,6 +195,14 @@ extension ValueCatalog {
             own.append(ValueEntry(name, title: name, help: "Set on \(label), for it and every key under it.",
                                   sample: selection.params[name] ?? "", group: "Set in the tree"))
         }
+        // One of a key's steps: what it sets, and the conditions above it.
+        let computed = ["leaf", "parent", "path", "parentPath", "folderPath", "tree"]
+        for (name, value) in selection.params.sorted(by: { $0.key < $1.key })
+        where setOn[name] == nil && !computed.contains(name) && !name.hasPrefix("level")
+            && !name.hasPrefix("contact.") && !name.hasPrefix("project.") {
+            own.append(ValueEntry(name, title: name, help: "Set on this step, or an If it's under, for the steps there.",
+                                  sample: value, group: "Set in the tree"))
+        }
         // What the keys under a branch set: `when` on Today and Tomorrow, for
         // the branch's {{when}}.
         var below: [String: [(label: String, value: String)]] = [:]

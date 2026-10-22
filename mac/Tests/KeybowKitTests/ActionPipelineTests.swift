@@ -33,13 +33,14 @@ private final class FakeMac {
     var ran: [ActionPlan] = []
     var onRun: (() -> Void)?
     var logged: [String] = []
+    var reads = 0
 
     var surroundings: ActionPipeline.Surroundings {
         ActionPipeline.Surroundings(
             values: { ["clipboard": "copied earlier", "frontApp": "TextEdit"] },
             clipboardMedia: { nil },
             frontmostApp: { [unowned self] in front },
-            readSelection: { [unowned self] in selection },
+            readSelection: { [unowned self] in reads += 1; return selection },
             mayInsertText: { [unowned self] in mayInsert },
             askForAccessibility: { [unowned self] in askedForAccess += 1 },
             putOnClipboard: { [unowned self] in clipboard.append($0) },
@@ -254,6 +255,139 @@ final class ActionPipelineTests: XCTestCase {
         guard case .copyToClipboard(let text, _) = mac.ran[1] else { return XCTFail("\(mac.ran)") }
         XCTAssertEqual(text, "Hi!", "with what the first one said")
         XCTAssertTrue(mac.logged.contains("  then ok: clipboard.copy"), "\(mac.logged)")
+    }
+}
+
+// MARK: - Steps
+
+extension ActionPipelineTests {
+    /// A key's steps, written under it.
+    private func fireSteps(_ outline: String, path: [Int] = [0]) async throws -> ActionOutcome {
+        let compiled = OutlineCompiler.compile(OutlineParser.parse(outline).0, locateApp: { _ in nil },
+                                               vocabulary: registry.vocabulary)
+        let config = try XCTUnwrap(compiled.config, compiled.configError ?? "")
+        ConfigStoreStandIn.config = config
+        let selection = try XCTUnwrap(config.resolve(path: path))
+        XCTAssertFalse(selection.steps.isEmpty)
+        let heard = expectation(description: "reported")
+        var outcome: ActionOutcome?
+        pipeline.fire(selection) { outcome = $0; heard.fulfill() }
+        await fulfillment(of: [heard], timeout: 5)
+        return try XCTUnwrap(outcome)
+    }
+
+    private var copied: [String] {
+        mac.ran.compactMap { if case .copyToClipboard(let text, _) = $0 { return text }; return nil }
+    }
+
+    func testStepsRunInTurn() async throws {
+        let outcome = try await fireSteps("""
+            1. Both [Copy, text: one]
+               - First
+               - [text: two]
+               - [Maps, query: coffee]
+            """)
+        XCTAssertEqual(mac.ran, [.copyToClipboard("one"), .copyToClipboard("two"), .searchMaps("coffee")])
+        XCTAssertTrue(outcome.succeeded)
+        XCTAssertEqual(overlay.shown, ["running", "running", "running", "finished: Done"],
+                       "each as it runs, and how they went once, at the end")
+        XCTAssertEqual(outcome.detail, "Done · Done", "what the steps before the last said")
+    }
+
+    func testAFailedStepStopsTheRest() async throws {
+        mac.outcomes = [.success("Copied"), .failure("Nope")]
+        let outcome = try await fireSteps("""
+            1. Three [Copy]
+               - [text: a]
+               - [text: b]
+               - [text: c]
+            """)
+        XCTAssertEqual(copied, ["a", "b"])
+        XCTAssertFalse(outcome.succeeded)
+        XCTAssertEqual(outcome.message, "Nope")
+        XCTAssertEqual(overlay.shown.last, "finished: Nope")
+    }
+
+    func testARefusedStepStopsTheRest() async throws {
+        let outcome = try await fireSteps("""
+            1. Two [Copy]
+               - [text: "{{nothing}}"]
+               - [text: b]
+            """)
+        XCTAssertFalse(outcome.succeeded)
+        XCTAssertEqual(mac.ran, [])
+        XCTAssertEqual(overlay.shown.count, 1)
+        XCTAssertTrue(overlay.shown[0].hasPrefix("refused:"), "\(overlay.shown)")
+    }
+
+    func testWhatAStepGivesGoesToTheNextAndItsConditions() async throws {
+        registry.register(Showcase(), host: MemoryModuleHost())
+        mac.outcomes = [.then("ok", values: ["answer": "Yes"])]
+        let outcome = try await fireSteps("""
+            1. Jot [Copy]
+               - [Showcase]
+               - If {{answer}} is yes
+                  - [text: "got {{answer}}"]
+               - Else if {{answer}}
+                  - [text: something else]
+               - Else
+                  - [text: nothing]
+               - [text: "and {{answer}} again"]
+            """)
+        XCTAssertTrue(outcome.succeeded)
+        XCTAssertEqual(copied, ["got Yes", "and Yes again"])
+        XCTAssertTrue(mac.logged.contains("  if: yes"), "\(mac.logged)")
+    }
+
+    func testElseRunsWhenNothingBeforeItHeld() async throws {
+        _ = try await fireSteps("""
+            1. Mood [Copy, mood: meh]
+               - If {{mood}} is glad
+                  - [text: glad]
+               - Else if {{mood}} == sad
+                  - [text: sad]
+               - Otherwise
+                  - [text: "{{mood}}"]
+               - If {{mood}} contains e
+                  - [text: an e]
+            """)
+        XCTAssertEqual(copied, ["meh", "an e"])
+    }
+
+    func testCancelStopsTheRest() async throws {
+        registry.register(Showcase(), host: MemoryModuleHost())
+        mac.outcomes = [.then("cancel", values: ["answer": ""])]
+        let outcome = try await fireSteps("""
+            1. Jot [Copy]
+               - [Showcase]
+               - [text: after]
+            """)
+        XCTAssertEqual(copied, [])
+        XCTAssertEqual(outcome.message, "Stopped at Cancel")
+        XCTAssertEqual(overlay.shown, ["running", "aside"], "Cancel was answer enough")
+    }
+
+    func testTheSelectionIsReadOnce() async throws {
+        _ = try await fireSteps("""
+            1. Twice [Copy]
+               - [text: "{{selection}}"]
+               - If {{selection}} contains words
+                  - [text: "again: {{selection}}"]
+            """)
+        XCTAssertEqual(copied, ["the selected words", "again: the selected words"])
+        XCTAssertEqual(mac.reads, 1, "typing replaces it, so it's read as the key was pressed")
+    }
+
+    func testADryRunSaysEveryStep() async throws {
+        settings.dryRun = true
+        let outcome = try await fireSteps("""
+            1. Both [Copy, text: one]
+               - First
+               - If {{selection}}
+                  - [Maps, query: coffee]
+            """)
+        XCTAssertEqual(mac.ran, [])
+        XCTAssertEqual(outcome.detail, "It would: Copy Both, then if {{selection}}: Search Maps coffee")
     }
 }
 

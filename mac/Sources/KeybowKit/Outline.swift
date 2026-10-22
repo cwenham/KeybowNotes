@@ -104,7 +104,8 @@ public enum Annotation: Equatable, Hashable, Sendable {
 }
 
 /// A node: a label, its bracketed annotations, and up to four children, each in
-/// the key position it occupies.
+/// the key position it occupies — or, for a key with nothing under it, its
+/// steps: bulleted items, each an action run in turn when it's chosen.
 public struct OutlineNode: Equatable, Identifiable, Sendable {
     /// Stable while the document is edited, so a selection can follow a node
     /// as it moves. Not written to the file.
@@ -114,15 +115,26 @@ public struct OutlineNode: Equatable, Identifiable, Sendable {
     /// Four slots — or under a page, one per key below it; nil where no node
     /// occupies that key.
     public var children: [OutlineNode?]
+    /// `- Label [annotations]` under it: what a key does, one after another,
+    /// each inheriting from it as a key inherits from its branch. A step with
+    /// steps under it is a condition — `If {{answer}} is yes`, `Else`.
+    public var steps: [OutlineNode]
     /// Where it was read from, for messages; 0 for a node made in the editor.
     public var line: Int
 
     public init(label: String, annotations: [Annotation] = [], children: [OutlineNode?] = OutlineNode.emptyRow,
-                line: Int = 0) {
+                steps: [OutlineNode] = [], line: Int = 0) {
         self.label = label
         self.annotations = annotations
         self.children = children
+        self.steps = steps
         self.line = line
+    }
+
+    /// A step: a label, annotations, and the steps under it, if it's a condition.
+    public static func step(_ label: String, _ annotations: [Annotation] = [], steps: [OutlineNode] = [],
+                            line: Int = 0) -> OutlineNode {
+        OutlineNode(label: label, annotations: annotations, children: [], steps: steps, line: line)
     }
 
     public static let emptyRow: [OutlineNode?] = [nil, nil, nil, nil]
@@ -139,11 +151,13 @@ public struct OutlineNode: Equatable, Identifiable, Sendable {
 
     public var isLeaf: Bool { !hasChildren && listReference == nil }
 
-    /// `Label [a, b: c]` — the node's own line, without its number.
+    /// `Label [a, b: c]` — the node's own line, without its number. A step
+    /// may have no label: `[Copy]`.
     public var text: String {
         let label = OutlineNode.escape(self.label)
         guard !annotations.isEmpty else { return label }
-        return label + " [" + annotations.map(\.text).joined(separator: ", ") + "]"
+        let brackets = "[" + annotations.map(\.text).joined(separator: ", ") + "]"
+        return label.isEmpty ? brackets : label + " " + brackets
     }
 
     /// Splits `Label [a, b: c]` into its label and annotations. Only a final
@@ -376,6 +390,15 @@ public enum OutlineParser {
         case contacts, projects, defaults
     }
 
+    /// An item still open for what's indented under it.
+    private enum Open {
+        case item([Int])
+        /// A key's step: the key's path, then the step's place in its steps,
+        /// and in each condition's steps down to it.
+        case step([Int], [Int])
+        case skipped
+    }
+
     public static func parse(_ text: String) -> (OutlineDocument, [OutlineDiagnostic]) {
         var document = OutlineDocument()
         var diagnostics: [OutlineDiagnostic] = []
@@ -383,9 +406,10 @@ public enum OutlineParser {
         var started = false
         /// The keypad tree headings belong to: 0 until a `# keypad` heading.
         var keypad = 0
-        // Open items, innermost last: their indent, and the slot path to them
-        // within the section — or nil for an item being skipped with its subtree.
-        var stack: [(indent: Int, path: [Int]?)] = []
+        // Open items, innermost last: their indent, and what they are — a key
+        // by its slot path within the section, a step by its key's path and
+        // its place among the steps, or something skipped with all under it.
+        var stack: [(indent: Int, open: Open)] = []
 
         for (offset, rawLine) in text.components(separatedBy: .newlines).enumerated() {
             let lineNumber = offset + 1
@@ -432,8 +456,8 @@ public enum OutlineParser {
                 continue
             }
 
-            // Bulleted entries: contacts, projects, defaults.
-            if trimmed.hasPrefix("- ") || trimmed == "-" {
+            // Bulleted entries: contacts, projects, defaults — and a key's steps.
+            if trimmed.hasPrefix("- ") || trimmed == "-" || trimmed.hasPrefix("* ") {
                 let body = String(trimmed.dropFirst(1)).trimmingCharacters(in: .whitespaces)
                 switch section {
                 case .contacts?, .projects?:
@@ -452,7 +476,30 @@ public enum OutlineParser {
                     }
                     continue
                 default:
-                    break
+                    // A key's steps: bullets under a numbered item.
+                    if started, case let container? = section, isNodeSection(container) {
+                        let indent = line.prefix { $0 == " " }.count
+                        while let last = stack.last, last.indent >= indent { stack.removeLast() }
+                        guard !body.isEmpty else { continue }
+                        guard let parent = stack.last?.open else {
+                            diagnostics.append(.init(.warning, line: lineNumber,
+                                                     "A step goes under a key, indented; ignored “\(body)”."))
+                            continue
+                        }
+                        let (label, annotations) = OutlineNode.split(body)
+                        let step = OutlineNode.step(label, annotations, line: lineNumber)
+                        switch parent {
+                        case .item(let path):
+                            let index = addStep(step, to: path, under: [], in: container, of: &document)
+                            stack.append((indent, .step(path, [index])))
+                        case .step(let path, let steps):
+                            let index = addStep(step, to: path, under: steps, in: container, of: &document)
+                            stack.append((indent, .step(path, steps + [index])))
+                        case .skipped:
+                            stack.append((indent, .skipped))
+                        }
+                        continue
+                    }
                 }
             }
 
@@ -476,19 +523,24 @@ public enum OutlineParser {
             // "3." with nothing after it: an empty key, written for clarity.
             guard !body.isEmpty else { continue }
 
-            let parentPath: [Int]?
-            if let last = stack.last {
-                parentPath = last.path          // nil when the parent is being skipped
-            } else {
+            let parentPath: [Int]
+            switch stack.last?.open {
+            case nil:
                 parentPath = []
-            }
-            guard let parentPath else {
-                stack.append((indent, nil))
+            case .item(let path)?:
+                parentPath = path
+            case .step?:
+                diagnostics.append(.init(.error, line: lineNumber,
+                                         "A key can't go under a step: steps are what a key does, not keys."))
+                stack.append((indent, .skipped))
+                continue
+            case .skipped?:
+                stack.append((indent, .skipped))
                 continue
             }
 
             func skipped() {
-                stack.append((indent, nil))
+                stack.append((indent, .skipped))
                 if !parentPath.isEmpty, let parent = node(at: parentPath, in: container, of: document) {
                     document.lostChildren.insert(parent.id)
                 }
@@ -527,7 +579,7 @@ public enum OutlineParser {
             let (label, annotations) = OutlineNode.split(body)
             place(OutlineNode(label: label, annotations: annotations, line: lineNumber),
                   at: path, in: container, of: &document)
-            stack.append((indent, path))
+            stack.append((indent, .item(path)))
         }
 
         // Trailing blank lines in the preamble are layout, not content.
@@ -579,6 +631,16 @@ public enum OutlineParser {
             level = next.children
         }
         return found
+    }
+
+    /// Adds a step to the key at `path` — or, with `under`, to the steps of
+    /// the step there — and says its place.
+    private static func addStep(_ step: OutlineNode, to path: [Int], under steps: [Int], in section: Section,
+                                of document: inout OutlineDocument) -> Int {
+        guard var key = node(at: path, in: section, of: document) else { return 0 }
+        let index = key.appendStep(step, under: steps)
+        place(key, at: path, in: section, of: &document)
+        return index
     }
 
     private static func place(_ node: OutlineNode, at path: [Int], in section: Section, of document: inout OutlineDocument) {
@@ -668,9 +730,17 @@ public enum OutlineWriter {
         for (slot, node) in level.enumerated() {
             guard let node else { continue }
             result.append(String(repeating: indentUnit, count: depth) + "\(slot + 1). " + node.text)
+            result.append(contentsOf: stepLines(node.steps, depth: depth + 1))
             result.append(contentsOf: lines(node.children, depth: depth + 1))
         }
         return result
+    }
+
+    /// A key's steps, bulleted, each with the steps under it.
+    static func stepLines(_ steps: [OutlineNode], depth: Int) -> [String] {
+        steps.flatMap { step in
+            [String(repeating: indentUnit, count: depth) + "- " + step.text] + stepLines(step.steps, depth: depth + 1)
+        }
     }
 }
 

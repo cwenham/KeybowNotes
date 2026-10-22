@@ -55,6 +55,14 @@ public enum OutlineEditError: Error, Equatable, CustomStringConvertible {
     case notEnoughRoom(free: Int, needed: Int)
     /// Pasting a node with keys past the room there is: a page's, off a page.
     case tooManyKeys(String, keys: Int)
+    /// Steps on a key with keys under it, or one taking them from a list.
+    case stepsNeedALeaf(String)
+    /// Keys under a key that has steps.
+    case keyHasSteps(String)
+    /// Nesting a step under one that isn't an If, Else if or Else.
+    case onlyAConditionTakesSteps
+    /// Outdenting a step that's already among its key's own.
+    case alreadyOutermost
 
     public var description: String {
         switch self {
@@ -77,6 +85,14 @@ public enum OutlineEditError: Error, Equatable, CustomStringConvertible {
                 : "Not enough free keys here: \(needed) to paste, \(free) free."
         case .tooManyKeys(let label, let keys):
             return "“\(label)” has keys past \(keys), which only fit on a page."
+        case .stepsNeedALeaf(let label):
+            return "“\(label)” has keys under it: steps go on a key with nothing under it."
+        case .keyHasSteps(let label):
+            return "“\(label)” has steps, so it can't have keys under it too."
+        case .onlyAConditionTakesSteps:
+            return "Only an If, Else if or Else has steps under it: start the step above with “If …”."
+        case .alreadyOutermost:
+            return "Already one of the key's own steps."
         }
     }
 }
@@ -119,8 +135,11 @@ extension OutlineDocument {
         return found
     }
 
+    /// A key, or a step, by its ID.
     public func node(_ id: UUID) -> OutlineNode? {
-        location(of: id).flatMap { node(at: $0) }
+        if let location = location(of: id) { return node(at: location) }
+        guard let address = stepAddress(of: id) else { return nil }
+        return node(at: address.key)?.step(at: address.path)
     }
 
     /// The slots under `parent` — the container's top row for `[]`: four, or
@@ -244,6 +263,10 @@ extension OutlineDocument {
         guard location.path.count <= levels(location.container) else {
             throw OutlineEditError.tooDeep(levels: levels(location.container))
         }
+        if location.path.count > 1, let parent = node(at: OutlineLocation(location.container, location.parentPath)),
+           !parent.steps.isEmpty {
+            throw OutlineEditError.keyHasSteps(parent.label)
+        }
         var row = level(location.container, parent: location.parentPath)
         guard row[location.slot] == nil else { throw OutlineEditError.notEmpty }
         let node = OutlineNode(label: label)
@@ -261,6 +284,7 @@ extension OutlineDocument {
             throw OutlineEditError.nothingAbove
         }
         guard above.listReference == nil else { throw OutlineEditError.aboveUsesList }
+        guard above.steps.isEmpty else { throw OutlineEditError.keyHasSteps(above.label) }
         guard location.path.count + Self.depth(of: node) <= levels(location.container) else {
             throw OutlineEditError.tooDeep(levels: levels(location.container))
         }
@@ -312,6 +336,10 @@ extension OutlineDocument {
     }
 
     public mutating func delete(_ id: UUID) throws {
+        if location(of: id) == nil, let address = stepAddress(of: id) {
+            try changeSteps(holding: address) { $0.remove(at: address.path.last!) }
+            return
+        }
         let (location, _) = try locate(id)
         var row = level(location.container, parent: location.parentPath)
         row[location.slot] = nil
@@ -321,6 +349,10 @@ extension OutlineDocument {
     // MARK: - Content
 
     private mutating func update(_ id: UUID, _ change: (inout OutlineNode) -> Void) throws {
+        if location(of: id) == nil, let address = stepAddress(of: id) {
+            try changeSteps(holding: address) { change(&$0[address.path.last!]) }
+            return
+        }
         let (location, node) = try locate(id)
         var changed = node
         change(&changed)
@@ -402,6 +434,7 @@ extension OutlineNode {
         copy.id = UUID()
         copy.line = 0
         copy.children = children.map { $0?.copyWithNewIDs() }
+        copy.steps = steps.map { $0.copyWithNewIDs() }
         return copy
     }
 }
@@ -446,9 +479,24 @@ public enum OutlineClipboard {
         var lines: [String] = []
         for (index, node) in nodes.enumerated() {
             lines.append("\(index + 1). " + node.text)
+            lines += OutlineWriter.stepLines(node.steps, depth: 1)
             lines += OutlineWriter.lines(node.children, depth: 1)
         }
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Steps, bulleted, each with the steps under it.
+    public static func text(steps: [OutlineNode]) -> String {
+        OutlineWriter.stepLines(steps, depth: 0).joined(separator: "\n") + "\n"
+    }
+
+    /// Steps from outline text: its bulleted items, nested by indentation —
+    /// or, with none, its numbered ones, as steps.
+    public static func steps(from text: String) -> [OutlineNode] {
+        func asSteps(_ node: OutlineNode) -> OutlineNode {
+            .step(node.label, node.annotations, steps: (node.steps + node.children.compactMap { $0 }).map(asSteps))
+        }
+        return nodes(from: text).map(asSteps)
     }
 
     /// The most keys anything has: a page on row 1's.
@@ -462,8 +510,16 @@ public enum OutlineClipboard {
     public static func nodes(from text: String) -> [OutlineNode] {
         final class Draft {
             let node: OutlineNode
+            /// A bullet under a numbered item, or under such a bullet: a step.
+            let isStep: Bool
+            let isNumbered: Bool
             var children: [(slot: Int?, draft: Draft)] = []
-            init(_ node: OutlineNode) { self.node = node }
+            var steps: [Draft] = []
+            init(_ node: OutlineNode, isStep: Bool, isNumbered: Bool) {
+                self.node = node
+                self.isStep = isStep
+                self.isNumbered = isNumbered
+            }
         }
         var roots: [Draft] = []
         var open: [(indent: Int, draft: Draft)] = []
@@ -486,14 +542,23 @@ public enum OutlineClipboard {
             let item = body.trimmingCharacters(in: .whitespaces)
             guard !item.isEmpty else { continue }
             let (label, annotations) = OutlineNode.split(item)
-            let draft = Draft(OutlineNode(label: label, annotations: annotations))
             while let last = open.last, last.indent >= indent { open.removeLast() }
-            if let parent = open.last?.draft {
+            let parent = open.last?.draft
+            let isStep = number == nil && parent.map { $0.isNumbered || $0.isStep } == true
+            let draft = Draft(OutlineNode(label: label, annotations: annotations), isStep: isStep,
+                              isNumbered: number != nil)
+            if let parent, isStep {
+                parent.steps.append(draft)
+            } else if let parent {
                 parent.children.append((number.map { $0 - 1 }, draft))
             } else {
                 roots.append(draft)
             }
             open.append((indent, draft))
+        }
+
+        func buildStep(_ draft: Draft) -> OutlineNode {
+            .step(draft.node.label, draft.node.annotations, steps: draft.steps.map(buildStep))
         }
 
         func build(_ draft: Draft) -> OutlineNode {
@@ -508,6 +573,7 @@ public enum OutlineClipboard {
                 slots[at] = build(child)
             }
             node.children = slots
+            node.steps = draft.steps.map(buildStep)
             return node
         }
         return roots.map(build)
@@ -529,18 +595,31 @@ extension OutlineDocument {
     /// copying, cutting or deleting them all acts on.
     public func topMost(_ ids: [UUID]) -> [UUID] {
         let chosen = Set(ids)
-        return ids.filter { id in
-            guard let location = location(of: id) else { return false }
-            return !(1..<max(1, location.path.count)).contains { depth in
+        func keyIsUnderChosen(_ location: OutlineLocation, including: Bool) -> Bool {
+            let depths = including ? Array(1...location.path.count) : Array(1..<max(1, location.path.count))
+            return depths.contains { depth in
                 let above = OutlineLocation(location.container, Array(location.path.prefix(depth)))
                 return node(at: above).map { chosen.contains($0.id) } ?? false
             }
         }
+        return ids.filter { id in
+            if let location = location(of: id) { return !keyIsUnderChosen(location, including: false) }
+            // A step: not under a chosen key, nor a chosen step.
+            guard let address = stepAddress(of: id), let key = node(at: address.key) else { return false }
+            if keyIsUnderChosen(address.key, including: true) { return false }
+            return !(1..<address.path.count).contains { depth in
+                key.step(at: Array(address.path.prefix(depth))).map { chosen.contains($0.id) } ?? false
+            }
+        }
     }
 
-    /// The outline text for copying nodes, each with everything under it.
+    /// The outline text for copying nodes, each with everything under it —
+    /// or steps, bulleted, when only steps are chosen.
     public func clipboardText(_ ids: [UUID]) -> String {
-        OutlineClipboard.text(topMost(ids).compactMap { node($0) })
+        let chosen = topMost(ids)
+        let keys = chosen.filter { location(of: $0) != nil }
+        if keys.isEmpty { return OutlineClipboard.text(steps: chosen.compactMap { node($0) }) }
+        return OutlineClipboard.text(keys.compactMap { node($0) })
     }
 
     /// Deletes nodes, each with everything under it.
@@ -567,6 +646,7 @@ extension OutlineDocument {
         case .inside(let id):
             let (location, node) = try locate(id)
             guard node.listReference == nil else { throw OutlineEditError.aboveUsesList }
+            guard node.steps.isEmpty else { throw OutlineEditError.keyHasSteps(node.label) }
             container = location.container
             parent = location.path
             order = Array(0..<slots(container, parent: parent))
@@ -615,5 +695,143 @@ extension OutlineDocument {
             try child.map { try fit($0, at: path + [slot], in: container) }
         }
         return fitted
+    }
+}
+
+// MARK: - Steps
+
+/// Where a step is: its key, and its place among the key's steps — and in
+/// each condition's steps down to it.
+public struct StepAddress: Hashable, Sendable {
+    public let key: OutlineLocation
+    public let path: [Int]
+
+    public init(key: OutlineLocation, path: [Int]) {
+        self.key = key
+        self.path = path
+    }
+}
+
+extension OutlineDocument {
+    /// Every key in the document, with where it is.
+    func everyKey() -> [(OutlineLocation, OutlineNode)] {
+        var found: [(OutlineLocation, OutlineNode)] = []
+        func walk(_ level: [OutlineNode?], _ container: OutlineContainer, _ prefix: [Int]) {
+            for (slot, node) in level.enumerated() {
+                guard let node else { continue }
+                found.append((OutlineLocation(container, prefix + [slot]), node))
+                walk(node.children, container, prefix + [slot])
+            }
+        }
+        for keypad in 0..<keypadCount {
+            for kind in TreeKind.allCases { walk(roots(kind, keypad: keypad), .tree(kind, keypad: keypad), []) }
+        }
+        for list in lists { walk(list.nodes, .list(list.name), []) }
+        return found
+    }
+
+    /// Where a step is, by its ID; nil for a key, or anything not there.
+    public func stepAddress(of id: UUID) -> StepAddress? {
+        for (location, key) in everyKey() where !key.steps.isEmpty {
+            if let path = key.stepPath(of: id) { return StepAddress(key: location, path: path) }
+        }
+        return nil
+    }
+
+    /// Whether it's one of a key's steps.
+    public func isStep(_ id: UUID) -> Bool { stepAddress(of: id) != nil }
+
+    /// Where a key is — or, for a step, its key.
+    public func keyLocation(of id: UUID) -> OutlineLocation? {
+        location(of: id) ?? stepAddress(of: id)?.key
+    }
+
+    /// Whether a key or a step with this ID is still there.
+    public func contains(_ id: UUID) -> Bool { keyLocation(of: id) != nil }
+
+    /// The steps from a key's first down to this one: the conditions it's
+    /// under, then itself.
+    public func stepChain(of id: UUID) -> [OutlineNode] {
+        guard let address = stepAddress(of: id), let key = node(at: address.key) else { return [] }
+        return (1...address.path.count).compactMap { key.step(at: Array(address.path.prefix($0))) }
+    }
+
+    /// Changes the list a step sits in: its key's own steps, or a condition's.
+    mutating func changeSteps(holding address: StepAddress, _ change: (inout [OutlineNode]) throws -> Void) throws {
+        guard var key = node(at: address.key) else { throw OutlineEditError.notFound }
+        try key.changeSteps(holding: address.path, change)
+        var row = level(address.key.container, parent: address.key.parentPath)
+        row[address.key.slot] = key
+        setLevel(address.key.container, parent: address.key.parentPath, to: row)
+    }
+
+    /// A new, empty step: at the end of a key's steps, or right after a step.
+    /// Refused on a key with keys under it — steps are what a key does.
+    @discardableResult
+    public mutating func addStep(after id: UUID, label: String = "") throws -> UUID {
+        let step = OutlineNode.step(label)
+        if let location = location(of: id), let key = node(at: location) {
+            guard !key.hasChildren, key.listReference == nil else { throw OutlineEditError.stepsNeedALeaf(key.label) }
+            try changeSteps(holding: StepAddress(key: location, path: [key.steps.count])) { $0.append(step) }
+            return step.id
+        }
+        guard let address = stepAddress(of: id) else { throw OutlineEditError.notFound }
+        try changeSteps(holding: address) { $0.insert(step, at: address.path.last! + 1) }
+        return step.id
+    }
+
+    /// Puts a step under the one above it — which must be an If, Else if or
+    /// Else — at the end of its steps.
+    public mutating func indentStep(_ id: UUID) throws {
+        guard let address = stepAddress(of: id), let key = node(at: address.key) else { throw OutlineEditError.notFound }
+        let index = address.path.last!
+        guard index > 0 else { throw OutlineEditError.nothingAbove }
+        let abovePath = Array(address.path.dropLast()) + [index - 1]
+        guard let above = key.step(at: abovePath), let step = key.step(at: address.path) else {
+            throw OutlineEditError.notFound
+        }
+        guard above.isCondition else { throw OutlineEditError.onlyAConditionTakesSteps }
+        try changeSteps(holding: address) { steps in
+            steps.remove(at: index)
+            steps[index - 1].steps.append(step)
+        }
+    }
+
+    /// Takes a step out of the condition it's under, to just after it.
+    public mutating func outdentStep(_ id: UUID) throws {
+        guard let address = stepAddress(of: id), let key = node(at: address.key),
+              let step = key.step(at: address.path) else { throw OutlineEditError.notFound }
+        guard address.path.count > 1 else { throw OutlineEditError.alreadyOutermost }
+        let conditionPath = Array(address.path.dropLast())
+        try changeSteps(holding: address) { $0.remove(at: address.path.last!) }
+        try changeSteps(holding: StepAddress(key: address.key, path: conditionPath)) {
+            $0.insert(step, at: conditionPath.last! + 1)
+        }
+    }
+
+    /// Moves a step one place earlier (-1) or later (+1) among its neighbours.
+    public mutating func moveStep(_ id: UUID, by offset: Int) throws {
+        guard let address = stepAddress(of: id) else { throw OutlineEditError.notFound }
+        let index = address.path.last!
+        try changeSteps(holding: address) { steps in
+            let target = index + offset
+            guard steps.indices.contains(target) else { throw OutlineEditError.atEdge }
+            steps.swapAt(index, target)
+        }
+    }
+
+    /// Copies of steps, put after a step or at the end of a key's steps, in
+    /// order; says which they became.
+    @discardableResult
+    public mutating func pasteSteps(_ steps: [OutlineNode], after id: UUID) throws -> [UUID] {
+        let copies = steps.map { $0.copyWithNewIDs() }
+        if let location = location(of: id), let key = node(at: location) {
+            guard !key.hasChildren, key.listReference == nil else { throw OutlineEditError.stepsNeedALeaf(key.label) }
+            try changeSteps(holding: StepAddress(key: location, path: [key.steps.count])) { $0 += copies }
+        } else {
+            guard let address = stepAddress(of: id) else { throw OutlineEditError.notFound }
+            try changeSteps(holding: address) { $0.insert(contentsOf: copies, at: address.path.last! + 1) }
+        }
+        return copies.map(\.id)
     }
 }

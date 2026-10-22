@@ -153,9 +153,18 @@ public final class DisplayModule: KeybowModule, @unchecked Sendable {
 
         let fade = request.field("fade").flatMap(Self.seconds) ?? Self.readingTime(Self.plainText(text))
         let content: ModuleDisplay.Content = NotesHTML.isDocument(text) ? .html(text) : .markdown(text)
-        let result = await host.display(ModuleDisplay(content: content, buttons: buttons, fadeAfter: fade))
-
+        let shown = ModuleDisplay(content: content, buttons: buttons, fadeAfter: fade)
         let values = ["displayed": Self.plainText(text)]
+
+        // Without buttons there's nothing to wait for: it fades by itself,
+        // and what comes next — a key's next step — goes on meanwhile.
+        guard !buttons.isEmpty else {
+            Task { _ = await host.display(shown) }
+            var outcome = ActionOutcome.quiet
+            outcome.values = values
+            return outcome
+        }
+        let result = await host.display(shown)
         switch result {
         case .ok where buttons.contains(.ok): return .then("ok", values: values, text: "{{displayed}}")
         case .cancel where buttons.contains(.cancel): return .then("cancel", values: values, text: "{{displayed}}")

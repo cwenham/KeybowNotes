@@ -195,6 +195,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func configChanged() {
+        // The tree changed — by hand, in another editor, or Reload Config:
+        // the editor shows it too.
+        if let editor = editorWindow, editor.model.outlineURL == AppLocations.outline(for: store.url) {
+            editor.model.takeOutsideChange()
+        }
         updateConfigStatus()
         if let problem = store.problem {
             Log.error("config problem: \(problem)")
@@ -751,6 +756,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self, self.store.url == outline else { return }
             self.store.reload()
         }
+        // Kept from last time it was open: brought up to date with the file.
+        editorWindow?.model.takeOutsideChange()
         editorWindow?.show()
     }
 

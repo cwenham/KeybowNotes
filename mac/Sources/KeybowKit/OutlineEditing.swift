@@ -720,6 +720,12 @@ public struct StepAddress: Hashable, Sendable {
     }
 }
 
+/// A key's place or a step's, whichever a node is.
+public enum OutlinePlace: Hashable, Sendable {
+    case key(OutlineLocation)
+    case step(StepAddress)
+}
+
 extension OutlineDocument {
     /// Every key in the document, with where it is.
     func everyKey() -> [(OutlineLocation, OutlineNode)] {
@@ -756,6 +762,25 @@ extension OutlineDocument {
 
     /// Whether a key or a step with this ID is still there.
     public func contains(_ id: UUID) -> Bool { keyLocation(of: id) != nil }
+
+    /// Where a key or a step is, by position: what a selection is kept by
+    /// when the file is read again, and every node gets a new ID.
+    public func place(of id: UUID) -> OutlinePlace? {
+        if let location = location(of: id) { return .key(location) }
+        return stepAddress(of: id).map { .step($0) }
+    }
+
+    /// The key or step at a place — for a step that's no longer there, its
+    /// key — or nil.
+    public func id(at place: OutlinePlace) -> UUID? {
+        switch place {
+        case .key(let location):
+            return node(at: location)?.id
+        case .step(let address):
+            guard let key = node(at: address.key) else { return nil }
+            return key.step(at: address.path)?.id ?? key.id
+        }
+    }
 
     /// The steps from a key's first down to this one: the conditions it's
     /// under, then itself.

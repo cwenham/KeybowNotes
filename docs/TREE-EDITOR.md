@@ -455,8 +455,14 @@ tree then becomes something you can feel as well as see.
   The version before is kept beside it as `tree.md.previous`.
 - An **edited** marker shows unsaved changes; closing the window with unsaved
   changes asks whether to save.
-- If `tree.md` changes on disk while it's open — edited by hand — the editor
-  offers to reload it.
+- If `tree.md` changes outside the editor — saved from another editor, by a
+  script or an agent — the editor shows the change: as the app picks it up,
+  on Reload Config, on coming back to the editor's window, and on opening it
+  again. With nothing unsaved it reloads at once, keeping what was selected,
+  and says so. Over unsaved changes it offers instead: **Reload**, losing
+  them, or **Keep Mine**, and saving writes over the change.
+- **Don't Save**, on closing, throws the changes away: the editor opens again
+  on the file as it is.
 - Lines between items that aren't items (comments) aren't kept when the outline
   is written back. The editor says so the first time it opens a file that has
   any.

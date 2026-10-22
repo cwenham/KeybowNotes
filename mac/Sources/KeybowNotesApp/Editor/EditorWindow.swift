@@ -48,6 +48,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         if window?.isDocumentEdited != model.isDirty { updateTitle() }
     }
 
+    /// Back from another editor: what was saved there shows at once, without
+    /// waiting for the app's next look at the file.
+    func windowDidBecomeKey(_ notification: Notification) {
+        model.takeOutsideChange()
+    }
+
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         sender.makeFirstResponder(nil)
         guard model.isDirty else { return true }
@@ -59,7 +65,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         alert.addButton(withTitle: "Don't Save")
         switch alert.runModal() {
         case .alertFirstButtonReturn: return model.save()
-        case .alertThirdButtonReturn: return true
+        case .alertThirdButtonReturn:
+            // The window is kept for next time: without what wasn't saved.
+            model.reloadFromFile()
+            return true
         default: return false
         }
     }
@@ -73,6 +82,7 @@ struct EditorRootView: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
+            if model.changedOutside { changedOutsideBanner }
             if !model.readProblems.isEmpty { readProblemsBanner }
             Divider()
             HSplitView {
@@ -147,6 +157,26 @@ struct EditorRootView: View {
         }
         if model.isPaged(tree) { base = "Row \(tree.startRow + 1) pages" }
         return model.hasProblems(tree) ? base + " •" : base
+    }
+
+    private var changedOutsideBanner: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Label("\(model.outlineURL.lastPathComponent) was changed outside the editor.",
+                      systemImage: "arrow.triangle.2.circlepath")
+                    .foregroundStyle(.orange)
+                Text("Reload it to see the change, losing what isn't saved here — or keep editing, and saving will write over it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Keep Mine") { model.keepOwnChanges() }
+            // No Return for it: Return adds rows, and this throws away what's unsaved.
+            Button("Reload") { model.reloadFromFile() }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(.orange.opacity(0.08))
     }
 
     private var readProblemsBanner: some View {

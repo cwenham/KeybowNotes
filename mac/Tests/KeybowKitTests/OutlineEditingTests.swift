@@ -193,4 +193,56 @@ final class OutlineEditingTests: XCTestCase {
         _ = try? doc.outdent(x)
         XCTAssertEqual(text(doc), before)
     }
+
+    /// The file read again gives every node a new ID; a selection is kept by
+    /// where it was — a step's by its key and its place among the steps.
+    func testPlacesOutlastReadingTheFileAgain() throws {
+        let text = """
+            1. Work
+               1. Focus time [Spaces]
+                  - Show
+                  - If {{selection}} contains build
+                     - [Display]
+                  - Else
+                     - [Copy]
+            2. Notes
+            """
+        let before = document(text)
+        let key = try id(before, [0, 0])
+        let step = try XCTUnwrap(before.node(at: OutlineLocation(.tree(.main), [0, 0]))?.step(at: [2, 0])?.id)
+
+        let after = document(text.replacingOccurrences(of: "[Copy]", with: "[Stay Awake]"))
+        XCTAssertNotEqual(try id(after, [0, 0]), key, "new IDs")
+        let keyPlace = try XCTUnwrap(before.place(of: key))
+        XCTAssertEqual(after.id(at: keyPlace), try id(after, [0, 0]))
+        let stepPlace = try XCTUnwrap(before.place(of: step))
+        XCTAssertEqual(after.id(at: stepPlace).flatMap { after.stepChain(of: $0).last?.annotations.first?.text }, "Stay Awake")
+
+        // A step that's gone: its key instead. A key that's gone: nothing.
+        let fewer = document("1. Work\n   1. Focus time [Spaces]\n      - Show")
+        XCTAssertEqual(fewer.id(at: stepPlace), try id(fewer, [0, 0]))
+        XCTAssertNil(document("1. Work").id(at: keyPlace))
+    }
+
+    /// The outline written out and read again writes out the same: how the
+    /// editor tells a change made outside it from its own save.
+    func testWrittenOutlineReadsBackTheSame() {
+        let written = text(document("""
+            Title
+            1. Work [colour: 0060ff, Calendar]
+               1. Jot [Ask, text: "What's \\"up\\"?"]
+                  - If {{answer}} is "is it"
+                     - [Copy]
+                  - else
+                     - [Stay Awake]
+            # row 2 [pages]
+            1. Page [Window]
+               5. Left
+            # contacts
+            - Alex Example [phone: +15550100]
+            # defaults
+            - commitDelayMs: 800
+            """))
+        XCTAssertEqual(text(document(written)), written)
+    }
 }

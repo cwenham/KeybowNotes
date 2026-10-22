@@ -36,8 +36,13 @@ final class EditorModel {
     /// A refusal or notice, shown briefly.
     private(set) var message: String?
     private(set) var saveStatus: String?
+    /// The file was changed outside the editor — by hand, in another editor —
+    /// while changes here were unsaved: the editor offers to reload it.
+    private(set) var changedOutside = false
 
     @ObservationIgnored weak var undoManager: UndoManager?
+    /// The file as last read or written, in the outline's standard form:
+    /// what unsaved changes, and changes made outside, are told by.
     @ObservationIgnored private var savedText: String
     @ObservationIgnored private var messageTask: Task<Void, Never>?
     @ObservationIgnored private let locateApp: (String) -> OutlineConverter.AppMatch?
@@ -223,10 +228,18 @@ final class EditorModel {
     /// Called after a save, so the app loads the tree at once.
     @ObservationIgnored var onSaved: (() -> Void)?
 
-    /// Reads the file again, after it was changed from outside — by a script
-    /// or an agent — while nothing here was unsaved. Undo starts afresh: what
-    /// it would undo is gone from the file.
+    /// Reads the file again, after it was changed from outside — by hand, a
+    /// script or an agent — or to throw away what's unsaved. What was
+    /// selected stays selected, by where it is. Undo starts afresh: what it
+    /// would undo is gone from the file.
     func reloadFromFile() {
+        let old = self.document
+        let selected = selection.flatMap { selection -> OutlinePlace? in
+            if case .node(let id) = selection { return old.place(of: id) }
+            return nil
+        }
+        let alsoSelected = selectedIDs.compactMap { old.place(of: $0) }
+
         let text = OutlineFile(outlineURL).text()
         let (document, problems) = OutlineParser.parse(text)
         self.document = document
@@ -234,10 +247,41 @@ final class EditorModel {
         savedText = text.isEmpty ? "" : OutlineWriter.text(document)
         compilation = OutlineCompiler.compile(document, locateApp: locateApp)
         isDirty = false
-        selection = nil
-        selectedIDs = []
+        changedOutside = false
+        if keypad >= document.keypadCount { keypad = 0 }
+        if case .empty? = selection {
+            // An empty key stays chosen: it's a place already.
+        } else {
+            selection = selected.flatMap { document.id(at: $0) }.map { .node($0) }
+        }
+        selectedIDs = alsoSelected.compactMap { document.id(at: $0) }
         revision += 1
         undoManager?.removeAllActions()
+    }
+
+    /// Looks for a change made to the file outside the editor, and takes
+    /// it: read in at once when nothing here is unsaved; offered when
+    /// something is, since reading it would lose that.
+    func takeOutsideChange() {
+        guard !isDraft else { return }
+        let text = OutlineFile(outlineURL).text()
+        let onDisk = text.isEmpty ? "" : OutlineWriter.text(OutlineParser.parse(text).0)
+        guard onDisk != savedText else { return }
+        if isDirty {
+            // What's here is now unsaved against the file as it is, even if
+            // it's undone back to how it was.
+            savedText = onDisk
+            isDirty = OutlineWriter.text(document) != savedText
+            changedOutside = isDirty
+        } else {
+            reloadFromFile()
+            flash("\(outlineURL.lastPathComponent) was changed outside the editor: reloaded.")
+        }
+    }
+
+    /// Keeps what's here over the change made outside; saving writes over it.
+    func keepOwnChanges() {
+        changedOutside = false
     }
 
     /// Writes the outline, which is the config: the app compiles it as it
@@ -255,6 +299,7 @@ final class EditorModel {
         }
         savedText = text
         isDirty = false
+        changedOutside = false
         readProblems = []
 
         let errors = compilation.diagnostics.filter { $0.severity == .error }

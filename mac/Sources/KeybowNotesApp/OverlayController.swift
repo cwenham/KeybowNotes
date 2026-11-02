@@ -94,6 +94,10 @@ final class OverlayController {
     private let panel = OverlayPanel()
     private let hosting: NSHostingView<OverlayView>
     private var hideTask: Task<Void, Never>?
+    /// Bumped by every `show()`, so a fade that finishes after the overlay was
+    /// shown again leaves it alone.
+    private var showCount = 0
+    private var spaceObserver: NSObjectProtocol?
     private var debugCount = 0
     /// True once the device has answered on the current connection. An open
     /// port alone proves nothing: a board stuck at its REPL opens fine and
@@ -123,6 +127,16 @@ final class OverlayController {
         ])
         panel.contentView = blur
         panel.appearance = NSAppearance(named: .vibrantDark)
+
+        // Up while the desktop changes (a "working" timer): bring it along.
+        spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.panel.isVisible else { return }
+                self.panel.orderFrontRegardless()
+            }
+        }
     }
 
     // MARK: - Inputs
@@ -272,14 +286,16 @@ final class OverlayController {
     private func show() {
         hideTask?.cancel()
         hideTask = nil
+        showCount += 1
         fitAndPlace()
         // SwiftUI settles its size on the next pass; fit again once it has.
         DispatchQueue.main.async { [weak self] in self?.fitAndPlace() }
 
-        if !panel.isVisible {
-            panel.alphaValue = 0
-            panel.orderFrontRegardless()
-        }
+        if !panel.isVisible { panel.alphaValue = 0 }
+        // Even when already up: ordering it in again puts it on the current
+        // Space. macOS leaves a see-through window behind when the desktop
+        // changes, so one that was faded out may be on an earlier Space.
+        panel.orderFrontRegardless()
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
             panel.animator().alphaValue = 1
@@ -330,12 +346,22 @@ final class OverlayController {
     }
 
     private func fadeOut() {
+        let fading = showCount
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.25
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, self.hideTask != nil, self.model.snapshot.isIdle else { return }
+                guard let self, self.showCount == fading else { return }
+                // Never left in place at no opacity: macOS doesn't carry a
+                // see-through window to a new Space, so it would stay stuck on
+                // this one. Either it comes back or it goes away.
+                guard self.model.snapshot.isIdle else {
+                    // A choice is under way: it should be showing.
+                    self.panel.alphaValue = 1
+                    self.fitAndPlace()
+                    return
+                }
                 self.model.outcome = nil
                 self.model.notice = nil
                 self.model.page = nil

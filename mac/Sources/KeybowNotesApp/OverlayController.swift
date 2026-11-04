@@ -57,6 +57,8 @@ enum OverlayPlacement: Hashable {
 /// A HUD panel in the style of the volume overlay: it floats above everything,
 /// on every Space and over full-screen apps, and never takes focus or clicks.
 final class OverlayPanel: NSPanel {
+    static let everySpace: NSWindow.CollectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+
     init() {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 560, height: 160),
@@ -66,7 +68,7 @@ final class OverlayPanel: NSPanel {
         )
         isFloatingPanel = true
         level = .statusBar
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        collectionBehavior = Self.everySpace
         ignoresMouseEvents = true
         isOpaque = false
         backgroundColor = .clear
@@ -78,6 +80,25 @@ final class OverlayPanel: NSPanel {
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+
+    /// Puts the panel back on every Space when macOS has pinned it to one.
+    ///
+    /// It happens though the panel still asks for every Space: macOS keeps it
+    /// on one desktop and reports it isn't on the active one, and hiding it,
+    /// ordering it front or setting the behaviour again don't undo that. What
+    /// does: move it to the active Space, then, once the window server has
+    /// done so (a turn of the run loop), ask for every Space again.
+    @MainActor
+    func rejoinEverySpace() {
+        guard isVisible, !isOnActiveSpace else { return }
+        collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        orderFrontRegardless()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.collectionBehavior = Self.everySpace
+            if self.isVisible { self.orderFrontRegardless() }
+        }
+    }
 }
 
 @MainActor
@@ -135,6 +156,7 @@ final class OverlayController {
             MainActor.assumeIsolated {
                 guard let self, self.panel.isVisible else { return }
                 self.panel.orderFrontRegardless()
+                self.panel.rejoinEverySpace()
             }
         }
     }
@@ -292,10 +314,9 @@ final class OverlayController {
         DispatchQueue.main.async { [weak self] in self?.fitAndPlace() }
 
         if !panel.isVisible { panel.alphaValue = 0 }
-        // Even when already up: ordering it in again puts it on the current
-        // Space. macOS leaves a see-through window behind when the desktop
-        // changes, so one that was faded out may be on an earlier Space.
         panel.orderFrontRegardless()
+        // macOS sometimes pins it to the desktop it was last shown on.
+        panel.rejoinEverySpace()
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
             panel.animator().alphaValue = 1

@@ -1,3 +1,4 @@
+import AppKit
 import KeybowKit
 import SwiftUI
 
@@ -11,30 +12,75 @@ struct KeypadPane: View {
         var colour: KeyColour?
         var level: Double = 0
         var label = ""
+        var icon: KeyIcon?
         var selected = false
         var target: EditorSelection?
     }
 
+    /// Which keypad to draw, when chosen: else the Stream Deck for a section
+    /// that's for one, and the Keybow for the rest.
+    @State private var chosenDeck: [Int: Bool] = [:]
+
+    private var keypadIndex: Int { min(model.keypad, model.document.keypads.count) }
+
+    private var showsDeck: Bool {
+        if let chosen = chosenDeck[keypadIndex] { return chosen }
+        guard keypadIndex > 0 else {
+            // The Default trees: the Stream Deck's only when it's all that uses them.
+            let users = model.keypadsInUse()[0] ?? []
+            return !users.isEmpty && users.allSatisfy { $0 == KeypadDevice.Model.streamDeck.title }
+        }
+        return model.document.keypads[keypadIndex - 1].model == .streamDeck
+    }
+
     var body: some View {
-        let keys = layout()
         VStack(alignment: .leading, spacing: 8) {
-            Text("Keypad").font(.subheadline.weight(.semibold))
-            Grid(horizontalSpacing: 6, verticalSpacing: 6) {
-                ForEach(0..<KeybowProtocol.rows, id: \.self) { row in
-                    GridRow {
-                        ForEach(0..<KeybowProtocol.columns, id: \.self) { column in
-                            keyView(keys[KeybowProtocol.key(row: row, column: column)])
+            HStack {
+                Text("Keypad").font(.subheadline.weight(.semibold))
+                Spacer()
+                Picker("Draw as", selection: Binding(
+                    get: { showsDeck },
+                    set: { chosenDeck[keypadIndex] = $0 }
+                )) {
+                    Text("Keybow").tag(false)
+                    Text("Stream Deck").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .fixedSize()
+                .help("Draw these trees as a Keybow lights them, or as a Stream Deck shows them.")
+            }
+            if showsDeck {
+                DeckDrawing(model: model)
+            } else {
+                let keys = layout()
+                Grid(horizontalSpacing: 6, verticalSpacing: 6) {
+                    ForEach(0..<KeybowProtocol.rows, id: \.self) { row in
+                        GridRow {
+                            ForEach(0..<KeybowProtocol.columns, id: \.self) { column in
+                                keyView(keys[KeybowProtocol.key(row: row, column: column)])
+                            }
                         }
                     }
                 }
             }
             Text(caption).font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
     }
 
     private var caption: String {
         let tree = model.tab
+        if showsDeck {
+            if model.isPaged(tree) {
+                return "\(tree.title) pages on a Stream Deck: a page's keys fill the left four columns. "
+                    + "Click a key to select it."
+            }
+            return "\(tree.title) tree on a Stream Deck, as folders: the path so far on top, what's on offer below. "
+                + "Click a key to select it."
+        }
         if model.isPaged(tree) {
             let rows = tree.levels == 2 ? "row 4" : "rows \(tree.startRow + 2)–4"
             return "Row \(tree.startRow + 1) pages: each key picks a page, whose \(tree.pageKeys) keys fill \(rows) "
@@ -57,14 +103,20 @@ struct KeypadPane: View {
                 RoundedRectangle(cornerRadius: 7)
                     .strokeBorder(key.selected ? Color.primary : Color.secondary.opacity(key.colour == nil ? 0.35 : 0.15),
                                   style: StrokeStyle(lineWidth: key.selected ? 2 : 1, dash: key.colour == nil ? [3, 3] : []))
-                Text(key.label)
-                    .font(.system(size: LabelFit.size(for: key.label, base: 9, weight: key.selected ? .bold : .regular,
-                                                      width: 56, smallest: 6.5),
-                                  weight: key.selected ? .bold : .regular))
-                    .foregroundStyle(key.level > 0.6 ? Color.white : Color.primary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .padding(3)
+                VStack(spacing: 1) {
+                    if let icon = key.icon {
+                        KeyIconImage(icon: icon, folder: model.outlineURL.deletingLastPathComponent(), size: 15)
+                            .foregroundStyle(key.level > 0.6 ? Color.white : Color.primary)
+                    }
+                    Text(key.label)
+                        .font(.system(size: LabelFit.size(for: key.label, base: 9, weight: key.selected ? .bold : .regular,
+                                                          width: 56, smallest: 6.5),
+                                      weight: key.selected ? .bold : .regular))
+                        .foregroundStyle(key.level > 0.6 ? Color.white : Color.primary)
+                        .lineLimit(key.icon == nil ? 2 : 1)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(3)
             }
             .frame(width: 64, height: 44)
             .contentShape(Rectangle())
@@ -95,8 +147,8 @@ struct KeypadPane: View {
                 : KeybowProtocol.key(row: tree.rows[depth], column: path[depth])
             let location = OutlineLocation(container, path)
             if let node = model.document.node(at: location) {
-                keys[index] = Key(colour: colour(path), level: level, label: node.label, selected: selected,
-                                  target: .node(node.id))
+                keys[index] = Key(colour: colour(path), level: level, label: node.label, icon: node.keyIcon,
+                                  selected: selected, target: .node(node.id))
             } else {
                 keys[index] = Key(colour: nil, label: "", selected: selected, target: .empty(location))
             }
@@ -150,5 +202,40 @@ struct KeypadPane: View {
             for column in 0..<KeybowProtocol.columns { put(path + [column], level: 0.3) }
         }
         return keys
+    }
+}
+
+extension OutlineNode {
+    /// Its own `icon:`, read.
+    var keyIcon: KeyIcon? {
+        annotations.lazy.compactMap { annotation -> KeyIcon? in
+            if case .pair("icon", let value) = annotation { return KeyIcon(value) }
+            return nil
+        }.first
+    }
+}
+
+/// A key's icon, small, in SwiftUI: for drawings of the keypad.
+struct KeyIconImage: View {
+    let icon: KeyIcon
+    let folder: URL?
+    var size: CGFloat
+
+    var body: some View {
+        switch icon {
+        case .symbol(let name):
+            Image(systemName: name).font(.system(size: size * 0.85, weight: .medium))
+                .frame(height: size)
+        case .text(let text):
+            Text(text).font(.system(size: size * 0.85, weight: .semibold)).lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .frame(height: size)
+        case .file:
+            if let url = icon.fileURL(relativeTo: folder), let image = NSImage(contentsOf: url) {
+                Image(nsImage: image).resizable().scaledToFit().frame(height: size)
+            } else {
+                Image(systemName: "questionmark.square.dashed").font(.system(size: size * 0.85)).frame(height: size)
+            }
+        }
     }
 }

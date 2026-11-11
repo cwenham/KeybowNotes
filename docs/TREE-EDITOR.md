@@ -439,7 +439,19 @@ chosen:
 - **empty keys** as outlines.
 
 Rows follow the tab's direction: in the bottom tree, the root row is at the
-bottom and the tree climbs.
+bottom and the tree climbs. A key with an icon shows it above its label.
+
+**As a Stream Deck.** *Keybow | Stream Deck*, beside the title, draws the
+trees instead as a Stream Deck shows them — the same folders layout and the
+same pictures as on the device (`DeckDrawing`, from `FolderLayout` and
+`KeyRenderer`), with the selected node chosen: a branch on the path, its
+children on offer; a key with nothing under it on offer beside its siblings;
+a page with its keys. A section for a Stream Deck opens that way, as do the
+Default trees when a Stream Deck is all that uses them; the choice is kept per
+section while the window's open. Clicking a key selects what's on it — the
+path, what's on offer, an empty place (dashed) to add a key there, the main
+tree's keys from a side tree; **Back** selects the level above, **Cancel**
+clears the selection, and the bottom tree's key switches tabs.
 
 **Clicking a key** selects the node on it: an ancestor or one of its siblings, a
 sibling of the selected node, or one of its children. Clicking an empty key on

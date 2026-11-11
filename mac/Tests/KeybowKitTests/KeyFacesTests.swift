@@ -188,6 +188,15 @@ final class KeyFacesTests: XCTestCase {
         XCTAssertEqual(slots[4].press, .key(0), "its own key leaves it")
     }
 
+    func testAStreamDeckUsesItsOwnSection() throws {
+        let config = try config(outline + "\n# keypad Deck [Stream Deck]\n1. Music [Copy, icon: sf:music.note]\n")
+        let deck = KeypadDevice(serial: "DECK0001", model: .streamDeck, dataPort: "")
+        XCTAssertEqual(config.keypadIndex(for: deck), 1)
+        XCTAssertEqual(config.forDevice(deck).roots(.main).compactMap { $0?.label }, ["Music"])
+        let keybow = KeypadDevice(serial: "KB0001", model: .keybow2040, dataPort: "/dev/null")
+        XCTAssertEqual(config.keypadIndex(for: keybow), 0, "a Keybow keeps the Default trees")
+    }
+
     func testTooSmallAKeypadShowsNothing() throws {
         let config = try config()
         let slots = FolderLayout(columns: 3, rows: 2).slots(for: view(Navigator(config: config, now: start), config))

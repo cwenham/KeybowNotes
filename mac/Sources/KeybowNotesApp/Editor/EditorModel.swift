@@ -75,7 +75,7 @@ final class EditorModel {
 
     /// The keypads plugged in: USB, in the app — or whatever a test, or a
     /// draft, says instead.
-    @ObservationIgnored var connectedKeypads: () -> [KeypadDevice] = { USBSerialPorts.keypads() }
+    @ObservationIgnored var connectedKeypads: () -> [KeypadDevice] = { KeypadDevice.connected() }
 
     /// The keypads plugged in, by the trees each uses: 0 for Default.
     func keypadsInUse() -> [Int: [String]] {

@@ -308,10 +308,16 @@ case "ports":
     }
 
 case "keypads":
-    let keypads = USBSerialPorts.keypads()
-    if keypads.isEmpty { print("no keypads found: a Keybow 2040 or an RGB Keypad with the firmware's boot.py run") }
+    let keypads = KeypadDevice.connected()
+    if keypads.isEmpty {
+        print("no keypads found: a Keybow 2040 or an RGB Keypad with the firmware's boot.py run, or a Stream Deck")
+    }
     for keypad in keypads {
-        print("\(keypad.model.title)  \(keypad.serial)  data \(keypad.dataPort)  console \(keypad.consolePort ?? "-")")
+        if keypad.model.isBoard {
+            print("\(keypad.model.title)  \(keypad.serial)  data \(keypad.dataPort)  console \(keypad.consolePort ?? "-")")
+        } else {
+            print("\(keypad.model.title)  \(keypad.serial)")
+        }
     }
 
 case "watch":

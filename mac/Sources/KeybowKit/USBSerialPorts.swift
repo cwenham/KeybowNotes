@@ -19,33 +19,49 @@ public struct USBSerialPort: Equatable, Sendable {
 }
 
 /// A keypad KeybowNotes can talk to: a Keybow 2040, or Pimoroni's RGB
-/// Keypad Base on a Raspberry Pi Pico, running the KeybowNotes firmware.
+/// Keypad Base on a Raspberry Pi Pico, running the KeybowNotes firmware — or
+/// an Elgato Stream Deck, which needs no firmware of ours.
 public struct KeypadDevice: Hashable, Sendable {
     public enum Model: String, CaseIterable, Sendable {
         case keybow2040
         case rgbKeypad = "rgbkeypad"
+        case streamDeck = "streamdeck"
 
         public var title: String {
             switch self {
             case .keybow2040: return "Keybow 2040"
             case .rgbKeypad: return "RGB Keypad"
+            case .streamDeck: return "Stream Deck"
             }
         }
 
-        /// The USB identity CircuitPython gives each board.
+        /// The boards that run KeybowNotes' firmware, set up and looked after
+        /// by the app: not the Stream Deck.
+        public static let boards: [Model] = [.keybow2040, .rgbKeypad]
+
+        /// Runs our firmware, over a serial port.
+        public var isBoard: Bool { Self.boards.contains(self) }
+
+        /// Draws on its keys, from the trees' icons and labels.
+        public var drawsKeys: Bool { self == .streamDeck }
+
+        /// The USB identity CircuitPython gives each board; for the Stream
+        /// Deck, the 2019 model's (there are several: see `StreamDeckModel`).
         var usb: (vendor: Int, product: Int) {
             switch self {
             case .keybow2040: return (0x16D0, 0x08C6)
             case .rgbKeypad: return (0x239A, 0x80F4)       // any Pico running CircuitPython
+            case .streamDeck: return (0x0FD9, 0x006D)
             }
         }
 
         /// From an outline or the firmware, any case and spacing: "Keybow
-        /// 2040", "keybow", "RGB Keypad", "rgbkeypad", "Pico".
+        /// 2040", "keybow", "RGB Keypad", "rgbkeypad", "Pico", "Stream Deck".
         public init?(words: String) {
             switch words.lowercased().filter({ $0.isLetter || $0.isNumber }) {
             case "keybow2040", "keybow": self = .keybow2040
             case "rgbkeypad", "rgbkeypadbase", "picorgbkeypad", "pico", "rgb": self = .rgbKeypad
+            case "streamdeck", "elgatostreamdeck", "streamdeckmk2", "deck": self = .streamDeck
             default: return nil
             }
         }
@@ -136,7 +152,7 @@ public enum USBSerialPorts {
     /// Every keypad board running CircuitPython, in a steady order.
     public static func boards() -> [Board] {
         var boards: [Board] = []
-        for model in KeypadDevice.Model.allCases {
+        for model in KeypadDevice.Model.boards {
             let ports = ports(vendorID: model.usb.vendor, productID: model.usb.product)
             let bySerial = Dictionary(grouping: ports) { $0.serial ?? "" }
             for (serial, own) in bySerial.sorted(by: { $0.key < $1.key }) {

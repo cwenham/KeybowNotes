@@ -185,7 +185,10 @@ private struct NodeInspector: View {
                        help: isStep ? (node.isCondition ? FieldHelp.condition : FieldHelp.stepLabel) : FieldHelp.label) { label in
                 model.edit("Rename") { try $0.setLabel(id, label) }
             }
-            if !isStep { colourSection }
+            if !isStep {
+                colourSection
+                KeyFaceSection(model: model, id: id, node: node, colour: keyColour)
+            }
             actionSection
             leftoversSection
             valuesSection
@@ -837,7 +840,7 @@ private struct NodeInspector: View {
     /// they could only be found, and removed, by editing the line.
     private var leftovers: [(annotation: Annotation, reason: String)] {
         let type = action?.type
-        var used = Set((type.flatMap(fields(for:)) ?? []).map(\.key)).union(["type", "instant", "colour", "color"])
+        var used = Set((type.flatMap(fields(for:)) ?? []).map(\.key)).union(["type", "instant"]).union(Annotation.appearanceKeys)
         switch type {
         case "app.open": used.insert("url")                    // opened when there's no Open
         case "clock.timer": used.insert("due")                 // a reminder's due works too
@@ -918,7 +921,7 @@ private struct NodeInspector: View {
     private var ownParameters: [(String, String)] {
         node.annotations.compactMap { annotation in
             guard case .pair(let key, let value) = annotation,
-                  !ModuleRegistry.shared.vocabulary.isActionField(key), key != "colour", key != "color" else { return nil }
+                  !ModuleRegistry.shared.vocabulary.isActionField(key), !Annotation.appearanceKeys.contains(key) else { return nil }
             return (key, value)
         }
     }
@@ -928,7 +931,7 @@ private struct NodeInspector: View {
         var result: [(String, String, String)] = []
         for ancestor in chain.dropLast().reversed() {
             for case .pair(let key, let value) in ancestor.annotations
-            where !ModuleRegistry.shared.vocabulary.isActionField(key) && key != "colour" && key != "color" && !seen.contains(key) {
+            where !ModuleRegistry.shared.vocabulary.isActionField(key) && !Annotation.appearanceKeys.contains(key) && !seen.contains(key) {
                 seen.insert(key)
                 result.append((key, value, ancestor.label))
             }

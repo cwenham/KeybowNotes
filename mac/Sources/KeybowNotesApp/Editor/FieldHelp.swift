@@ -32,6 +32,19 @@ enum FieldHelp {
         as a key does its branch's: [Reminders] makes a step a reminder. ⇧↩ in the outline does the same.
         """
 
+    static let icon = """
+        The picture on the key, for keypads with a screen under each key, like the Stream Deck. \
+        One of Apple's symbols, an emoji or a few letters, or an image file. It's this key's own: \
+        the keys under it don't take it.
+        Examples: icon: sf:phone.fill · icon: 📞 · icon: Icons/mum.png
+        """
+
+    static let caption = """
+        The text on the key, under its icon, in place of the label — shorter, say, to fit. \
+        Turn off "Show text on the key" for the icon alone.
+        Examples: caption: Mum · caption: none
+        """
+
     static let colour = """
         The key's light, on the Keybow and the overlay. Set here, it colours this node \
         and everything under it that doesn't set its own. Click a swatch, or the well for any colour.

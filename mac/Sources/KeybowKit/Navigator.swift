@@ -179,6 +179,23 @@ public struct Navigator {
         return [.page(nil)]
     }
 
+    /// Back a level, or Cancel, from a keypad with keys to spare for them.
+    /// Either one, while an action waits to run, calls it off, as any press does.
+    public mutating func navigate(_ move: KeypadNavigation, at now: Date) -> [NavigatorEvent] {
+        lastActivity = now
+        if pendingSelection != nil {
+            reset()
+            return [.cleared(reason: .cancelled), .selectionChanged(nil)]
+        }
+        if tree == nil, page != nil { return leavePage() }
+        guard let tree else { return [] }
+        if move == .back, path.count > 1 {
+            return choose(tree: tree, path: Array(path.dropLast()), at: now, key: -1)
+        }
+        reset()
+        return move == .cancel ? [.cleared(reason: .cancelled), .selectionChanged(nil)] : [.selectionChanged(nil)]
+    }
+
     public mutating func keyUp(_ key: Int, at now: Date) -> [NavigatorEvent] {
         lastActivity = now
         heldSince.removeValue(forKey: key)

@@ -378,7 +378,7 @@ public enum Troubleshooter {
         }
 
         // A keypad that keeps going: three times in ten minutes.
-        for model in KeypadDevice.Model.allCases {
+        for model in KeypadDevice.Model.boards {
             let gone = facts.events.filter { event in
                 guard case .left(let vendor, let product, _, _) = event.kind,
                       !facts.restarts.contains(where: { $0.contains(event.date) }) else { return false }

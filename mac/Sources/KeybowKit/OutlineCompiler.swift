@@ -15,6 +15,8 @@ public enum AnnotationRole: Equatable, Sendable {
     /// A recognised action field: `duration: 1h`, `find.byName: …`.
     case field
     case colour(valid: Bool)
+    /// `icon:` or `caption:`: how its key looks on a keypad that draws.
+    case keyFace
     /// Any other `key: value`: a value for templates.
     case parameter
     case unknown
@@ -86,6 +88,7 @@ public enum OutlineCompiler {
             return .unknown
         case .pair(let key, let value):
             if key == "colour" || key == "color" { return .colour(valid: KeyColour(hex: value) != nil) }
+            if key == "icon" || key == "caption" { return .keyFace }
             if vocabulary.isActionField(key) { return .field }
             return .parameter
         }
@@ -182,7 +185,7 @@ private struct Compiler {
             if let model = keypad.model { fields.append(("model", .string(model.rawValue))) }
             if let id = keypad.id { fields.append(("id", .string(id))) }
             for case .word(let word) in keypad.annotations where KeypadDevice.Model(words: word) == nil {
-                warnings.append("Keypad “\(keypad.name)”: “\(word)” isn't a model — Keybow 2040 or RGB Keypad.")
+                warnings.append("Keypad “\(keypad.name)”: “\(word)” isn't a model — Keybow 2040, RGB Keypad or Stream Deck.")
             }
             fields.append(("trees", .object(compileTrees(keypad: index + 1))))
             if let paged = pages(keypad: index + 1) { fields.append(("pages", paged)) }
@@ -219,6 +222,8 @@ private struct Compiler {
         var action: [(String, OrderedJSON)] = []
         var params: [(String, OrderedJSON)] = []
         var colour: String?
+        /// `icon` and `caption`, as written.
+        var face: [(String, OrderedJSON)] = []
         var declaredType: String?
         var roles: [AnnotationRole] = []
         var diagnostics: [OutlineDiagnostic] = []
@@ -280,6 +285,7 @@ private struct Compiler {
 
         var fields: [(String, OrderedJSON)] = [("label", .string(node.label)), ("key", .number(Double(slot)))]
         if let colour { fields.append(("colour", .string(colour))) }
+        fields.append(contentsOf: annotated.face)
         if !params.isEmpty { fields.append(("params", .object(params))) }
         if !action.isEmpty { fields.append(("action", .object(action))) }
         if !steps.isEmpty { fields.append(("steps", .array(steps))) }
@@ -367,6 +373,9 @@ private struct Compiler {
             if annotated.colour != nil {
                 note(.warning, "A step has no key of its own, so no colour.")
             }
+            if !annotated.face.isEmpty {
+                note(.warning, "A step has no key of its own, so no icon or caption.")
+            }
             if !annotated.params.isEmpty { fields.append(("params", .object(annotated.params))) }
             if !annotated.action.isEmpty { fields.append(("action", .object(annotated.action))) }
             if step.isCondition, case .success? = step.condition, !step.steps.isEmpty {
@@ -391,6 +400,7 @@ private struct Compiler {
         var nested: [(String, [(String, OrderedJSON)])] = []
         var params: [(String, OrderedJSON)] = []
         var colour = paletteColour
+        var face: [(String, OrderedJSON)] = []
         var declaredType: String?
         var roles: [AnnotationRole] = []
         var diagnostics: [OutlineDiagnostic] = []
@@ -492,6 +502,13 @@ private struct Compiler {
                 warnings.append("\(where_): didn't understand “\(word)” on “\(node.label)”")
             case (.pair(_, let value), .colour(let valid)):
                 if valid { colour = value } else { note(.error, "“\(value)” isn't a colour; use rrggbb.") }
+            case (.pair(let key, let value), .keyFace):
+                face.removeAll { $0.0 == key }
+                if key == "icon", KeyIcon(value) == nil {
+                    note(.warning, "An empty icon; write sf:name, an image file, or emoji.")
+                } else {
+                    face.append((key, .string(value)))
+                }
             case (.pair(let key, let value), .field):
                 // `ok.url`: a field of the action run on OK, typed and checked as `url`.
                 let held = vocabulary.heldField(key)
@@ -540,8 +557,8 @@ private struct Compiler {
         for (name, fields) in nested { set(name, .object(fields)) }
         if let declaredType { action.removeAll { $0.0 == "type" }; action.insert(("type", .string(declaredType)), at: 0) }
 
-        return Annotated(context: context, action: action, params: params, colour: colour, declaredType: declaredType,
-                         roles: roles, diagnostics: diagnostics)
+        return Annotated(context: context, action: action, params: params, colour: colour, face: face,
+                         declaredType: declaredType, roles: roles, diagnostics: diagnostics)
     }
 
     private mutating func leafValues(_ node: OutlineNode, context: Context, declaredHere: Bool,

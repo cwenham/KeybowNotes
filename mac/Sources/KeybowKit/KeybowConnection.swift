@@ -4,6 +4,32 @@ public enum KeybowEvent: Equatable, Sendable {
     case connected(path: String)
     case disconnected(reason: String)
     case message(DeviceMessage)
+    /// Back or Cancel, from a keypad with keys of its own for them.
+    case navigate(KeypadNavigation)
+}
+
+/// A keypad, as the selection driver sees it: key events in, what to show out.
+/// A Keybow's link is a `KeybowConnection`; a Stream Deck's draws its keys.
+public protocol KeypadConnection: AnyObject, Sendable {
+    /// One consumer: the selection driver.
+    var events: AsyncStream<KeybowEvent> { get }
+    func start()
+    func stop()
+    func send(_ command: HostCommand)
+    /// True for a keypad that draws its keys from `show(_:)` rather than
+    /// lighting them from `send(.leds…)`.
+    var drawsKeys: Bool { get }
+    /// The whole state, for a keypad that draws its keys. Called whenever the
+    /// lights would be worked out: often, so it should be cheap when nothing changed.
+    func show(_ view: KeypadView)
+    /// 0.05 to 1, for a keypad whose brightness is its own (a screen's backlight).
+    func setBrightness(_ value: Double)
+}
+
+extension KeypadConnection {
+    public var drawsKeys: Bool { false }
+    public func show(_ view: KeypadView) {}
+    public func setBrightness(_ value: Double) {}
 }
 
 /// Keeps a connection to a keypad alive: finds the device, holds the data port
@@ -16,7 +42,7 @@ public enum KeybowEvent: Equatable, Sendable {
 /// `events` is an `AsyncStream`, which has **one** consumer: two `for await`
 /// loops over it compete and each sees only some of the events. When something
 /// else needs the same news, republish it (see `SelectionDriver`).
-public final class KeybowConnection: @unchecked Sendable {
+public final class KeybowConnection: KeypadConnection, @unchecked Sendable {
     public struct Timings: Sendable {
         /// How often to look for the device while disconnected, and to ping while connected.
         public var tick: TimeInterval = 1.0

@@ -204,20 +204,23 @@ final class OverlayController {
         }
     }
 
-    func handle(_ event: KeybowEvent) {
+    /// `keypad`: what to call it in the notice — "Keybow", "Stream Deck".
+    func handle(_ event: KeybowEvent, keypad: String = "Keybow") {
         switch event {
         case .connected:
             deviceAnswering = false
         case .message:
             if !deviceAnswering {
                 deviceAnswering = true
-                flashNotice("Keybow ready", symbol: "cable.connector")
+                flashNotice("\(keypad) ready", symbol: "cable.connector")
             }
         case .disconnected(let reason):
             if deviceAnswering && reason != "stopped" {
-                flashNotice("Keybow disconnected — \(reason)", symbol: "cable.connector.slash")
+                flashNotice("\(keypad) disconnected — \(reason)", symbol: "cable.connector.slash")
             }
             deviceAnswering = false
+        case .navigate:
+            break
         }
     }
 

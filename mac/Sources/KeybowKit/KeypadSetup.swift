@@ -296,6 +296,8 @@ extension KeypadDevice.Model {
             return "Hold the BOOT button on the Keybow and press its RESET button — or hold BOOT while you plug it in."
         case .rgbKeypad:
             return "Hold the BOOTSEL button on the Pico while you plug the keypad in."
+        case .streamDeck:
+            return "A Stream Deck needs no setting up: plug it in."
         }
     }
 }

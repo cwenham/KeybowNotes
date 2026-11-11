@@ -45,7 +45,7 @@ public struct SelectionSnapshot: Equatable, Sendable {
 /// and publishes what the user is choosing. The app and the CLI both use this.
 public final class SelectionDriver: @unchecked Sendable {
     private let queue = DispatchQueue(label: "SelectionDriver")
-    private let connection: KeybowConnection
+    private let connection: any KeypadConnection
     private var config: KeybowConfig
     private var lighting: Lighting
     private let flashDuration: TimeInterval = 0.2
@@ -69,7 +69,7 @@ public final class SelectionDriver: @unchecked Sendable {
     /// The whole state, whenever it changes. Like the others, one consumer.
     public let snapshots: AsyncStream<SelectionSnapshot>
 
-    public init(config: KeybowConfig, connection: KeybowConnection, lighting: Lighting = Lighting()) {
+    public init(config: KeybowConfig, connection: any KeypadConnection, lighting: Lighting = Lighting()) {
         self.config = config
         self.connection = connection
         self.lighting = lighting
@@ -98,6 +98,8 @@ public final class SelectionDriver: @unchecked Sendable {
                 switch event {
                 case .message(let message):
                     inject(message)
+                case .navigate(let move):
+                    apply { $0.navigate(move, at: Date()) }
                 case .connected:
                     // Re-assert the lights: a device that just reappeared is dark.
                     queue.async { self.lastSentColours = nil; self.refresh() }
@@ -156,7 +158,13 @@ public final class SelectionDriver: @unchecked Sendable {
     /// 0.05 to 1: dims every key, for a dark room.
     public func setBrightness(_ value: Double) {
         queue.async { [self] in
-            lighting.brightness = min(1, max(0.05, value))
+            let clamped = min(1, max(0.05, value))
+            // A keypad with a screen dims its backlight, not its colours.
+            if connection.drawsKeys {
+                connection.setBrightness(clamped)
+            } else {
+                lighting.brightness = clamped
+            }
             refresh()
         }
     }
@@ -214,7 +222,11 @@ public final class SelectionDriver: @unchecked Sendable {
     /// Sends LEDs and a snapshot, each only when something actually changed.
     private func refresh() {
         let colours = lighting.colours(for: navigator, config: config, flashing: flash?.key, firing: firing?.key)
-        if colours != lastSentColours {
+        if connection.drawsKeys {
+            connection.show(KeypadView(config: config, tree: navigator.tree, path: navigator.path, page: navigator.page,
+                                       currentRow: navigator.currentRow, pending: navigator.pendingWindow != nil,
+                                       colours: colours))
+        } else if colours != lastSentColours {
             lastSentColours = colours
             connection.send(.leds(colours))
         }

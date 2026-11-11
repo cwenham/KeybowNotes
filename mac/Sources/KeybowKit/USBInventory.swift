@@ -85,7 +85,7 @@ public enum USBIdentity: Equatable, Sendable {
     case other
 
     public init(vendor: Int, product: Int) {
-        if let model = KeypadDevice.Model.allCases.first(where: { $0.usb == (vendor, product) }) {
+        if let model = KeypadDevice.Model.boards.first(where: { $0.usb == (vendor, product) }) {
             self = .keypad(model)
             return
         }

@@ -152,6 +152,49 @@ a step waits on the person for more than 15, or setting up fails. `keybow
 troubleshoot` prints the same findings, and *Copy Report* puts them, with what
 they were drawn from, on the clipboard for someone helping.
 
+### Stream Deck
+
+An Elgato Stream Deck is a keypad too, with a small screen under each key and
+no firmware of ours: the app speaks Elgato's documented HID protocol
+(https://docs.elgato.com/streamdeck/hid/), in the `KeybowStreamDeck` target.
+The 15-key family is supported — product IDs `0x006D` (2019), `0x0080` (MK.2),
+`0x00A5` (MK.2 Scissor Keys) and `0x00B9` (Module 15 Keys) — with 72-pixel
+keys; the others differ in size or protocol, and are a table entry away
+(`StreamDeckModel.all`) once tried.
+
+- **Input report 1**: a header of four bytes, then a byte per key, 1 while
+  pressed, sent whenever any key changes.
+- **Output report 2, command 7**: a key's picture, as a JPEG turned half a
+  turn, in chunks of up to 1016 bytes: key, last-chunk flag, length and chunk
+  number (little-endian), then the data.
+- **Feature report 3**: brightness (command 8, 0–100), and Elgato's logo
+  (command 2), which it's left showing when the app quits.
+
+The navigator doesn't change: its keypad is still 4×4. `FolderLayout`, in
+KeybowKit, turns the navigator's state into fifteen faces — the trees as
+folders, a level at a time, with Back and Cancel keys
+([CONFIG-LANGUAGE.md](CONFIG-LANGUAGE.md#keys-with-screens)) — and each face
+says what pressing it does: press a key of the 4×4 keypad, go Back or Cancel
+(`Navigator.navigate`), or show the bottom tree. A press is read through the
+faces showing when it happened, so it does what the key said.
+
+`SelectionDriver` talks to any `KeypadConnection`. `KeybowConnection` lights
+LEDs; `StreamDeckConnection` draws instead (`drawsKeys`): it's given the whole
+state (`KeypadView`) whenever the lights would be worked out, lays it out,
+and sends only the keys whose face changed. Colours are the Keybow's lighting
+at full strength, so chosen, on offer, the escape row, flashes and pulses all
+show; the Brightness setting goes to the screens' backlight instead.
+`KeyRenderer` draws a face: the colour, white or near-black ink by the
+colour's lightness, the icon above and the caption below, text shrunk to fit.
+The tree editor's inspector draws its preview with the same code.
+
+Stream Decks are found by the IO registry every two seconds, as boards are,
+and told apart by serial number. They need no setting up, so Set Up a Keypad
+and the troubleshooter leave them out (`KeypadDevice.Model.boards`). Elgato's
+own app draws on the keys too; when it's open, the app logs that. A
+development build given `KEYBOW_KEYPADS=streamdeck` takes only the Stream Decks,
+and can run beside the installed app.
+
 ---
 
 ## 3. Interaction model

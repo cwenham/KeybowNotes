@@ -88,9 +88,9 @@ final class KeypadTests: XCTestCase {
     }
 
     func testAModelThatIsntOneIsNoted() {
-        let (document, _) = OutlineParser.parse("# keypad Odd [Stream Deck]\n1. Work [Copy]\n")
+        let (document, _) = OutlineParser.parse("# keypad Odd [Launchpad]\n1. Work [Copy]\n")
         let compiled = OutlineCompiler.compile(document, locateApp: { _ in nil })
-        XCTAssertEqual(compiled.warnings, ["Keypad “Odd”: “Stream Deck” isn't a model — Keybow 2040 or RGB Keypad."])
+        XCTAssertEqual(compiled.warnings, ["Keypad “Odd”: “Launchpad” isn't a model — Keybow 2040, RGB Keypad or Stream Deck."])
         XCTAssertNil(document.keypads.first?.model)
     }
 
@@ -114,6 +114,8 @@ final class KeypadTests: XCTestCase {
         XCTAssertEqual(KeypadDevice.Model(words: "keybow"), .keybow2040)
         XCTAssertEqual(KeypadDevice.Model(words: "RGB Keypad"), .rgbKeypad)
         XCTAssertEqual(KeypadDevice.Model(words: "Pico"), .rgbKeypad)
-        XCTAssertNil(KeypadDevice.Model(words: "Stream Deck"))
+        XCTAssertEqual(KeypadDevice.Model(words: "Stream Deck"), .streamDeck)
+        XCTAssertEqual(KeypadDevice.Model(words: "streamdeck"), .streamDeck)
+        XCTAssertNil(KeypadDevice.Model(words: "Launchpad"))
     }
 }

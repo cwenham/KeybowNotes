@@ -95,8 +95,10 @@ MainActor.assumeIsolated {
 
     // A development build left off the keypads — KEYBOW_NO_KEYPADS=1 — can
     // run beside the app, for looking at its windows.
+    // So can one given only the Stream Decks: KEYBOW_KEYPADS=streamdeck.
     let besideTheApp = Bundle.main.bundleIdentifier == nil
-        && ProcessInfo.processInfo.environment["KEYBOW_NO_KEYPADS"] == "1"
+        && (ProcessInfo.processInfo.environment["KEYBOW_NO_KEYPADS"] == "1"
+            || ProcessInfo.processInfo.environment["KEYBOW_KEYPADS"] == "streamdeck")
     guard besideTheApp || SingleInstance.acquire() else {
         Log.error("KeybowNotes is already running; only one copy can use the Keybow.")
         if Bundle.main.bundleIdentifier != nil {

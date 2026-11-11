@@ -475,7 +475,7 @@ struct KeypadSetupView: View {
     private var modelChoice: some View {
         VStack(alignment: .leading, spacing: 6) {
             Picker("Model", selection: $model.newModel) {
-                ForEach(KeypadDevice.Model.allCases, id: \.self) { Text($0.title).tag($0) }
+                ForEach(KeypadDevice.Model.boards, id: \.self) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
             .fixedSize()

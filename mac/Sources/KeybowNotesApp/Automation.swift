@@ -191,7 +191,7 @@ final class Automation {
             var annotations: [Annotation] = []
             if let model {
                 guard let known = KeypadDevice.Model(words: model) else {
-                    throw Problem("“\(model)” isn't a keypad model: Keybow 2040 or RGB Keypad.")
+                    throw Problem("“\(model)” isn't a keypad model: Keybow 2040, RGB Keypad or Stream Deck.")
                 }
                 annotations.append(.word(known.title))
             }

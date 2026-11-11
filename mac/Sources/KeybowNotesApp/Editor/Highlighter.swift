@@ -104,6 +104,9 @@ struct Highlighter {
             } else {
                 colour(.systemRed, valueRange)
             }
+        case .keyFace:
+            colour(.secondaryLabelColor, keyRange)
+            colour(.systemIndigo, valueRange)
         case .link:
             colour(.linkColor)
             underline(.linkColor, .single)

@@ -157,8 +157,8 @@ heading are the **Default** trees.
 
 The brackets say which keypads a section is for:
 
-- **A model** — `Keybow 2040` or `RGB Keypad` (also `keybow`, `rgb`,
-  `Pico`) — for every keypad of that model.
+- **A model** — `Keybow 2040`, `RGB Keypad` or `Stream Deck` (also `keybow`,
+  `rgb`, `Pico`, `streamdeck`) — for every keypad of that model.
 - **`id: …`** — for one board, by the unique ID it reports. It's for having two
   of one model: the section naming a board's ID wins over one naming only its
   model. `keybow keypads` lists the IDs of those connected, and the tree
@@ -215,6 +215,53 @@ through choices:
 
 A page takes its keys from the items under it, not from a list. An empty page
 is noted, and does nothing.
+
+### Keys with screens
+
+A Stream Deck has a small screen under each key, so it shows what each key
+does instead of lighting it. Its keys run the same trees as a Keybow's — the
+Default trees, or a `# keypad … [Stream Deck]` section of its own — laid out as
+**folders**, one level at a time:
+
+```
+At rest                               Choosing: Work › Meeting
+[Work ][Home ][Jrnl ][ Hi  ][     ]    [Work ][Meet ][     ][     ][Cancel]
+[Timer][Long…][     ][     ][     ]    [Stand][Plan ][     ][     ][ Back ]
+[Music][     ][     ][     ][Bottm]    [     ][     ][     ][     ][      ]
+```
+
+- **At rest**, the left four columns are the first three rows of the 4×4
+  keypad: the main tree, row 2's and row 3's — or their pages. With a bottom
+  tree, the right column has a key that shows its row in place of the main
+  tree's, and back again.
+- **Choosing**, the top row is the path so far — press one to go back to it —
+  and the row below is what's on offer next. From a side tree, the third row
+  holds the main tree's first keys, as the way out. On the right, **Cancel**
+  clears everything and **Back** goes up a level; either calls off an action
+  waiting to run, as any press does.
+- **On a page**, its keys fill the left 4×3 (up to twelve), with the page's own
+  key on the right to leave it.
+
+Colours are as the Keybow would light them: what's on offer in a darker shade,
+what's chosen in full with a white edge.
+
+Each key shows its **icon** and its label. Two pairs change that, and neither
+is inherited:
+
+- **`icon`** — `sf:` and the name of one of Apple's SF Symbols
+  (`icon: sf:phone.fill`); an image file, by its path — under the tree's folder
+  unless it starts with `/` or `~` (`icon: Icons/mum.png`); or emoji or a few
+  letters, drawn large (`icon: 📞`, `icon: Hi`).
+- **`caption`** — the text on the key in place of the label: shorter, say, to
+  fit (`caption: Mum`); `caption: none` for the icon alone.
+
+```
+1. Work [colour: 0060ff, icon: sf:briefcase.fill]
+   1. Call Alex [Call, icon: 📞, caption: Alex]
+   2. Today [icon: Icons/today.png, caption: none]
+```
+
+A Keybow ignores both. A step has no key of its own, so no icon either.
 
 ### Steps
 
@@ -360,6 +407,8 @@ An annotation is either a **word** or a **pair**.
 `key: value` sets something. The key decides where it goes:
 
 - **`colour`** (or `color`): the key's light, `rrggbb`.
+- **`icon`** and **`caption`**: the picture and text on a key that has a
+  screen — see [Keys with screens](#keys-with-screens).
 - **`type`**: the action type by its full name, for types without a keyword:
   `type: shortcut`.
 - **An action field** (§5) sets that field: `folder`, `title`, `template`,
@@ -499,6 +548,8 @@ tree.
 | `label` | Shown in the overlay; also a value for templates. Required. |
 | `key` | Position 0–3 — or under a page, 0–11, across then down. Without it, the next free position. |
 | `colour` | `rrggbb` for the key's light (`color` also accepted). Inherited from the parent when absent. |
+| `icon` | The picture on a key with a screen: `sf:name`, an image file's path, or emoji or text. Not inherited. |
+| `caption` | The text on such a key in place of the label; `none` for none. Not inherited. |
 | `params` | Values for templates, inherited by everything beneath; deeper nodes override. |
 | `action` | Some or all of an action, inherited by every leaf beneath (§4). |
 | `children` | Up to four nodes, or `"@name"` to use a list from `lists`. |
@@ -2029,7 +2080,7 @@ the app; edit it only while KeybowNotes isn't running.
 `append`, `new`, `create`, `… alert`, `….md`, `@…`, and the app names the
 compiler knows.
 
-**Outline pairs with a meaning of their own:** `colour`/`color`, `type`, and the
+**Outline pairs with a meaning of their own:** `colour`/`color`, `icon`, `caption`, `type`, and the
 action fields listed in §2.
 
 **Step conditions:** a step's label beginning `If`, `Else if`, `Otherwise if`
@@ -2038,7 +2089,7 @@ or `Elif`, or that is `Else` or `Otherwise`.
 **Section headings:** `main`, `row 2`, `row 3`, `bottom` (and their variants),
 `keypad …`, `list …`, `contacts`, `projects`, `defaults`; `[pages]` on a tree's.
 
-**Keypad models:** `Keybow 2040`, `RGB Keypad` (and their variants), with `id`.
+**Keypad models:** `Keybow 2040`, `RGB Keypad`, `Stream Deck` (and their variants), with `id`.
 
 **Action types:** `notes.create`, `notes.append`, `calendar.createEvent`,
 `reminders.create`, `messages.compose`, `mail.compose`, `phone.call`, `app.open`,

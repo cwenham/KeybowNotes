@@ -9,6 +9,9 @@ or a Raspberry Pi Pico on Pimoroni's [RGB Keypad Base](https://shop.pimoroni.com
 a 4 × 4 grid of lit keys. You arrange what you want to do as a tree, four keys to
 a row. Pressing a key picks a branch; its choices light up on the next row, and a
 heads-up display on the Mac shows where you are. Choosing a leaf runs its action.
+An Elgato Stream Deck works too: it shows the same trees as folders, a level at
+a time, each key with its icon and label
+([Keys with screens](docs/CONFIG-LANGUAGE.md#keys-with-screens)).
 
 ![The tree editor: the outline on the left, the selected Standup node's settings on the right, and the keypad as it will light up](docs/images/tree-editor.png)
 

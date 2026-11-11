@@ -110,6 +110,8 @@ func withConnection(seconds: TimeInterval, _ body: @escaping (KeybowConnection) 
                 print("disconnected: \(reason)")
             case .message(let message):
                 print(describe(message))
+            case .navigate(let move):
+                print(move.rawValue)
             }
         }
         // The stream finishes once stop() has run, which is our cue to leave.

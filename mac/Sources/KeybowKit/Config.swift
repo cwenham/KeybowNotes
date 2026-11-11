@@ -169,15 +169,23 @@ public final class TreeNode: @unchecked Sendable {
     /// A leaf's steps: actions run one after another when it's chosen,
     /// each inheriting from it. Empty for a leaf with one action.
     public let steps: [TreeStep]
+    /// The picture on its key, for keypads that draw on their keys. Its own;
+    /// not inherited.
+    public let icon: KeyIcon?
+    /// The text on its key in place of the label; "none" for no text.
+    public let caption: String?
 
     init(label: String, colour: KeyColour?, params: [String: String],
-         actionFields: [String: JSONValue]?, children: [TreeNode?], steps: [TreeStep] = []) {
+         actionFields: [String: JSONValue]?, children: [TreeNode?], steps: [TreeStep] = [],
+         icon: KeyIcon? = nil, caption: String? = nil) {
         self.label = label
         self.colour = colour
         self.params = params
         self.actionFields = actionFields
         self.children = children
         self.steps = steps
+        self.icon = icon
+        self.caption = caption
     }
 
     /// A leaf is anything without children. It needs no action of its own:
@@ -653,6 +661,8 @@ private struct RawNode: Decodable {
     var label: String
     var colour: String?
     var color: String?          // tolerate the American spelling
+    var icon: String?
+    var caption: String?
     var key: Int?
     var params: [String: JSONValue]?
     var children: RawChildren?
@@ -936,7 +946,7 @@ private struct TreeBuilder {
         }
 
         return TreeNode(label: raw.label, colour: colour, params: params, actionFields: action, children: children,
-                        steps: steps)
+                        steps: steps, icon: raw.icon.flatMap(KeyIcon.init), caption: raw.caption)
     }
 
     /// A leaf's steps. One that can't be — a condition that can't be read,

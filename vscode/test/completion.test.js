@@ -167,7 +167,7 @@ test('headings', () => {
   assert.ok(sections.labels.includes('contacts'));
   assert.deepEqual(at('# row 2 [‸]').labels, ['pages']);
   assert.equal(at('# bottom [‸]'), undefined, 'the bottom tree can\'t be pages');
-  assert.deepEqual(at('# keypad Desk [‸]').labels, ['Keybow 2040', 'RGB Keypad', 'id']);
+  assert.deepEqual(at('# keypad Desk [‸]').labels, ['Keybow 2040', 'RGB Keypad', 'Stream Deck', 'id']);
 });
 
 test('defaults, contacts and projects', () => {

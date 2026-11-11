@@ -187,7 +187,7 @@ public final class MCPServer {
              required: ["outline"], destructive: true),
         tool("add_keypad", "Add a keypad section",
              "A keypad section with trees of its own, for every keypad of a model, or one board.",
-             ["name": string("What it's called."), "model": string("Keybow 2040 or RGB Keypad."),
+             ["name": string("What it's called."), "model": string("Keybow 2040, RGB Keypad or Stream Deck."),
               "board_id": string("One board's unique ID, for two keypads of the same model.")],
              required: ["name"]),
         tool("run_entry", "Run an entry",

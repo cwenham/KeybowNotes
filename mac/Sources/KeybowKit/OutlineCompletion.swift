@@ -158,7 +158,7 @@ extension OutlineCompletion {
                 offered = sources.lists.map { "@" + $0 }
                 break
             }
-            let keys = (fields.map(\.key) + ["colour", "instant"] + (own == nil ? ["type"] : []) + sources.valueKeys)
+            let keys = (fields.map(\.key) + ["colour", "icon", "caption", "instant"] + (own == nil ? ["type"] : []) + sources.valueKeys)
                 .filter { !present.contains($0) }.map { $0 + ": " }
             // Each type's own word first, then the others it answers to.
             let keywords = own == nil ? vocabulary.types.compactMap(\.keywords.first)
@@ -176,7 +176,7 @@ extension OutlineCompletion {
 
 extension OutlineDocument {
     /// The names nodes give values — `when: tomorrow` — anywhere in the
-    /// outline, in order of first use: not action fields, nor colours.
+    /// outline, in order of first use: not action fields, nor colours or icons.
     public func valueKeys(vocabulary: ActionVocabulary) -> [String] {
         var keys: [String] = []
         var seen = Set<String>()
@@ -188,7 +188,7 @@ extension OutlineDocument {
         pending.reverse()
         while let node = pending.popLast() {
             for case .pair(let key, _) in node.annotations
-            where !vocabulary.isActionField(key) && key != "colour" && key != "color" && seen.insert(key).inserted {
+            where !vocabulary.isActionField(key) && !Annotation.appearanceKeys.contains(key) && seen.insert(key).inserted {
                 keys.append(key)
             }
             pending += (node.children.compactMap { $0 } + node.steps).reversed()

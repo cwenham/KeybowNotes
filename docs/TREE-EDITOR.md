@@ -356,6 +356,14 @@ For the selected node:
   force and where it comes from; **Use Inherited** removes the node's own. Writes
   `colour: rrggbb`. Dragging in the colour panel is written once it settles, so
   it's one undo step.
+- **Key icon** and **Key text** — for keypads with a screen under each key
+  (the Stream Deck). The key is drawn as it appears there, in its colour;
+  clicking it, or *Choose Icon…*, opens a picker: **Symbols** (Apple's SF
+  Symbols, everyday ones first, searchable by name), **Emoji & Text** (with
+  the Emoji & Symbols viewer), or **Image File** — copied into an `Icons`
+  folder beside the tree, unless it's already under the tree's folder, and
+  written as a path relative to it. *Key text* replaces the label on the key;
+  *Show text on the key* off writes `caption: none`. Not shown for steps.
 - **Run at once** — for every action: skip the time to cancel (`instant:`).
   Left to inherit, it says what the key will do — "at once" for a stopwatch's
   Start, "after 1 s" for most — and the preview notes a key that runs the
@@ -504,7 +512,9 @@ tree then becomes something you can feel as well as see.
   value, described, and those for a key: `atKey`) and `TemplateSyntax` (each
   tag where it is, and `check`, what's wrong).
 
-**Adding to the inspector.** An action's fields come from its type's
+**Adding to the inspector.** How a key looks — colour, icon, key text — is
+drawn above the action, the icon and key text by `KeyFaceSection`, its own
+file.  An action's fields come from its type's
 `ModuleField`s, built in (`BuiltInActions`) or a module's, and `fieldRow` in
 `InspectorPane` draws each by its kind — flag, choice, colour, text. A field
 that needs more than a text field gets a view of its own, chosen there by its

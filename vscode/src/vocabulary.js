@@ -11,6 +11,15 @@ const COMMON_FIELDS = [
     help: "The key's light, rrggbb. Inherited by the keys under it.\nExample: 0060ff",
   },
   {
+    key: 'icon', title: 'Key icon', kind: 'text',
+    help: "The picture on the key, for keypads with a screen under each key (the Stream Deck): sf:symbol-name, "
+      + "an image file beside the tree, or emoji or a few letters. Not inherited.\nExamples: sf:phone.fill · 📞 · Icons/mum.png",
+  },
+  {
+    key: 'caption', title: 'Key text', kind: 'text',
+    help: "The text on the key, under its icon, in place of the label; none for no text.\nExample: caption: Mum",
+  },
+  {
     key: 'instant', title: 'Run at once', kind: 'flag',
     help: 'true: run the moment the key is pressed, with no time to cancel. false: wait, where something would otherwise skip it.',
   },
@@ -33,7 +42,7 @@ const SECTIONS = [
   { label: 'defaults', detail: 'Settings: - key: value', insert: 'defaults' },
 ];
 
-const KEYPAD_MODELS = ['Keybow 2040', 'RGB Keypad'];
+const KEYPAD_MODELS = ['Keybow 2040', 'RGB Keypad', 'Stream Deck'];
 
 /** What `# defaults` takes. */
 const DEFAULTS = [

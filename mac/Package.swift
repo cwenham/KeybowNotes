@@ -16,6 +16,7 @@ let package = Package(
         .library(name: "KeybowHome", targets: ["KeybowHome"]),
         .library(name: "KeybowCalendar", targets: ["KeybowCalendar"]),
         .library(name: "KeybowSystem", targets: ["KeybowSystem"]),
+        .library(name: "KeybowStreamDeck", targets: ["KeybowStreamDeck"]),
         .executable(name: "keybow", targets: ["keybow"]),
         .executable(name: "keybownotes", targets: ["KeybowNotesApp"]),
     ],
@@ -75,6 +76,12 @@ let package = Package(
             dependencies: ["KeybowKit", "KeybowWindows"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        // Elgato Stream Decks as keypads: HID, and pictures on their keys.
+        .target(
+            name: "KeybowStreamDeck",
+            dependencies: ["KeybowKit"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
         // The list of modules built in, for the app and the command line.
         .target(
             name: "KeybowModules",
@@ -89,7 +96,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "KeybowNotesApp",
-            dependencies: ["KeybowKit", "KeybowAI", "KeybowLocation", "KeybowWindows", "KeybowModules"],
+            dependencies: ["KeybowKit", "KeybowAI", "KeybowLocation", "KeybowWindows", "KeybowModules", "KeybowStreamDeck"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
@@ -140,6 +147,11 @@ let package = Package(
         .testTarget(
             name: "KeybowSystemTests",
             dependencies: ["KeybowSystem", "KeybowKit"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
+            name: "KeybowStreamDeckTests",
+            dependencies: ["KeybowStreamDeck", "KeybowKit"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(

@@ -1,6 +1,7 @@
 import AppKit
 import EventKit
 import KeybowKit
+import KeybowStreamDeck
 import ServiceManagement
 
 @MainActor
@@ -784,19 +785,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func discoverKeypads() {
         // A development build can leave the keypads to the installed app, for
         // looking at its windows: KEYBOW_NO_KEYPADS=1.
-        if !isPackaged, ProcessInfo.processInfo.environment["KEYBOW_NO_KEYPADS"] == "1" { return }
-        let present = USBSerialPorts.keypads()
+        let environment = ProcessInfo.processInfo.environment
+        if !isPackaged, environment["KEYBOW_NO_KEYPADS"] == "1" { return }
+        // Or only its Stream Decks, leaving the Keybows to the installed app:
+        // KEYBOW_KEYPADS=streamdeck.
+        let decksOnly = !isPackaged && environment["KEYBOW_KEYPADS"] == "streamdeck"
+        let boards = decksOnly ? [] : USBSerialPorts.keypads()
+        let present = boards + StreamDeckDevices.present()
         for device in present where keypads[device.serial] == nil {
             Log.info("keypad found: \(device.model.title) \(device.serial)")
             addKeypad(device, serial: device.serial)
         }
-        noteKeypads(present)
+        // Only boards are looked after: set up, troubleshot, missed.
+        noteKeypads(boards)
     }
 
     @discardableResult
     private func addKeypad(_ device: KeypadDevice?, serial: String) -> KeypadLink {
-        let driver = SelectionDriver(config: device.map(config.forDevice) ?? config,
-                                     connection: KeybowConnection(serial: serial))
+        let connection: any KeypadConnection = device?.model == .streamDeck
+            ? StreamDeckConnection(serial: serial, iconFolder: AppLocations.outline(for: store.url).deletingLastPathComponent())
+            : KeybowConnection(serial: serial)
+        let driver = SelectionDriver(config: device.map(config.forDevice) ?? config, connection: connection)
         driver.setBrightness(settings.brightness)
         let link = KeypadLink(device: device, driver: driver)
         keypads[serial] = link
@@ -815,7 +824,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         Task { @MainActor [weak self] in
             for await event in driver.connectionEvents {
-                self?.overlay?.handle(event)
+                self?.overlay?.handle(event, keypad: device?.model == .streamDeck ? "Stream Deck" : "Keybow")
                 self?.updateConnection(event, of: serial)
             }
         }
@@ -858,7 +867,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Log.error("\(name): ERR \(text)")
         case .message(.unrecognised(let text)):
             Log.error("\(name) said something unexpected: \(text)")
-        case .message:
+        case .message, .navigate:
             break
         }
         let changed = keypads[serial]?.status != link.status

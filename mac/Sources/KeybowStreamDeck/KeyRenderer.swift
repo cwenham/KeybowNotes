@@ -13,14 +13,21 @@ public struct KeyRenderer {
         self.iconFolder = iconFolder
     }
 
-    /// The face, upright. Nil face: a dark key.
-    public func image(_ face: KeyFace?) -> CGImage? {
+    /// The face, upright. Nil face: a dark key, or the picture alone.
+    ///
+    /// `behind` is the part of a background picture under this key: the
+    /// key's colour is laid over it at `tint`, rather than covering it.
+    public func image(_ face: KeyFace?, behind: CGImage? = nil, tint: Double = 1) -> CGImage? {
         let side = CGFloat(size)
         guard let context = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
                                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                       bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
         context.setFillColor(CGColor(gray: 0, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: side, height: side))
+        if let behind {
+            context.interpolationQuality = .high
+            context.draw(behind, in: CGRect(x: 0, y: 0, width: side, height: side))
+        }
         guard let face else { return context.makeImage() }
 
         let graphics = NSGraphicsContext(cgContext: context, flipped: false)
@@ -29,9 +36,9 @@ public struct KeyRenderer {
         defer { NSGraphicsContext.restoreGraphicsState() }
 
         let background = NSColor(srgbRed: CGFloat(face.colour.red) / 255, green: CGFloat(face.colour.green) / 255,
-                                 blue: CGFloat(face.colour.blue) / 255, alpha: 1)
+                                 blue: CGFloat(face.colour.blue) / 255, alpha: behind == nil ? 1 : CGFloat(tint))
         background.setFill()
-        CGRect(x: 0, y: 0, width: side, height: side).fill()
+        CGRect(x: 0, y: 0, width: side, height: side).fill(using: .sourceOver)
         if face.emphasis == .chosen {
             // On the path: a white edge, as well as the full colour.
             NSColor.white.withAlphaComponent(0.9).setStroke()
@@ -39,7 +46,16 @@ public struct KeyRenderer {
             edge.lineWidth = 3
             edge.stroke()
         }
-        let ink = Self.ink(on: face.colour)
+        // Over a picture, the ink is chosen by how light the key has come
+        // out, and given a shadow, since a picture is rarely one shade.
+        let ink = behind == nil ? Self.ink(on: face.colour) : Self.ink(onLuminance: Self.luminance(of: context))
+        if behind != nil {
+            let shadow = NSShadow()
+            shadow.shadowColor = (ink == .white ? NSColor.black : NSColor.white).withAlphaComponent(0.6)
+            shadow.shadowBlurRadius = side * 0.035
+            shadow.shadowOffset = .zero
+            shadow.set()
+        }
 
         if let reading = face.reading {
             drawLive(reading, caption: face.caption, side: side)
@@ -72,8 +88,8 @@ public struct KeyRenderer {
     }
 
     /// The face as the Stream Deck wants it: JPEG, turned half a turn.
-    public func jpeg(_ face: KeyFace?) -> Data? {
-        guard let upright = image(face),
+    public func jpeg(_ face: KeyFace?, behind: CGImage? = nil, tint: Double = 1) -> Data? {
+        guard let upright = image(face, behind: behind, tint: tint),
               let context = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
                                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                       bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
@@ -130,12 +146,35 @@ public struct KeyRenderer {
 
     /// White on dark colours, near-black on light ones.
     static func ink(on colour: KeyColour) -> NSColor {
+        ink(onLuminance: luminance(colour.red, colour.green, colour.blue))
+    }
+
+    static func ink(onLuminance luminance: Double) -> NSColor {
+        luminance > 0.4 ? NSColor(white: 0.08, alpha: 1) : .white
+    }
+
+    static func luminance(_ red: UInt8, _ green: UInt8, _ blue: UInt8) -> Double {
         func linear(_ value: UInt8) -> Double {
             let c = Double(value) / 255
             return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
         }
-        let luminance = 0.2126 * linear(colour.red) + 0.7152 * linear(colour.green) + 0.0722 * linear(colour.blue)
-        return luminance > 0.4 ? NSColor(white: 0.08, alpha: 1) : .white
+        return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+    }
+
+    /// The average luminance of what's drawn so far, from every other pixel.
+    static func luminance(of context: CGContext) -> Double {
+        guard let data = context.data?.assumingMemoryBound(to: UInt8.self) else { return 0 }
+        let stride = context.bytesPerRow
+        var total = 0.0
+        var count = 0
+        for y in Swift.stride(from: 0, to: context.height, by: 2) {
+            for x in Swift.stride(from: 0, to: context.width, by: 2) {
+                let pixel = data + y * stride + x * 4
+                total += luminance(pixel[0], pixel[1], pixel[2])
+                count += 1
+            }
+        }
+        return count == 0 ? 0 : total / Double(count)
     }
 
     private func draw(_ icon: KeyIcon, in box: CGRect, ink: NSColor) {

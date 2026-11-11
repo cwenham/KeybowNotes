@@ -289,3 +289,48 @@ public struct FolderLayout {
         return slots
     }
 }
+
+/// A picture across a Stream Deck's keys, set in `# defaults`:
+///
+///     - streamDeck.background: Images/sunset.jpg
+///     - streamDeck.tint: 0.6
+///
+/// Each key shows the part of the picture under it, its colour laid over at
+/// `tint` (0 the picture alone, 1 the colour alone), then its icon and caption.
+public struct DeckBackground: Hashable, Sendable {
+    /// The image file as written: under the tree's folder unless it starts
+    /// with `/` or `~`.
+    public var image: String
+    public var tint: Double
+
+    public static let defaultTint = 0.6
+
+    public init(image: String, tint: Double = DeckBackground.defaultTint) {
+        self.image = image
+        self.tint = min(max(tint, 0), 1)
+    }
+
+    public init?(defaults: [String: JSONValue]) {
+        // However the keys were spelt: `StreamDeck.Tint` is the same setting.
+        var deck: [String: JSONValue] = [:]
+        for (key, value) in defaults where key.lowercased() == "streamdeck" {
+            guard case .object(let fields) = value else { continue }
+            for (field, value) in fields { deck[field.lowercased()] = value }
+        }
+        guard let image = deck["background"]?.stringValue?.trimmingCharacters(in: .whitespaces),
+              !image.isEmpty, image.lowercased() != "none" else { return nil }
+        let tint = deck["tint"]?.stringValue.flatMap { Double($0.replacingOccurrences(of: "%", with: "")) }
+            .map { $0 > 1 ? $0 / 100 : $0 }
+        self.init(image: image, tint: tint ?? Self.defaultTint)
+    }
+
+    /// The image's file.
+    public func fileURL(relativeTo folder: URL?) -> URL? {
+        KeyIcon.file(image).fileURL(relativeTo: folder)
+    }
+}
+
+extension KeybowConfig {
+    /// The picture across a Stream Deck's keys, if `# defaults` sets one.
+    public var deckBackground: DeckBackground? { DeckBackground(defaults: defaults) }
+}

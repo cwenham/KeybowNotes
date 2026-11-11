@@ -274,12 +274,12 @@ enum IconFiles {
     /// The path to write in the outline: the file's own, under the tree's
     /// folder; else a copy in its Icons folder, renamed if one of that name
     /// is already there and different.
-    static func place(_ url: URL, besideTreeIn folder: URL) throws -> String {
+    static func place(_ url: URL, besideTreeIn folder: URL, subfolder: String = "Icons") throws -> String {
         let folderPath = folder.standardizedFileURL.path + "/"
         let path = url.standardizedFileURL.path
         if path.hasPrefix(folderPath) { return String(path.dropFirst(folderPath.count)) }
 
-        let icons = folder.appendingPathComponent("Icons")
+        let icons = folder.appendingPathComponent(subfolder)
         try FileManager.default.createDirectory(at: icons, withIntermediateDirectories: true)
         let base = url.deletingPathExtension().lastPathComponent
         let ext = url.pathExtension
@@ -287,13 +287,13 @@ enum IconFiles {
         var number = 2
         while FileManager.default.fileExists(atPath: destination.path) {
             if FileManager.default.contentsEqual(atPath: destination.path, andPath: url.path) {
-                return "Icons/" + destination.lastPathComponent
+                return subfolder + "/" + destination.lastPathComponent
             }
             destination = icons.appendingPathComponent("\(base) \(number).\(ext)")
             number += 1
         }
         try FileManager.default.copyItem(at: url, to: destination)
-        return "Icons/" + destination.lastPathComponent
+        return subfolder + "/" + destination.lastPathComponent
     }
 }
 

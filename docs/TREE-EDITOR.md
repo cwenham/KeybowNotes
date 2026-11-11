@@ -462,6 +462,19 @@ path, what's on offer, an empty place (dashed) to add a key there, the main
 tree's keys from a side tree; **Back** selects the level above, **Cancel**
 clears the selection, and the bottom tree's key switches tabs.
 
+**A background picture.** Under the Stream Deck drawing, **Background** sets
+the picture laid across every Stream Deck's keys (`streamDeck.background` in
+`# defaults`, so shared by every section). Its swatch opens a chooser of the
+Mac's own desktop pictures — the stills installed in `/System/Library/Desktop
+Pictures` and `/Library/Desktop Pictures`, written by their full path — with
+**Choose File…** for any picture, which is copied into a `Backgrounds` folder
+beside the tree unless it's already under the tree's folder, and **None**.
+**Key opacity** is how strongly each key's colour covers the picture
+(`streamDeck.tint`, left out at the 60% default); the drawing follows the
+slider as it's dragged, and the tree changes, undoably, when it's let go
+(`DeckBackgroundControls`). The drawing uses `DeckBackdrop.cached`, so a large
+picture is scaled once, not on every redraw.
+
 **Clicking a key** selects the node on it: an ancestor or one of its siblings, a
 sibling of the selected node, or one of its children. Clicking an empty key on
 the selected node's row selects that placeholder, ready to type into.

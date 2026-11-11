@@ -245,4 +245,27 @@ final class OutlineEditingTests: XCTestCase {
             """))
         XCTAssertEqual(text(document(written)), written)
     }
+
+    // MARK: - Defaults
+
+    func testSettingADefaultAddsReplacesAndRemovesIt() throws {
+        var document = document("1. Work\n\n# defaults\n- colour: 202020\n- StreamDeck.Tint: 0.5\n")
+        document.setDefault("streamDeck.background", "/System/Library/Desktop Pictures/Sonoma.heic")
+        document.setDefault("streamDeck.tint", "0.3")
+        XCTAssertEqual(document.defaultValue("streamdeck.TINT"), "0.3")
+        let written = text(document)
+        XCTAssertTrue(written.contains("- StreamDeck.Tint: 0.3\n"), "replaced in place, keeping how it was written")
+        XCTAssertTrue(written.contains("- streamDeck.background: /System/Library/Desktop Pictures/Sonoma.heic"))
+
+        // Read back, it compiles to the setting the Stream Deck uses.
+        let reread = self.document(written)
+        let config = try XCTUnwrap(OutlineCompiler.compile(reread, locateApp: { _ in nil }).config)
+        XCTAssertEqual(config.deckBackground?.image, "/System/Library/Desktop Pictures/Sonoma.heic")
+        XCTAssertEqual(config.deckBackground?.tint ?? 0, 0.3, accuracy: 0.0001)
+
+        document.setDefault("streamDeck.background", nil)
+        document.setDefault("streamDeck.tint", nil)
+        XCTAssertNil(document.defaultValue("streamDeck.background"))
+        XCTAssertEqual(document.defaults, [.pair(key: "colour", value: "202020")])
+    }
 }

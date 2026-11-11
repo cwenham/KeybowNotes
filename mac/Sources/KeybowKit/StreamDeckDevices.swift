@@ -28,6 +28,20 @@ public struct StreamDeckModel: Hashable, Sendable {
     }
 
     public var keyCount: Int { columns * rows }
+
+    /// The one screen under all the keys, in pixels — the keys are windows
+    /// onto it, with the frame between them hiding the rest.
+    public var screenWidth: Int { 480 }
+    public var screenHeight: Int { 272 }
+
+    /// Where a key sits on the screen, upright, from the top left: 72-pixel
+    /// squares 97 apart, from (11, 3) — Elgato's pixel layout drawing for the
+    /// 15-key family.
+    public func keyRect(_ key: Int) -> CGRect {
+        let pitch = keySize + 25
+        return CGRect(x: 11 + (key % columns) * pitch, y: 3 + (key / columns) * pitch,
+                      width: keySize, height: keySize)
+    }
 }
 
 public enum StreamDeckDevices {

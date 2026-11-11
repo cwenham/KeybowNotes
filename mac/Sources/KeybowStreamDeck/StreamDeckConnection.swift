@@ -38,6 +38,10 @@ public final class StreamDeckConnection: KeypadConnection, @unchecked Sendable {
     /// What a key held down pressed, so its release goes to the same place.
     private var held: [Int: KeyPress] = [:]
     private var brightness = 1.0
+    /// The background picture the keys were last drawn over, and when its
+    /// file last changed: a new one redraws every key.
+    private var backdrop: DeckBackdrop?
+    private var backdropStamp: (DeckBackground, Date?)?
     private let reportBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 1024)
 
     public init(serial: String?, iconFolder: URL? = nil) {
@@ -117,26 +121,47 @@ public final class StreamDeckConnection: KeypadConnection, @unchecked Sendable {
     // MARK: - Drawing
 
     private func redraw() {
-        let work = lock.withLock { () -> (IOHIDDevice, StreamDeckModel, [(Int, KeyFace?)])? in
+        let work = lock.withLock { () -> (IOHIDDevice, StreamDeckModel, [(Int, KeyFace?)], DeckBackdrop?)? in
             guard let device, let model, let view else { return nil }
             let layout = FolderLayout(columns: model.columns, rows: model.rows)
             slots = layout.slots(for: view, showingBottomTree: showingBottomTree)
             if sent.count != slots.count { sent = Array(repeating: nil, count: slots.count) }
+            if updateBackdrop(view.config.deckBackground, model: model) {
+                sent = Array(repeating: nil, count: slots.count)
+            }
             var changed: [(Int, KeyFace?)] = []
             for (key, slot) in slots.enumerated() where sent[key] != .some(slot.face) {
                 sent[key] = .some(slot.face)
                 changed.append((key, slot.face))
             }
-            return changed.isEmpty ? nil : (device, model, changed)
+            return changed.isEmpty ? nil : (device, model, changed, backdrop)
         }
-        guard let (device, model, changed) = work else { return }
+        guard let (device, model, changed, backdrop) = work else { return }
         let renderer = KeyRenderer(size: model.keySize, iconFolder: iconFolder)
         writer.async {
             for (key, face) in changed {
-                guard let jpeg = renderer.jpeg(face) else { continue }
+                guard let jpeg = renderer.jpeg(face, behind: backdrop?.slice(key), tint: backdrop?.tint ?? 1)
+                else { continue }
                 Self.sendImage(jpeg, key: key, to: device)
             }
         }
+    }
+
+    /// Loads the background picture when the setting or its file has
+    /// changed; true when it has, so every key is drawn again. Called with
+    /// `lock` held.
+    private func updateBackdrop(_ background: DeckBackground?, model: StreamDeckModel) -> Bool {
+        let url = background?.fileURL(relativeTo: iconFolder)
+        let modified = url.flatMap {
+            (try? $0.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        }
+        let stamp = background.map { ($0, modified) }
+        if stamp?.0 == backdropStamp?.0, stamp?.1 == backdropStamp?.1, backdrop?.model == model || background == nil {
+            return false
+        }
+        backdropStamp = stamp
+        backdrop = background.flatMap { DeckBackdrop($0, model: model, folder: iconFolder) }
+        return true
     }
 
     private static func sendImage(_ jpeg: Data, key: Int, to device: IOHIDDevice) {

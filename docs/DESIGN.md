@@ -188,6 +188,18 @@ show; the Brightness setting goes to the screens' backlight instead.
 colour's lightness, the icon above and the caption below, text shrunk to fit.
 The tree editor's inspector draws its preview with the same code.
 
+**A background picture** (`streamDeck.background` in `# defaults`) is laid
+under the faces. The 15-key models are one 480×272 screen under the keys, and
+the protocol has a command for the whole screen (output report 2, command 8),
+but no transparency: images are JPEG, and a key's picture replaces its square.
+So the blending is done here. `DeckBackdrop` scales the picture to cover the
+screen and cuts out each key's 72-pixel square where the key really sits —
+from (11, 3), 97 pixels apart, per Elgato's pixel layout drawing
+(`StreamDeckModel.keyRect`) — so it lines up across the frame. `KeyRenderer`
+draws the square, the key's colour over it at the tint, then the icon and
+caption, choosing the ink by the result's average lightness. Every key is still
+sent with command 7; a changed setting or picture file redraws them all.
+
 **Pinned keys** are a fifth kind of tree, `TreeKind.pinned`: flat, up to four
 keys, left out of `TreeKind.allCases` — the keypad's four trees — and in
 `TreeKind.everyTree`, so the outline, the compiler, the editor and resolving

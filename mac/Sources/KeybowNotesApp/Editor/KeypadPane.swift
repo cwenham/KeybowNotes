@@ -20,6 +20,7 @@ struct KeypadPane: View {
     /// Which keypad to draw, when chosen: else the Stream Deck for a section
     /// that's for one, and the Keybow for the rest.
     @State private var chosenDeck: [Int: Bool] = [:]
+    @State private var draggingTint: Double?
 
     private var keypadIndex: Int { min(model.keypad, model.document.keypads.count) }
 
@@ -55,7 +56,9 @@ struct KeypadPane: View {
                 .help("Draw these trees as a Keybow lights them, or as a Stream Deck shows them.")
             }
             if showsDeck {
-                DeckDrawing(model: model)
+                DeckDrawing(model: model, tint: draggingTint)
+                DeckBackgroundControls(model: model, draggingTint: $draggingTint)
+                    .frame(maxWidth: 320)
             } else {
                 let keys = layout()
                 Grid(horizontalSpacing: 6, verticalSpacing: 6) {

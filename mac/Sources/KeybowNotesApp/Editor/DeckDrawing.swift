@@ -7,6 +7,8 @@ import SwiftUI
 /// key selects what's on it.
 struct DeckDrawing: View {
     let model: EditorModel
+    /// The background's tint while its slider is dragged, before it's written.
+    var tint: Double? = nil
 
     static let columns = 5
     static let rows = 3
@@ -31,12 +33,20 @@ struct DeckDrawing: View {
 
     var body: some View {
         let keys = layout()
-        let renderer = KeyRenderer(size: 144, iconFolder: model.outlineURL.deletingLastPathComponent())
+        let folder = model.outlineURL.deletingLastPathComponent()
+        let renderer = KeyRenderer(size: 144, iconFolder: folder)
+        let backdrop = model.keypadConfig?.deckBackground.flatMap { background -> DeckBackdrop? in
+            var background = background
+            if let tint { background.tint = tint }
+            return DeckBackdrop.cached(background, model: StreamDeckModel.all[0], folder: folder)
+        }
         Grid(horizontalSpacing: 6, verticalSpacing: 6) {
             ForEach(0..<Self.rows, id: \.self) { row in
                 GridRow {
                     ForEach(0..<Self.columns, id: \.self) { column in
-                        keyView(keys[row * Self.columns + column], renderer: renderer)
+                        let index = row * Self.columns + column
+                        keyView(keys[index], renderer: renderer, behind: backdrop?.slice(index),
+                                tint: backdrop?.tint ?? 1)
                     }
                 }
             }
@@ -45,11 +55,11 @@ struct DeckDrawing: View {
         .background(Color.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 12))
     }
 
-    private func keyView(_ key: Key, renderer: KeyRenderer) -> some View {
+    private func keyView(_ key: Key, renderer: KeyRenderer, behind: CGImage?, tint: Double) -> some View {
         let side: CGFloat = 52
         return Button { go(key.target) } label: {
             ZStack {
-                if let face = key.face, let image = renderer.image(face) {
+                if key.face != nil || behind != nil, let image = renderer.image(key.face, behind: behind, tint: tint) {
                     Image(decorative: image, scale: 1).resizable().interpolation(.high)
                 } else {
                     Color.black

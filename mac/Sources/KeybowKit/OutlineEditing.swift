@@ -936,3 +936,27 @@ extension OutlineDocument {
         return copies.map(\.id)
     }
 }
+
+// MARK: - Defaults
+
+extension OutlineDocument {
+    /// A `# defaults` setting's value, by its key (case doesn't matter).
+    public func defaultValue(_ key: String) -> String? {
+        for case .pair(let name, let value) in defaults where name.caseInsensitiveCompare(key) == .orderedSame {
+            return value
+        }
+        return nil
+    }
+
+    /// Sets a `# defaults` setting, in place if it's there, else at the end;
+    /// nil removes it.
+    public mutating func setDefault(_ key: String, _ value: String?) {
+        let index = defaults.firstIndex { $0.key?.caseInsensitiveCompare(key) == .orderedSame }
+        switch (index, value) {
+        case (let index?, let value?): defaults[index] = .pair(key: defaults[index].key ?? key, value: value)
+        case (let index?, nil): defaults.remove(at: index)
+        case (nil, let value?): defaults.append(.pair(key: key, value: value))
+        case (nil, nil): break
+        }
+    }
+}

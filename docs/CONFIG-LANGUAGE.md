@@ -264,6 +264,24 @@ is inherited:
 
 A Keybow ignores both. A step has no key of its own, so no icon either.
 
+A **background picture** can run across all the keys, set in `# defaults`:
+
+```
+# defaults
+- streamDeck.background: Images/sunset.jpg
+- streamDeck.tint: 0.6
+```
+
+The keys are windows onto one screen, so the picture fills the screen —
+cropped to its shape, not stretched — and each key shows the part under it,
+lined up across the frame between them. A key's colour is laid over its part
+at `tint`, from 0 (the picture alone) to 1 (the colour alone); 0.6 if not
+given, and `60%` works too. Empty keys show the picture alone. The text on a
+key is white or near-black by how light the key comes out, with a soft shadow.
+The path is read as an `icon`'s is; `none` turns it off. The tree editor
+sets both from under its Stream Deck drawing, with the Mac's own desktop
+pictures to choose from.
+
 ### Pinned and live keys
 
 A `# pinned` section holds up to four keys that a keypad with screens shows

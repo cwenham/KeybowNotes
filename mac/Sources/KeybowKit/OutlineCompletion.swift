@@ -182,7 +182,7 @@ extension OutlineDocument {
         var seen = Set<String>()
         var pending: [OutlineNode] = []
         for keypad in 0..<keypadCount {
-            for tree in TreeKind.allCases { pending += roots(tree, keypad: keypad).compactMap { $0 } }
+            for tree in TreeKind.everyTree { pending += roots(tree, keypad: keypad).compactMap { $0 } }
         }
         pending += lists.flatMap { $0.nodes.compactMap { $0 } }
         pending.reverse()

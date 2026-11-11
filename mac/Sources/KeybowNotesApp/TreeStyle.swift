@@ -12,11 +12,13 @@ extension TreeKind {
         case .row2: return .teal
         case .row3: return .orange
         case .bottom: return .pink
+        case .pinned: return .mint
         }
     }
 
     /// "starts on row 1 and goes down, four levels"
     var shape: String {
+        if isPinned { return "always shown on a keypad with screens, up to four keys" }
         let levels = ["", "one level", "two levels", "three levels", "four levels"][rows.count]
         return "starts on row \(startRow + 1) and goes \(rows.count > 1 && rows[1] < rows[0] ? "up" : "down"), \(levels)"
     }
@@ -34,6 +36,18 @@ struct TreeGridIcon: View {
     private static let fade: [Double] = [1, 0.55, 0.38, 0.26]
 
     var body: some View {
+        if tree.isPinned {
+            Image(systemName: "pin.fill")
+                .font(.system(size: cell * 3))
+                .foregroundStyle(tree.tint)
+                .frame(width: cell * 4 + gap * 3, height: cell * 4 + gap * 3)
+                .accessibilityHidden(true)
+        } else {
+            grid
+        }
+    }
+
+    private var grid: some View {
         VStack(spacing: gap) {
             ForEach(0..<KeybowProtocol.rows, id: \.self) { row in
                 HStack(spacing: gap) {

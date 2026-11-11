@@ -55,6 +55,7 @@ public final class SelectionDriver: @unchecked Sendable {
     private var consumer: Task<Void, Never>?
     private var lastSentColours: [KeyColour]?
     private var lastSnapshot: SelectionSnapshot?
+    private var readings: [LiveKeySpec: LiveKeyReading] = [:]
     private var flash: (key: Int, until: Date)?
     /// A page's key, pressed: bright while its action starts.
     private var firing: (key: Int, until: Date)?
@@ -100,6 +101,8 @@ public final class SelectionDriver: @unchecked Sendable {
                     inject(message)
                 case .navigate(let move):
                     apply { $0.navigate(move, at: Date()) }
+                case .pinned(let slot):
+                    apply { $0.pressPinned(slot, at: Date()) }
                 case .connected:
                     // Re-assert the lights: a device that just reappeared is dark.
                     queue.async { self.lastSentColours = nil; self.refresh() }
@@ -180,6 +183,15 @@ public final class SelectionDriver: @unchecked Sendable {
         }
     }
 
+    /// A live key's latest, for a keypad that draws.
+    public func setReading(_ reading: LiveKeyReading, for key: LiveKeySpec) {
+        queue.async { [self] in
+            guard readings[key] != reading else { return }
+            readings[key] = reading
+            refresh()
+        }
+    }
+
     /// Sends a command straight to the keypad: STOP, before it's set up again.
     public func send(_ command: HostCommand) {
         connection.send(command)
@@ -225,7 +237,7 @@ public final class SelectionDriver: @unchecked Sendable {
         if connection.drawsKeys {
             connection.show(KeypadView(config: config, tree: navigator.tree, path: navigator.path, page: navigator.page,
                                        currentRow: navigator.currentRow, pending: navigator.pendingWindow != nil,
-                                       colours: colours))
+                                       colours: colours, readings: readings))
         } else if colours != lastSentColours {
             lastSentColours = colours
             connection.send(.leds(colours))

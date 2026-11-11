@@ -123,6 +123,14 @@ public protocol KeybowModule: AnyObject, Sendable {
     /// — a thermostat's temperature, not a lamp's brightness — or nil for
     /// all of them. A field that's been set is shown whatever this says.
     func shownFields(type: String, fields: [String: String]) -> Set<String>?
+    /// For a type drawn live on keypads with screens: how often to look
+    /// again, in seconds. Nil for a type that isn't live — the default.
+    /// Asked with no fields to find out whether a type is live at all.
+    func liveInterval(for key: LiveKeySpec) -> TimeInterval?
+    /// What a live key shows now. Nil leaves it showing the last.
+    func reading(for key: LiveKeySpec, now: Date) async -> LiveKeyReading?
+    /// A made-up reading, for the tree editor's drawing of the keys.
+    func standInReading(for key: LiveKeySpec) -> LiveKeyReading?
 }
 
 /// Something a field can be set to: what's written, and what it's called.
@@ -176,6 +184,9 @@ extension KeybowModule {
     public func choices(for field: String, type: String, fields: [String: String]) async throws -> [FieldChoice] { [] }
     public func choices(forSetting key: String) async throws -> [FieldChoice] { [] }
     public func shownFields(type: String, fields: [String: String]) -> Set<String>? { nil }
+    public func liveInterval(for key: LiveKeySpec) -> TimeInterval? { nil }
+    public func reading(for key: LiveKeySpec, now: Date) async -> LiveKeyReading? { nil }
+    public func standInReading(for key: LiveKeySpec) -> LiveKeyReading? { nil }
 }
 
 /// A command a module offers in the menu bar's menu — or a submenu of them,
@@ -308,15 +319,19 @@ public struct ModuleActionType: Sendable {
     /// it over as the request's `text`. Values placed into an HTML document
     /// are escaped as HTML.
     public let takesText: Bool
+    /// Only for keypads with screens — a live key, say. The tree editor
+    /// offers it only there, and the compiler notes it anywhere else.
+    public let needsDisplay: Bool
 
     public init(type: String, title: String, keywords: [String], symbol: String, fields: [ModuleField],
-                takesText: Bool = false) {
+                takesText: Bool = false, needsDisplay: Bool = false) {
         self.type = type
         self.title = title
         self.keywords = keywords
         self.symbol = symbol
         self.fields = fields
         self.takesText = takesText
+        self.needsDisplay = needsDisplay
     }
 
     /// The field a template file takes the place of — `text`, a note's

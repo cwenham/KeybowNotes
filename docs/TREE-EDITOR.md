@@ -441,6 +441,15 @@ chosen:
 Rows follow the tab's direction: in the bottom tree, the root row is at the
 bottom and the tree climbs. A key with an icon shows it above its label.
 
+**Pinned keys.** For a keypad with screens — a section for a Stream Deck,
+or the Default trees when a Stream Deck uses them — or once there are pinned
+keys, a fifth tab, **Pinned**, holds the keys always shown (`# pinned`). The
+keypad is drawn as the Stream Deck, with places for up to four along the
+bottom row from the right, dashed where there's none yet. On any tab, the
+Stream Deck drawing shows them, a live key with a made-up reading; clicking
+one goes to the Pinned tab. The Type menu offers types only for keypads with
+screens — CPU load — only there, or on a key that has one already.
+
 **As a Stream Deck.** *Keybow | Stream Deck*, beside the title, draws the
 trees instead as a Stream Deck shows them — the same folders layout and the
 same pictures as on the device (`DeckDrawing`, from `FolderLayout` and

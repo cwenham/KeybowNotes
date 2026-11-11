@@ -394,7 +394,7 @@
       "contentName": "",
       "patterns": [
         {
-          "match": "\\G(?:calendar\\.createEvent|reminders\\.complete|text\\.insertDirect|reminders\\.create|messages\\.compose|calendar\\.addNote|clipboard\\.copy|calendar\\.join|notes\\.create|notes\\.append|mail\\.compose|text\\.insert|clock\\.timer|maps\\.search|phone\\.call|music\\.play|microphone|brightness|nightShift|stopwatch|bluetooth|stayAwake|app\\.open|url\\.open|shortcut|darkMode|display|window|expose|spaces|volume|focus|home|wifi|ask)(?=[ \\t]*(?:,|\\][ \\t]*$))",
+          "match": "\\G(?:calendar\\.createEvent|reminders\\.complete|text\\.insertDirect|reminders\\.create|messages\\.compose|calendar\\.addNote|clipboard\\.copy|calendar\\.join|notes\\.create|notes\\.append|mail\\.compose|text\\.insert|clock\\.timer|maps\\.search|phone\\.call|music\\.play|microphone|brightness|nightShift|stopwatch|bluetooth|stayAwake|app\\.open|url\\.open|shortcut|darkMode|display|window|expose|spaces|volume|focus|home|wifi|ask|cpu)(?=[ \\t]*(?:,|\\][ \\t]*$))",
           "name": "support.type.action.keybownotes"
         },
         {
@@ -416,11 +416,11 @@
       "contentName": "",
       "patterns": [
         {
-          "match": "\\G(?i:Complete Reminder|Mission Control|Home Assistant|Direct Insert|Join Meeting|Add to Event|Night Shift|Event Note|Microphone|Brightness|Stay Awake|Keep Awake|Reminders|Clipboard|Stopwatch|Bluetooth|Dark Mode|Calendar|Messages|FaceTime|Tick Off|Browser|Display|Arrange|Create|append|Insert|Prompt|Window|Exposé|Expose|Spaces|Volume|Notes|Paste|Timer|Music|Space|Wi\\-Fi|Focus|Mail|Call|Link|Copy|Type|Maps|Show|Home|Join|Done|WiFi|New|Ask|Mic)(?=[ \\t]*(?:,|\\][ \\t]*$))",
+          "match": "\\G(?i:Complete Reminder|Mission Control|Home Assistant|Direct Insert|Join Meeting|Add to Event|Night Shift|Event Note|Microphone|Brightness|Stay Awake|Keep Awake|Reminders|Clipboard|Stopwatch|Bluetooth|Dark Mode|Calendar|Messages|FaceTime|Tick Off|Browser|Display|Arrange|Create|append|Insert|Prompt|Window|Exposé|Expose|Spaces|Volume|Notes|Paste|Timer|Music|Space|Wi\\-Fi|Focus|Mail|Call|Link|Copy|Type|Maps|Show|Home|Join|Done|WiFi|New|Ask|Mic|CPU)(?=[ \\t]*(?:,|\\][ \\t]*$))",
           "name": "keyword.other.action.keybownotes"
         },
         {
-          "match": "\\G(?:calendar\\.createEvent|reminders\\.complete|text\\.insertDirect|reminders\\.create|messages\\.compose|calendar\\.addNote|clipboard\\.copy|calendar\\.join|notes\\.create|notes\\.append|mail\\.compose|text\\.insert|clock\\.timer|maps\\.search|phone\\.call|music\\.play|microphone|brightness|nightShift|stopwatch|bluetooth|stayAwake|app\\.open|url\\.open|shortcut|darkMode|display|window|expose|spaces|volume|focus|home|wifi|ask)(?=[ \\t]*(?:,|\\][ \\t]*$))",
+          "match": "\\G(?:calendar\\.createEvent|reminders\\.complete|text\\.insertDirect|reminders\\.create|messages\\.compose|calendar\\.addNote|clipboard\\.copy|calendar\\.join|notes\\.create|notes\\.append|mail\\.compose|text\\.insert|clock\\.timer|maps\\.search|phone\\.call|music\\.play|microphone|brightness|nightShift|stopwatch|bluetooth|stayAwake|app\\.open|url\\.open|shortcut|darkMode|display|window|expose|spaces|volume|focus|home|wifi|ask|cpu)(?=[ \\t]*(?:,|\\][ \\t]*$))",
           "name": "support.type.action.keybownotes"
         },
         {
@@ -555,7 +555,7 @@
       }
     },
     "word-keyword": {
-      "match": "(?<=[\\[,])[ \\t]*((?i:Complete Reminder|Mission Control|Home Assistant|Direct Insert|Join Meeting|Add to Event|Night Shift|Event Note|Microphone|Brightness|Stay Awake|Keep Awake|Reminders|Clipboard|Stopwatch|Bluetooth|Dark Mode|Calendar|Messages|FaceTime|Tick Off|Browser|Display|Arrange|Create|append|Insert|Prompt|Window|Exposé|Expose|Spaces|Volume|Notes|Paste|Timer|Music|Space|Wi\\-Fi|Focus|Mail|Call|Link|Copy|Type|Maps|Show|Home|Join|Done|WiFi|New|Ask|Mic))(?=[ \\t]*(?:,|\\][ \\t]*$))",
+      "match": "(?<=[\\[,])[ \\t]*((?i:Complete Reminder|Mission Control|Home Assistant|Direct Insert|Join Meeting|Add to Event|Night Shift|Event Note|Microphone|Brightness|Stay Awake|Keep Awake|Reminders|Clipboard|Stopwatch|Bluetooth|Dark Mode|Calendar|Messages|FaceTime|Tick Off|Browser|Display|Arrange|Create|append|Insert|Prompt|Window|Exposé|Expose|Spaces|Volume|Notes|Paste|Timer|Music|Space|Wi\\-Fi|Focus|Mail|Call|Link|Copy|Type|Maps|Show|Home|Join|Done|WiFi|New|Ask|Mic|CPU))(?=[ \\t]*(?:,|\\][ \\t]*$))",
       "captures": {
         "1": {
           "name": "keyword.other.action.keybownotes"
@@ -622,7 +622,7 @@
           "name": "constant.numeric.keybownotes"
         },
         {
-          "match": "\\G(?:calendar\\.createEvent|reminders\\.complete|text\\.insertDirect|reminders\\.create|messages\\.compose|calendar\\.addNote|clipboard\\.copy|calendar\\.join|notes\\.create|notes\\.append|mail\\.compose|text\\.insert|clock\\.timer|maps\\.search|phone\\.call|music\\.play|microphone|brightness|nightShift|stopwatch|bluetooth|stayAwake|app\\.open|url\\.open|shortcut|darkMode|display|window|expose|spaces|volume|focus|home|wifi|ask)[ \\t]*$",
+          "match": "\\G(?:calendar\\.createEvent|reminders\\.complete|text\\.insertDirect|reminders\\.create|messages\\.compose|calendar\\.addNote|clipboard\\.copy|calendar\\.join|notes\\.create|notes\\.append|mail\\.compose|text\\.insert|clock\\.timer|maps\\.search|phone\\.call|music\\.play|microphone|brightness|nightShift|stopwatch|bluetooth|stayAwake|app\\.open|url\\.open|shortcut|darkMode|display|window|expose|spaces|volume|focus|home|wifi|ask|cpu)[ \\t]*$",
           "name": "support.type.action.keybownotes"
         },
         {

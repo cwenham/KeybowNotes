@@ -34,6 +34,7 @@ const SECTIONS = [
   { label: 'row 2', detail: 'The tree that starts on row 2', insert: 'row 2' },
   { label: 'row 3', detail: 'The tree that starts on row 3', insert: 'row 3' },
   { label: 'bottom', detail: 'The tree that starts on row 4, upwards', insert: 'bottom' },
+  { label: 'pinned', detail: 'Up to four keys always shown on a keypad with screens', insert: 'pinned' },
   { label: 'main', detail: 'The main tree, on row 1 (also what comes before any heading)', insert: 'main' },
   { label: 'list', detail: 'Nodes to reuse with [@name]', insert: 'list ', retrigger: false },
   { label: 'keypad', detail: "Another keypad's trees: # keypad Name [RGB Keypad]", insert: 'keypad ' },

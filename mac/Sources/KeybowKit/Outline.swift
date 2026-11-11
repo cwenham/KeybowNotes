@@ -690,7 +690,7 @@ public enum OutlineWriter {
             } else if !main.isEmpty {
                 blocks.append(main.joined(separator: "\n"))
             }
-            for tree in TreeKind.allCases where tree != .main {
+            for tree in TreeKind.everyTree where tree != .main {
                 let body = lines(document.roots(tree, keypad: keypad))
                 let paged = document.isPaged(tree, keypad: keypad)
                 guard !body.isEmpty || paged else { continue }
@@ -700,6 +700,7 @@ public enum OutlineWriter {
                 case .row3: heading = "# row 3"
                 case .bottom: heading = "# bottom"
                 case .main: heading = "# main"
+                case .pinned: heading = "# pinned"
                 }
                 if paged { heading += " [pages]" }
                 blocks.append(([heading] + body).joined(separator: "\n"))

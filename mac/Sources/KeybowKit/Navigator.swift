@@ -196,6 +196,13 @@ public struct Navigator {
         return move == .cancel ? [.cleared(reason: .cancelled), .selectionChanged(nil)] : [.selectionChanged(nil)]
     }
 
+    /// A pinned key: runs at once, leaving whatever's being chosen alone.
+    public mutating func pressPinned(_ slot: Int, at now: Date) -> [NavigatorEvent] {
+        lastActivity = now
+        guard let resolved = config.resolve(tree: .pinned, path: [slot]), resolved.node.isLeaf else { return [] }
+        return [.fire(resolved, chosenAt: now)]
+    }
+
     public mutating func keyUp(_ key: Int, at now: Date) -> [NavigatorEvent] {
         lastActivity = now
         heldSince.removeValue(forKey: key)

@@ -6,6 +6,8 @@ public enum KeybowEvent: Equatable, Sendable {
     case message(DeviceMessage)
     /// Back or Cancel, from a keypad with keys of its own for them.
     case navigate(KeypadNavigation)
+    /// A pinned key, by its place among them: run at once.
+    case pinned(Int)
 }
 
 /// A keypad, as the selection driver sees it: key events in, what to show out.

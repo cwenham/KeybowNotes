@@ -77,6 +77,19 @@ final class EditorModel {
     /// draft, says instead.
     @ObservationIgnored var connectedKeypads: () -> [KeypadDevice] = { KeypadDevice.connected() }
 
+    /// These trees are for a keypad with screens: a section for a Stream Deck,
+    /// or the Default trees when a Stream Deck plugged in uses them.
+    var forDisplayKeypad: Bool {
+        let index = min(keypad, document.keypads.count)
+        if index > 0 { return document.keypads[index - 1].model == .streamDeck }
+        return (keypadsInUse()[0] ?? []).contains(KeypadDevice.Model.streamDeck.title)
+    }
+
+    /// The Pinned tab: for a keypad with screens, or once there are pinned keys.
+    var showsPinnedTab: Bool {
+        forDisplayKeypad || document.roots(.pinned, keypad: min(keypad, document.keypads.count)).contains { $0 != nil }
+    }
+
     /// The keypads plugged in, by the trees each uses: 0 for Default.
     func keypadsInUse() -> [Int: [String]] {
         Dictionary(grouping: connectedKeypads()) { device in compilation.config?.keypadIndex(for: device) ?? 0 }

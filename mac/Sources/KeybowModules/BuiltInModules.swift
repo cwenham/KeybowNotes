@@ -35,5 +35,6 @@ public enum BuiltInModules {
         ModuleRegistry.shared.register(AppearanceModule(), host: host)
         ModuleRegistry.shared.register(StayAwakeModule(), host: host)
         ModuleRegistry.shared.register(FocusModule(), host: host)
+        ModuleRegistry.shared.register(CPUModule(), host: host)
     }
 }

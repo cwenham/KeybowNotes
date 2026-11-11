@@ -12,6 +12,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// One per keypad found, by its unique ID: its driver, and how it's doing.
     private var keypads: [String: KeypadLink] = [:]
     private var keypadOrder: [String] = []
+    /// Samples the live keys — CPU load and the like — that connected
+    /// keypads with screens are showing, and hands each reading to them.
+    private lazy var liveKeys = LiveKeyWatcher { [weak self] key, reading in
+        Task { @MainActor in self?.show(reading, for: key) }
+    }
     /// The keypad whose choosing the overlay shows: the last one pressed.
     private var activeKeypad: String?
     /// The page each keypad last showed: turning one is using it.
@@ -231,6 +236,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func applyConfig() {
         for link in keypads.values { link.driver.replaceConfig(config(for: link)) }
+        updateLiveKeys()
         overlay?.config = config
         refreshModules()
     }
@@ -848,6 +854,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         overlay?.handle(snapshot)
     }
 
+    /// Watches the live keys of every keypad with screens that's connected;
+    /// with none, nothing is sampled.
+    private func updateLiveKeys() {
+        var wanted = Set<LiveKeySpec>()
+        for link in keypads.values where link.device?.model.drawsKeys == true && link.status == "connected" {
+            wanted.formUnion(config(for: link).liveKeys())
+        }
+        if wanted != liveKeys.watching { liveKeys.watch(wanted) }
+    }
+
+    private func show(_ reading: LiveKeyReading, for key: LiveKeySpec) {
+        for link in keypads.values where link.device?.model.drawsKeys == true {
+            link.driver.setReading(reading, for: key)
+        }
+    }
+
     private func updateConnection(_ event: KeybowEvent, of serial: String) {
         guard var link = keypads[serial] else { return }
         let name = link.name
@@ -867,12 +889,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Log.error("\(name): ERR \(text)")
         case .message(.unrecognised(let text)):
             Log.error("\(name) said something unexpected: \(text)")
-        case .message, .navigate:
+        case .message, .navigate, .pinned:
             break
         }
         let changed = keypads[serial]?.status != link.status
         keypads[serial] = link
-        if changed { updateKeypadStatus() }
+        if changed {
+            updateKeypadStatus()
+            updateLiveKeys()
+        }
     }
 
     /// "Keybow 2040: connected" — or, with two, a line for both.

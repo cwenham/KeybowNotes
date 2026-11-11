@@ -219,7 +219,7 @@ final class OverlayController {
                 flashNotice("\(keypad) disconnected — \(reason)", symbol: "cable.connector.slash")
             }
             deviceAnswering = false
-        case .navigate:
+        case .navigate, .pinned:
             break
         }
     }

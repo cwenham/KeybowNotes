@@ -253,6 +253,7 @@ public final class StreamDeckConnection: KeypadConnection, @unchecked Sendable {
                     case .showBottomTree(let shown):
                         showingBottomTree = shown
                         needsRedraw = true
+                    case .pinned(let slot): out.append(.pinned(slot))
                     }
                 } else if let press = held.removeValue(forKey: key), case .key(let keypadKey) = press {
                     out.append(.message(.up(key: keypadKey)))

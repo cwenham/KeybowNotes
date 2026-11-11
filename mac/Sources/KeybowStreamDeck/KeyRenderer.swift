@@ -41,6 +41,11 @@ public struct KeyRenderer {
         }
         let ink = Self.ink(on: face.colour)
 
+        if let reading = face.reading {
+            drawLive(reading, caption: face.caption, side: side)
+            return context.makeImage()
+        }
+
         let margin = side * 0.07
         let caption = face.caption?.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasCaption = !(caption ?? "").isEmpty
@@ -84,6 +89,43 @@ public struct KeyRenderer {
                                    [kCGImageDestinationLossyCompressionQuality: 0.92] as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { return nil }
         return data as Data
+    }
+
+    /// A live key: a fill rising from the bottom to the level, like a
+    /// thermometer, the value large over it and the caption under it.
+    private func drawLive(_ reading: LiveKeyReading, caption: String?, side: CGFloat) {
+        if let level = reading.level {
+            let fill = reading.fillColour
+            let colour = NSColor(srgbRed: CGFloat(fill.red) / 255, green: CGFloat(fill.green) / 255,
+                                 blue: CGFloat(fill.blue) / 255, alpha: 1)
+            let height = (side * CGFloat(level)).rounded()
+            colour.withAlphaComponent(0.75).setFill()
+            CGRect(x: 0, y: 0, width: side, height: height).fill()
+            // The top of the column, brighter, so the level reads at a glance.
+            if height > 0 {
+                colour.setFill()
+                CGRect(x: 0, y: max(0, height - side * 0.035), width: side, height: side * 0.035).fill()
+            }
+            // A scale: a tick at each quarter, on the left.
+            NSColor.white.withAlphaComponent(0.35).setFill()
+            for quarter in 1...3 {
+                CGRect(x: 0, y: side * CGFloat(quarter) / 4, width: side * 0.1, height: max(1, side * 0.012)).fill()
+            }
+        }
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.7)
+        shadow.shadowBlurRadius = side * 0.03
+        shadow.shadowOffset = .zero
+        shadow.set()
+        let label = reading.caption ?? caption
+        let valueBox = label == nil
+            ? CGRect(x: side * 0.06, y: side * 0.06, width: side * 0.88, height: side * 0.88)
+            : CGRect(x: side * 0.06, y: side * 0.3, width: side * 0.88, height: side * 0.6)
+        drawText(reading.value, in: valueBox, ink: .white, largest: side * 0.36, smallest: side * 0.14, lines: 1)
+        if let label {
+            drawText(label, in: CGRect(x: 2, y: side * 0.04, width: side - 4, height: side * 0.26), ink: .white,
+                     largest: side * 0.17, smallest: side * 0.12, lines: 1)
+        }
     }
 
     /// White on dark colours, near-black on light ones.

@@ -59,8 +59,13 @@ private struct SeveralSelected: View {
 
 /// The fields each action type uses, in the order they're shown.
 /// Inherit, then every type — built in or from a module — by name.
-private var typeNames: [(String?, String)] {
-    [(nil, "Inherit")] + ModuleRegistry.shared.vocabulary.types.map { ($0.type, $0.title) }
+private var typeNames: [(String?, String)] { allTypeNames(forDisplay: true) }
+
+/// Without the types only keypads with screens show — live keys like CPU —
+/// unless `forDisplay`.
+private func allTypeNames(forDisplay: Bool) -> [(String?, String)] {
+    [(nil, "Inherit")] + ModuleRegistry.shared.vocabulary.types.filter { forDisplay || !$0.needsDisplay }
+        .map { ($0.type, $0.title) }
         .sorted { $0.1.localizedStandardCompare($1.1) == .orderedAscending }
 }
 
@@ -240,6 +245,10 @@ private struct NodeInspector: View {
                 Text("Row \(tree.startRow + 1) pages · \(place)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            } else if let tree, tree.isPinned {
+                Text("Pinned key \(location.slot + 1) · always shown on a keypad with screens · runs at once")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             } else if let tree {
                 let depth = location.path.count - 1
                 Text("\(tree.title) tree · row \(tree.rows[depth] + 1) · key \(location.slot + 1)")
@@ -398,7 +407,10 @@ private struct NodeInspector: View {
                         get: { ownType },
                         set: { type in model.edit("Set Type") { try $0.setType(id, type) } }
                     )) {
-                        ForEach(Array(typeNames.enumerated()), id: \.offset) { _, entry in
+                        // Live keys and the like only where they show — or where one's set already.
+                        let display = model.forDisplayKeypad || model.tab.isPinned
+                            || ownType.map { ModuleRegistry.shared.needsDisplay($0) } == true
+                        ForEach(Array(allTypeNames(forDisplay: display).enumerated()), id: \.offset) { _, entry in
                             let (type, name) = entry
                             Text(type.map { "\(name)  \(bracketWord(for: $0))" }
                                  ?? "Inherit (\(typeName(inheritedTypeAbove)))").tag(type)
@@ -654,7 +666,7 @@ private struct NodeInspector: View {
                     set: { type in setOutcomeType(spec.key, type) }
                 )) {
                     Text("Nothing: just close").tag(String?.none)
-                    ForEach(Array(typeNames.enumerated()), id: \.offset) { _, entry in
+                    ForEach(Array(allTypeNames(forDisplay: false).enumerated()), id: \.offset) { _, entry in
                         if let type = entry.0 {
                             Text("\(entry.1)  \(spec.key): \(outcomeWord(for: type))").tag(Optional(type))
                         }

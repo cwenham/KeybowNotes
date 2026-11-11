@@ -66,8 +66,10 @@ final class KeyRendererTests: XCTestCase {
                     emphasis: .control),
             KeyFace(node: "Timers", colour: "1a0d26", icon: .symbol("timer")),
             KeyFace(node: "Missing", colour: "330000", icon: .file("/nonexistent.png")),
-            KeyFace(node: "Lights", colour: "ffffff", icon: .symbol("lightbulb.fill")),
-            nil,
+            KeyFace(colour: KeyColour(red: 10, green: 10, blue: 10), caption: "CPU",
+                    reading: LiveKeyReading(value: "23%", caption: "CPU", level: 0.23)),
+            KeyFace(colour: KeyColour(red: 10, green: 10, blue: 10), caption: "CPU",
+                    reading: LiveKeyReading(value: "91%", caption: "CPU", level: 0.91)),
             KeyFace(colour: FolderLayout.controlColour, icon: .symbol("chevron.down"), caption: "Bottom",
                     emphasis: .control),
         ]

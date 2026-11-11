@@ -24,6 +24,8 @@ struct KeypadPane: View {
     private var keypadIndex: Int { min(model.keypad, model.document.keypads.count) }
 
     private var showsDeck: Bool {
+        // Pinned keys are only on keypads with screens.
+        if model.tab.isPinned { return true }
         if let chosen = chosenDeck[keypadIndex] { return chosen }
         guard keypadIndex > 0 else {
             // The Default trees: the Stream Deck's only when it's all that uses them.
@@ -49,6 +51,7 @@ struct KeypadPane: View {
                 .labelsHidden()
                 .controlSize(.small)
                 .fixedSize()
+                .disabled(model.tab.isPinned)
                 .help("Draw these trees as a Keybow lights them, or as a Stream Deck shows them.")
             }
             if showsDeck {
@@ -74,6 +77,11 @@ struct KeypadPane: View {
     private var caption: String {
         let tree = model.tab
         if showsDeck {
+            if tree.isPinned {
+                return "Pinned keys are always shown on a Stream Deck, along the bottom row from the right, and run "
+                    + "the moment they're pressed. Past the first, each covers a key the trees would use. "
+                    + "Click a key to select it."
+            }
             if model.isPaged(tree) {
                 return "\(tree.title) pages on a Stream Deck: a page's keys fill the left four columns. "
                     + "Click a key to select it."

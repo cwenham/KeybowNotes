@@ -116,7 +116,7 @@ struct EditorRootView: View {
         VStack(alignment: .leading, spacing: 8) {
             KeypadBar(model: model)
             HStack(spacing: 12) {
-                TreeTabs(selection: $model.tab, title: tabTitle)
+                TreeTabs(selection: $model.tab, title: tabTitle, showsPinned: model.showsPinnedTab)
                 if model.tab.canHavePages {
                     Toggle("Pages", isOn: Binding(get: { model.isPaged(model.tab) }, set: setPages))
                         .toggleStyle(.checkbox)
@@ -154,6 +154,7 @@ struct EditorRootView: View {
         case .row2: base = "Row 2 ↓"
         case .row3: base = "Row 3 ↓"
         case .bottom: base = "Bottom ↑"
+        case .pinned: base = "Pinned"
         }
         if model.isPaged(tree) { base = "Row \(tree.startRow + 1) pages" }
         return model.hasProblems(tree) ? base + " •" : base
@@ -390,10 +391,12 @@ private struct KeypadBar: View {
 private struct TreeTabs: View {
     @Binding var selection: TreeKind
     let title: (TreeKind) -> String
+    /// For a keypad with screens, or once there are pinned keys: a fifth tab.
+    var showsPinned = false
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(Array(TreeKind.allCases.enumerated()), id: \.element) { index, tree in
+            ForEach(Array((showsPinned ? TreeKind.everyTree : TreeKind.allCases).enumerated()), id: \.element) { index, tree in
                 tab(tree, shortcut: KeyEquivalent(Character(String(index + 1))))
             }
         }

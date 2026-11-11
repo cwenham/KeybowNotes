@@ -116,6 +116,7 @@ A heading starts a section, which lasts until the next one:
 | `# row 2` | the row 2 tree |
 | `# row 3` | the row 3 tree |
 | `# bottom`, `# row 4`, `# bottom up` | the bottom tree |
+| `# pinned` | keys always shown on a keypad with screens — see [Pinned and live keys](#pinned-and-live-keys) |
 | `# main [pages]`, `# row 2 [pages]`, `# row 3 [pages]` | a tree as pages — see [Pages](#pages) |
 | `# keypad <name> [model, id: …]` | another keypad's trees — see [Keypads](#keypads) |
 | `# list <name>` | nodes reused with `[@name]` |
@@ -262,6 +263,40 @@ is inherited:
 ```
 
 A Keybow ignores both. A step has no key of its own, so no icon either.
+
+### Pinned and live keys
+
+A `# pinned` section holds up to four keys that a keypad with screens shows
+**all the time**, whatever's being chosen: on a Stream Deck, along the bottom
+row from the right. Each runs the moment it's pressed, and leaves anything
+being chosen as it was. They're flat — nothing goes under them — and, like the
+trees, belong to the keypad section they're in.
+
+```
+# keypad Deck [Stream Deck]
+1. Work [colour: 0060ff]
+   …
+# pinned
+1. CPU [CPU]                              ← bottom-right
+2. Clip [Copy, icon: sf:doc.on.clipboard] ← to its left
+```
+
+The bottom-right key is free in every state; the bottom tree's key moves up a
+row for it. Each pinned key after the first covers what the trees would put
+there — the row 3 tree's keys from the right, the main tree's keys offered as
+the way out of a side tree, a main-tree page's last keys — and the editor
+notes what it covers.
+
+A **live key** shows something as it changes, drawn on its key: a value, a
+caption under it, and a fill rising from the bottom like a thermometer —
+green, then amber past 60%, red past 85%. Its type comes from a module, and
+it's only offered for keypads with screens; in a section for a Keybow, the
+editor notes it. A live key is usually pinned, but it can go anywhere in a
+Stream Deck's trees. The ones there are:
+
+| Keyword | Type | Shows | Pressed |
+|---|---|---|---|
+| `CPU` | `cpu` | how busy the processor is, all cores together, every second | opens Activity Monitor, or brings it forward |
 
 ### Steps
 
@@ -2086,7 +2121,7 @@ action fields listed in §2.
 **Step conditions:** a step's label beginning `If`, `Else if`, `Otherwise if`
 or `Elif`, or that is `Else` or `Otherwise`.
 
-**Section headings:** `main`, `row 2`, `row 3`, `bottom` (and their variants),
+**Section headings:** `main`, `row 2`, `row 3`, `bottom`, `pinned` (and their variants),
 `keypad …`, `list …`, `contacts`, `projects`, `defaults`; `[pages]` on a tree's.
 
 **Keypad models:** `Keybow 2040`, `RGB Keypad`, `Stream Deck` (and their variants), with `id`.

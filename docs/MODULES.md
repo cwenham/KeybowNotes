@@ -38,6 +38,8 @@ bar or the outline directly.
 | Have the host **run a follow-up action** of the node's own — a display's OK | a field of kind `.action`; `ActionOutcome.then(_:values:)` |
 | Keep secrets of its own making in the Keychain | `ModuleHost.setSecret` |
 | Say its status changed on its own | `ModuleHost.statusChanged()` |
+| Draw a **live key** on keypads with screens — a value, a caption, a thermometer fill — looked at again at its own pace | `liveInterval(for:)`, `reading(for:now:)`, `standInReading(for:)` |
+| Make a type **only for keypads with screens**, offered and checked only there | `ModuleActionType.needsDisplay` |
 
 The interface is in `mac/Sources/KeybowKit/Modules.swift`.
 

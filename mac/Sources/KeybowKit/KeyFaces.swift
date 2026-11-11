@@ -74,9 +74,12 @@ public struct KeypadView: Sendable {
     /// What a Keybow would light, at full brightness: each key's colour with
     /// its state in it — chosen, on offer, the escape row, a flash, a pulse.
     public let colours: [KeyColour]
+    /// The latest of each live key's readings.
+    public let readings: [LiveKeySpec: LiveKeyReading]
 
     public init(config: KeybowConfig, tree: TreeKind?, path: [Int], page: KeypadPage?, currentRow: Int?,
-                pending: Bool, colours: [KeyColour]) {
+                pending: Bool, colours: [KeyColour], readings: [LiveKeySpec: LiveKeyReading] = [:]) {
+        self.readings = readings
         self.config = config
         self.tree = tree
         self.path = path
@@ -103,12 +106,16 @@ public struct KeyFace: Hashable, Sendable {
     /// Text under the icon, or alone without one.
     public var caption: String?
     public var emphasis: Emphasis
+    /// A live key's latest: drawn in place of the icon.
+    public var reading: LiveKeyReading?
 
-    public init(colour: KeyColour, icon: KeyIcon? = nil, caption: String? = nil, emphasis: Emphasis = .normal) {
+    public init(colour: KeyColour, icon: KeyIcon? = nil, caption: String? = nil, emphasis: Emphasis = .normal,
+                reading: LiveKeyReading? = nil) {
         self.colour = colour
         self.icon = icon
         self.caption = caption
         self.emphasis = emphasis
+        self.reading = reading
     }
 
     /// A tree's key, as its node says it should look.
@@ -134,6 +141,8 @@ public enum KeyPress: Hashable, Sendable {
     /// At rest, shows the bottom tree's first row in place of the main tree's,
     /// or back again.
     case showBottomTree(Bool)
+    /// Runs a pinned key, by its place among them.
+    case pinned(Int)
 }
 
 /// Lays the trees out on a keypad with a screen under each key, as folders:
@@ -147,6 +156,9 @@ public enum KeyPress: Hashable, Sendable {
 ///   when it's an escape from a side tree. On the right, Cancel and Back.
 /// - On a page: its keys, up to twelve, with the page's own key on the right to
 ///   leave it.
+/// - Pinned keys, always: along the bottom row from the right. The corner is
+///   free in every state but rest, where the bottom tree's key moves up for it;
+///   each pinned key past the first covers what the trees would put there.
 ///
 /// Needs at least 5 columns and 3 rows; anything beyond those stays dark.
 public struct FolderLayout {
@@ -173,7 +185,8 @@ public struct FolderLayout {
     static let controlColour = KeyColour(red: 0x30, green: 0x30, blue: 0x34)
 
     /// One slot per key, left to right, top to bottom.
-    public func slots(for view: KeypadView, showingBottomTree: Bool = false) -> [Slot] {
+    public func slots(for view: KeypadView, showingBottomTree: Bool = false,
+                      registry: ModuleRegistry = .shared) -> [Slot] {
         var slots = [Slot](repeating: Slot(), count: columns * rows)
         guard fits else { return slots }
         let config = view.config
@@ -181,11 +194,23 @@ public struct FolderLayout {
 
         func put(_ row: Int, _ column: Int, _ slot: Slot) { slots[row * columns + column] = slot }
         func colour(_ key: Int) -> KeyColour { key < view.colours.count ? view.colours[key] : .off }
-        /// A key of the 4×4 keypad, shown as it's lit.
-        func keypadKey(_ key: Int, node: TreeNode?) -> Slot {
-            guard let node else { return Slot() }
-            return Slot(face: KeyFace(node: node, colour: colour(key)), press: .key(key))
+        /// A node's face, with its reading if it's a live key.
+        func face(_ node: TreeNode, colour: KeyColour, emphasis: KeyFace.Emphasis = .normal, tree: TreeKind,
+                  path: [Int]) -> KeyFace {
+            var face = KeyFace(node: node, colour: colour, emphasis: emphasis)
+            if node.isLeaf, !view.readings.isEmpty,
+               let spec = LiveKeySpec(config.resolve(tree: tree, path: path)?.action, registry: registry) {
+                face.reading = view.readings[spec]
+            }
+            return face
         }
+        /// A key of the 4×4 keypad, shown as it's lit.
+        func keypadKey(_ key: Int, node: TreeNode?, tree: TreeKind, path: [Int]) -> Slot {
+            guard let node else { return Slot() }
+            return Slot(face: face(node, colour: colour(key), tree: tree, path: path), press: .key(key))
+        }
+        let pinned = config.roots(.pinned)
+        let hasPinned = pinned.contains { $0 != nil }
         func control(_ symbol: String, _ caption: String, _ press: KeyPress) -> Slot {
             Slot(face: KeyFace(colour: Self.controlColour, icon: .symbol(symbol), caption: caption, emphasis: .control),
                  press: press)
@@ -197,7 +222,8 @@ public struct FolderLayout {
             for (depth, column) in view.path.enumerated() where depth < grid {
                 guard column < level.count, let node = level[column] else { break }
                 let key = KeybowProtocol.key(row: tree.rows[depth], column: column)
-                put(0, depth, Slot(face: KeyFace(node: node, colour: node.colour ?? config.defaultColour, emphasis: .chosen),
+                put(0, depth, Slot(face: face(node, colour: node.colour ?? config.defaultColour, emphasis: .chosen,
+                                              tree: tree, path: Array(view.path.prefix(depth + 1))),
                                    press: .key(key)))
                 level = node.children
             }
@@ -205,14 +231,16 @@ public struct FolderLayout {
             if let row = view.currentRow {
                 let options = config.options(in: tree, after: view.path)
                 for (column, node) in options.enumerated() where column < grid {
-                    put(1, column, keypadKey(KeybowProtocol.key(row: row, column: column), node: node))
+                    put(1, column, keypadKey(KeybowProtocol.key(row: row, column: column), node: node, tree: tree,
+                                             path: view.path + [column]))
                 }
             }
             // The way out to the main tree, from a side tree.
             let top = TreeKind.main.startRow
             if tree != .main, !tree.rows.prefix(view.path.count + 1).contains(top) {
                 for (column, node) in config.roots(.main).enumerated() where column < grid {
-                    put(2, column, keypadKey(KeybowProtocol.key(row: top, column: column), node: node))
+                    put(2, column, keypadKey(KeybowProtocol.key(row: top, column: column), node: node, tree: .main,
+                                             path: [column]))
                 }
             }
             put(0, 4, control("xmark", "Cancel", .navigate(.cancel)))
@@ -221,7 +249,8 @@ public struct FolderLayout {
             let roots = config.roots(page.tree)
             if page.column < roots.count, let pageNode = roots[page.column] {
                 for (slot, node) in pageNode.children.enumerated() where slot < min(page.tree.pageKeys, 3 * grid) {
-                    put(slot / grid, slot % grid, keypadKey(page.tree.key(onPage: slot), node: node))
+                    put(slot / grid, slot % grid, keypadKey(page.tree.key(onPage: slot), node: node, tree: page.tree,
+                                                            path: [page.column, slot]))
                 }
                 // Its own key again leaves it.
                 let own = KeybowProtocol.key(row: page.tree.startRow, column: page.column)
@@ -237,14 +266,25 @@ public struct FolderLayout {
                 let keypadRow = row + shift
                 guard let tree = TreeKind.starting(at: keypadRow) else { continue }
                 for (column, node) in config.roots(tree).enumerated() where column < grid {
-                    put(row, column, keypadKey(KeybowProtocol.key(row: keypadRow, column: column), node: node))
+                    put(row, column, keypadKey(KeybowProtocol.key(row: keypadRow, column: column), node: node,
+                                               tree: tree, path: [column]))
                 }
             }
             if hasBottom {
-                put(shift == 1 ? 0 : 2, 4, shift == 1
+                put(shift == 1 ? 0 : hasPinned ? 1 : 2, 4, shift == 1
                     ? control("chevron.up", "Main", .showBottomTree(false))
                     : control("chevron.down", TreeKind.bottom.title, .showBottomTree(true)))
             }
+        }
+
+        // Pinned keys, over whatever's there.
+        for (slot, node) in pinned.enumerated() where slot < columns {
+            guard let node else { continue }
+            let own = node.colour ?? config.defaultColour
+            let dimmed = KeyColour(red: UInt8(Double(own.red) * 0.35), green: UInt8(Double(own.green) * 0.35),
+                                   blue: UInt8(Double(own.blue) * 0.35))
+            put(rows - 1, columns - 1 - slot, Slot(face: face(node, colour: dimmed, tree: .pinned, path: [slot]),
+                                                    press: .pinned(slot)))
         }
         return slots
     }

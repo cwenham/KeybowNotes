@@ -36,7 +36,7 @@ function classify(text) {
   return { kind: 'other' };
 }
 
-const TREE_NAMES = new Set(['main', 'top', 'row1', 'row2', 'row3', 'bottom', 'bottomup', 'row4', 'row4up']);
+const TREE_NAMES = new Set(['main', 'top', 'row1', 'row2', 'row3', 'bottom', 'bottomup', 'row4', 'row4up', 'pinned', 'pinnedkeys', 'pin', 'always']);
 
 /** What a heading starts: `# row 2 [pages]`, `# list when`, `# contacts`… */
 function headingSection(title) {

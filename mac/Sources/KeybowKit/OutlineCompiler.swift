@@ -166,7 +166,7 @@ private struct Compiler {
         }
         func compileTrees(keypad: Int) -> [(String, OrderedJSON)] {
             var trees: [(String, OrderedJSON)] = []
-            for kind in TreeKind.allCases {
+            for kind in TreeKind.everyTree {
                 let roots = document.roots(kind, keypad: keypad)
                 guard roots.contains(where: { $0 != nil }) else { continue }
                 let nodes = roots.enumerated().compactMap { slot, node -> OrderedJSON? in
@@ -306,9 +306,42 @@ private struct Compiler {
             if children.isEmpty { emptied = true }
         }
 
+        // Keypads with screens: what only shows there, and what a pinned key covers.
+        let section = keypad > 0 && keypad <= document.keypads.count ? document.keypads[keypad - 1] : nil
+        let boardsOnly = section?.model.map(\.isBoard) ?? false
+        if let type = context.type, node.isLeaf, vocabulary.types.first(where: { $0.type == type })?.needsDisplay == true,
+           boardsOnly {
+            note(.warning, "“\(typeTitle(type))” is for keypads with screens, like the Stream Deck; "
+                 + "a \(section?.model?.title ?? "keypad") has none.")
+        }
+        if tree == .pinned, path.count == 1 {
+            if boardsOnly {
+                note(.warning, "Pinned keys only show on keypads with screens, like the Stream Deck.")
+            } else if slot > 0 {
+                // On a Stream Deck, along the bottom row from the right.
+                let column = 4 - slot
+                var covered: [String] = []
+                if column < KeybowProtocol.columns, let key = document.roots(.row3, keypad: keypad)[column] {
+                    covered.append("the row 3 tree's key \(column + 1), “\(key.label)”")
+                }
+                if document.isPaged(.main, keypad: keypad),
+                   document.roots(.main, keypad: keypad).contains(where: { page in
+                       page.map { 8 + column < $0.children.count && $0.children[8 + column] != nil } ?? false }) {
+                    covered.append("key \(9 + column) of the main tree's pages")
+                }
+                if !covered.isEmpty {
+                    note(.warning, "On a Stream Deck, this covers \(covered.joined(separator: " and ")).")
+                }
+            }
+        }
+
         infos[node.id] = OutlineNodeInfo(tree: tree, keypad: keypad, listName: list, path: path, roles: roles,
                                          diagnostics: diagnostics, actionType: context.type)
         return emptied || unusablePage ? nil : .object(fields)
+    }
+
+    private func typeTitle(_ type: String) -> String {
+        vocabulary.types.first { $0.type == type }?.title ?? type
     }
 
     /// The types a key's steps run, in order, at any depth.

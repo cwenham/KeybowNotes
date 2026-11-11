@@ -122,7 +122,7 @@ extension OutlineDocument {
             return nil
         }
         for keypad in 0..<keypadCount {
-            for kind in TreeKind.allCases {
+            for kind in TreeKind.everyTree {
                 if let path = search(roots(kind, keypad: keypad), []) { return OutlineLocation(.tree(kind, keypad: keypad), path) }
             }
         }
@@ -465,7 +465,7 @@ extension OutlineDocument {
     /// Fills a keypad's trees with copies of another's.
     public mutating func copyTrees(from source: Int, to target: Int) {
         guard source != target else { return }
-        for kind in TreeKind.allCases {
+        for kind in TreeKind.everyTree {
             setRoots(roots(kind, keypad: source).map { $0?.copyWithNewIDs() }, kind, keypad: target)
             markPaged(kind, keypad: target, isPaged(kind, keypad: source))
         }
@@ -473,7 +473,7 @@ extension OutlineDocument {
 
     /// True when a keypad has no nodes in any tree.
     public func keypadIsEmpty(_ index: Int) -> Bool {
-        TreeKind.allCases.allSatisfy { roots($0, keypad: index).allSatisfy { $0 == nil } }
+        TreeKind.everyTree.allSatisfy { roots($0, keypad: index).allSatisfy { $0 == nil } }
     }
 }
 
@@ -738,7 +738,7 @@ extension OutlineDocument {
             }
         }
         for keypad in 0..<keypadCount {
-            for kind in TreeKind.allCases { walk(roots(kind, keypad: keypad), .tree(kind, keypad: keypad), []) }
+            for kind in TreeKind.everyTree { walk(roots(kind, keypad: keypad), .tree(kind, keypad: keypad), []) }
         }
         for list in lists { walk(list.nodes, .list(list.name), []) }
         return found

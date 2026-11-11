@@ -73,7 +73,7 @@ struct KeypadEntryQuery: EntityQuery {
         let document = try automation.document()
         var entries: [KeypadEntry] = []
         for (index, keypad) in TreeControl.keypadNames(document).enumerated() {
-            for tree in TreeKind.allCases {
+            for tree in TreeKind.everyTree {
                 for path in TreeControl.leaves(document, keypad: index, tree: tree) {
                     entries.append(KeypadEntry(id: "\(keypad)|\(tree.name)|\(path.joined(separator: "/"))"))
                 }

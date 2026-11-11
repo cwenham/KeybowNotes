@@ -1195,6 +1195,17 @@
       "takesText" : false,
       "title" : "Focus",
       "type" : "focus"
+    },
+    {
+      "fields" : [
+
+      ],
+      "keywords" : [
+        "CPU"
+      ],
+      "takesText" : false,
+      "title" : "CPU load",
+      "type" : "cpu"
     }
   ],
   "conditionOperators" : [

@@ -76,7 +76,9 @@ struct DeckDrawing: View {
         switch key.target {
         case .clear?: return caption.isEmpty ? "Clear the selection" : "\(caption): clears the selection"
         case .tab(let tree)?: return "Show the \(tree.name) tree"
-        case .elsewhere?: return "\(caption), in the main tree"
+        case .elsewhere(let location)?:
+            if case .tree(let tree, _) = location.container, tree.isPinned { return "\(caption): a pinned key" }
+            return "\(caption), in the main tree"
         default: return key.empty ? "An empty key: click to add one here" : caption
         }
     }
@@ -104,6 +106,38 @@ struct DeckDrawing: View {
     // MARK: - Laying it out
 
     private func layout() -> [Key] {
+        var keys = trees()
+        // The pinned keys, over whatever's there, along the bottom row from the right.
+        let keypad = min(model.keypad, model.document.keypads.count)
+        let container = OutlineContainer.tree(.pinned, keypad: keypad)
+        var selectedSlot: Int?
+        switch model.selection {
+        case .node(let id)?:
+            if let location = model.document.keyLocation(of: id), location.container == container {
+                selectedSlot = location.path.first
+            }
+        case .empty(let location)?:
+            if location.container == container { selectedSlot = location.path.first }
+        case nil:
+            break
+        }
+        let onPinnedTab = model.tab.isPinned
+        for slot in 0..<4 {
+            let index = (Self.rows - 1) * Self.columns + Self.columns - 1 - slot
+            let location = OutlineLocation(container, [slot])
+            if let node = model.document.node(at: location) {
+                keys[index].target = onPinnedTab ? .select(.node(node.id)) : .elsewhere(location)
+                keys[index].empty = false
+            } else if onPinnedTab {
+                // Places for more, dashed — over what the trees put there.
+                keys[index] = Key(face: keys[index].face, target: .select(.empty(location)), empty: true)
+            }
+            keys[index].selected = slot == selectedSlot
+        }
+        return keys
+    }
+
+    private func trees() -> [Key] {
         var keys = [Key](repeating: Key(), count: Self.columns * Self.rows)
         guard let config = model.keypadConfig else { return keys }
         let tree = model.tab
@@ -143,10 +177,16 @@ struct DeckDrawing: View {
             return !events.contains { if case .invalidPress = $0 { return true } else { return false } }
         }
         var shown: [FolderLayout.Slot] = []
+        // Live keys show a made-up reading here: the real ones are on the device.
+        var readings: [LiveKeySpec: LiveKeyReading] = [:]
+        for key in config.liveKeys() {
+            readings[key] = ModuleRegistry.shared.module(handling: key.type)?.standInReading(for: key)
+        }
         func lay(showingBottom: Bool = false) {
             let view = KeypadView(config: config, tree: navigator.tree, path: navigator.path, page: navigator.page,
                                   currentRow: navigator.currentRow, pending: false,
-                                  colours: Lighting().colours(for: navigator, config: config, now: now))
+                                  colours: Lighting().colours(for: navigator, config: config, now: now),
+                                  readings: readings)
             shown = FolderLayout(columns: Self.columns, rows: Self.rows).slots(for: view, showingBottomTree: showingBottom)
             for (index, slot) in shown.enumerated() { keys[index].face = slot.face }
         }
@@ -188,7 +228,7 @@ struct DeckDrawing: View {
             keys[9].target = .clear
             return keys
         }
-        guard !paged, !path.isEmpty else {
+        guard !paged, !path.isEmpty, !tree.isPinned else {
             atRest(selectedRoot: path.first)
             return keys
         }

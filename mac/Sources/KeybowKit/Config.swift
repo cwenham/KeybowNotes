@@ -80,6 +80,11 @@ public struct ActionSpec: Equatable, Sendable {
 
 /// The four trees the keypad can hold. The first key pressed decides which one
 /// is in play: each starts on a different row.
+///
+/// And `pinned`: keys a keypad with screens shows all the time, whatever's
+/// going on in the trees — on a Stream Deck, along the bottom row from the
+/// right. Up to four, flat, each run the moment it's pressed. It's not one of
+/// the keypad's trees, so `allCases` leaves it out; `everyTree` has it.
 public enum TreeKind: String, CaseIterable, Sendable {
     /// Row 1 downwards: four levels.
     case main
@@ -89,6 +94,17 @@ public enum TreeKind: String, CaseIterable, Sendable {
     case row3
     /// Row 4 upwards: four levels.
     case bottom
+    /// Always shown, on a keypad with screens.
+    case pinned
+
+    /// The keypad's four trees, by the rows they start on.
+    public static var allCases: [TreeKind] { [.main, .row2, .row3, .bottom] }
+
+    /// The four trees and the pinned keys: everything an outline can hold.
+    public static let everyTree: [TreeKind] = [.main, .row2, .row3, .bottom, .pinned]
+
+    /// Up to four keys, always shown: there's no row of the 4×4 keypad for them.
+    public var isPinned: Bool { self == .pinned }
 
     /// Rows visited in order, zero-based from the top.
     public var rows: [Int] {
@@ -97,6 +113,7 @@ public enum TreeKind: String, CaseIterable, Sendable {
         case .row2: return [1, 2, 3]
         case .row3: return [2, 3]
         case .bottom: return [3, 2, 1, 0]
+        case .pinned: return []
         }
     }
 
@@ -108,18 +125,21 @@ public enum TreeKind: String, CaseIterable, Sendable {
         case .row2: return "row 2"
         case .row3: return "row 3"
         case .bottom: return "bottom"
+        case .pinned: return "pinned"
         }
     }
 
     /// "Main", "Row 2"…: the name as a title.
     public var title: String { name.prefix(1).uppercased() + name.dropFirst() }
 
-    public var startRow: Int { rows[0] }
-    public var levels: Int { rows.count }
+    /// The pinned keys' is past the keypad's last row: they have none.
+    public var startRow: Int { rows.first ?? KeybowProtocol.rows }
+    public var levels: Int { isPinned ? 1 : rows.count }
 
     /// As pages: how many keys a page holds — every key on the rows below its
-    /// own. The bottom tree has no rows below, so it can't have pages.
-    public var pageKeys: Int { self == .bottom ? 0 : (levels - 1) * KeybowProtocol.columns }
+    /// own. The bottom tree has no rows below, so it can't have pages; nor
+    /// can the pinned keys.
+    public var pageKeys: Int { self == .bottom || isPinned ? 0 : (levels - 1) * KeybowProtocol.columns }
 
     public var canHavePages: Bool { pageKeys > 0 }
 
@@ -148,6 +168,7 @@ public enum TreeKind: String, CaseIterable, Sendable {
         case "row2": self = .row2
         case "row3": self = .row3
         case "bottom", "bottomup", "row4", "row4up": self = .bottom
+        case "pinned", "pinnedkeys", "pin", "always": self = .pinned
         default: return nil
         }
     }

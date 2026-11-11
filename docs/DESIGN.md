@@ -188,6 +188,29 @@ show; the Brightness setting goes to the screens' backlight instead.
 colour's lightness, the icon above and the caption below, text shrunk to fit.
 The tree editor's inspector draws its preview with the same code.
 
+**Pinned keys** are a fifth kind of tree, `TreeKind.pinned`: flat, up to four
+keys, left out of `TreeKind.allCases` — the keypad's four trees — and in
+`TreeKind.everyTree`, so the outline, the compiler, the editor and resolving
+treat them as a tree while the navigator and the Keybow's lighting never see
+them. `FolderLayout` puts them along the bottom row from the right, over what's
+there; a press is `KeyPress.pinned`, then `KeybowEvent.pinned`, then
+`Navigator.pressPinned`, which fires the key at once and leaves the walk alone.
+
+**Live keys** are a module's: `liveInterval(for:)` says a type is live and how
+often to look again, `reading(for:now:)` gives a `LiveKeyReading` — a value,
+a caption, a level from 0 to 1 — and `standInReading(for:)` one for the
+editor's drawing. A type only for keypads with screens says so with
+`ModuleActionType.needsDisplay`. The app's `LiveKeyWatcher` keeps a loop for
+each live key (`LiveKeySpec`: type and fields, so keys alike share one) that a
+connected Stream Deck's config holds — none when no Stream Deck is connected —
+and hands each reading to the drivers of keypads that draw. The reading
+travels in `KeypadView.readings`; `FolderLayout` puts it on the face of the
+key whose action it is, and `KeyRenderer` draws it: the fill, a scale, the
+value large. Since only changed faces are sent, a reading that's the same
+costs nothing. The CPU key (`CPUModule`, in KeybowSystem) reads the kernel's
+tick counts (`host_statistics`, `HOST_CPU_LOAD_INFO`) each second and shows the
+share of time busy since the last look.
+
 Stream Decks are found by the IO registry every two seconds, as boards are,
 and told apart by serial number. They need no setting up, so Set Up a Keypad
 and the troubleshooter leave them out (`KeypadDevice.Model.boards`). Elgato's

@@ -112,6 +112,8 @@ func withConnection(seconds: TimeInterval, _ body: @escaping (KeybowConnection) 
                 print(describe(message))
             case .navigate(let move):
                 print(move.rawValue)
+            case .pinned(let slot):
+                print("pinned \(slot + 1)")
             }
         }
         // The stream finishes once stop() has run, which is our cue to leave.
@@ -157,7 +159,7 @@ func loadConfig(_ arguments: [String]) -> (KeybowConfig, URL) {
 }
 
 func printTrees(_ config: KeybowConfig) {
-    for tree in TreeKind.allCases where config.trees[tree] != nil {
+    for tree in TreeKind.everyTree where config.trees[tree] != nil {
         let rows = tree.rows.map { String($0 + 1) }.joined(separator: " → ")
         if config.isPaged(tree) {
             print("\(tree.rawValue) pages (on row \(tree.startRow + 1); their keys on rows \(tree.startRow + 2)–4, at once)")

@@ -522,7 +522,7 @@ Every text field in an action is expanded through the template system first.
 | `messages.compose` | `sms:` URL | Opens a conversation with the text filled in. **Never sends.** |
 | `mail.compose` | AppleScript | Opens a real draft window, ready to edit. |
 | `phone.call` | `tel:` / `facetime-audio:` URL | Through the iPhone, or FaceTime audio. macOS asks before dialling. |
-| `app.open` | `NSWorkspace` | Opens an app (by `bundleId`, else `app` name), optionally with a file, folder or URL. |
+| `app.open` | `NSWorkspace` | Opens an app (by `bundleId`, else `app` name), optionally with a file, folder or URL. With `toggle`, an app already in front goes behind the next app's window, or hides. |
 | `url.open` | `NSWorkspace` | Any link in its default app — web links in the browser, `things:`, `obsidian:`… — or a file. |
 | `clipboard.copy` | `NSPasteboard` | Text, a template, or the label. |
 | `text.insert` | paste | The same, at the cursor in the app in front: on the clipboard, ⌘V, then the clipboard put back. |

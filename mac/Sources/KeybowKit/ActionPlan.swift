@@ -23,6 +23,28 @@ public struct AppendGuards: Equatable, Sendable {
 
 /// Exactly what to do, with every value decided. Planning is pure and tested;
 /// `ActionRunner` carries a plan out.
+/// What a toggling app key does when its app is already in front.
+public enum AppToggle: String, CaseIterable, Equatable, Sendable {
+    /// The app that was in front before it comes forward again.
+    case behind
+    /// Hidden, as ⌘H does.
+    case hide
+
+    /// `behind`, `hide` — or `true`, `yes`, `on` for `behind`. Nil for off.
+    public init?(field text: String) {
+        let lower = text.trimmingCharacters(in: .whitespaces).lowercased()
+        if let toggle = AppToggle(rawValue: lower) {
+            self = toggle
+        } else if ["true", "yes", "on", "1", "back", "background", "send behind"].contains(lower) {
+            self = .behind
+        } else if ["hidden", "hides"].contains(lower) {
+            self = .hide
+        } else {
+            return nil
+        }
+    }
+}
+
 public enum ActionPlan: Equatable, Sendable {
     case createNote(NoteLocation, title: String, html: String)
     /// `titleHTML` starts the note when it has to be created first.
@@ -36,7 +58,8 @@ public enum ActionPlan: Equatable, Sendable {
     case placeCall(to: String, faceTime: Bool)
     case composeMail(to: String, subject: String, body: String)
     /// `open` is a file path (already expanded) or a URL; empty just launches the app.
-    case openApp(name: String, bundleID: String, open: String)
+    /// With `toggle`, an app already in front goes back instead.
+    case openApp(name: String, bundleID: String, open: String, toggle: AppToggle? = nil)
     case runShortcut(name: String, input: String)
     /// A web link in the default browser, any other link in the app that
     /// handles it, or a file in its default app.
@@ -365,7 +388,7 @@ private struct Planner {
             if !open.isEmpty && !open.contains("://") {
                 open = (open as NSString).expandingTildeInPath
             }
-            return .openApp(name: name, bundleID: bundleID, open: open)
+            return .openApp(name: name, bundleID: bundleID, open: open, toggle: AppToggle(field: optional("toggle")))
 
         case "shortcut":
             let name = try required(action.string("name"), for: "shortcut name")

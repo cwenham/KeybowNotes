@@ -153,8 +153,8 @@ public enum ActionRunner {
             return .success(to.isEmpty ? "New email ready" : "Email to \(to) ready",
                             "Nothing is sent until you send it.")
 
-        case .openApp(let name, let bundleID, let open):
-            return try await openApp(name: name, bundleID: bundleID, open: open)
+        case .openApp(let name, let bundleID, let open, let toggle):
+            return try await openApp(name: name, bundleID: bundleID, open: open, toggle: toggle)
 
         case .module(let request):
             guard let module = registry.module(handling: request.type) else {
@@ -289,7 +289,8 @@ public enum ActionRunner {
         }
     }
 
-    private static func openApp(name: String, bundleID: String, open: String) async throws -> ActionOutcome {
+    private static func openApp(name: String, bundleID: String, open: String,
+                                toggle: AppToggle? = nil) async throws -> ActionOutcome {
         var appURL: URL?
         if !bundleID.isEmpty {
             appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
@@ -299,6 +300,11 @@ public enum ActionRunner {
         }
         let label = name.isEmpty ? bundleID : name
         guard let appURL else { throw RunError("\(label) isn't installed", "Looked for it by bundle ID and in /Applications.") }
+        if let toggle, let front = NSWorkspace.shared.frontmostApplication,
+           (!bundleID.isEmpty && front.bundleIdentifier == bundleID)
+            || front.bundleURL?.standardizedFileURL == appURL.standardizedFileURL {
+            return try await sendBack(front, label: label, toggle)
+        }
 
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
@@ -319,6 +325,43 @@ public enum ActionRunner {
         }
         _ = try await NSWorkspace.shared.open([target], withApplicationAt: appURL, configuration: configuration)
         return .success("Opened \(target.isFileURL ? target.lastPathComponent : open) in \(label)")
+    }
+
+    /// A toggling app key pressed with its app in front: the app with the
+    /// frontmost window beneath it comes forward — or, with none, or asked
+    /// to, the app is hidden.
+    private static func sendBack(_ app: NSRunningApplication, label: String, _ toggle: AppToggle) async throws -> ActionOutcome {
+        if toggle == .behind, let other = appBeneath(app.processIdentifier), let url = other.bundleURL {
+            // Opening it, not `activate()`: macOS lets a background app hand
+            // activation only to an app it opens.
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            _ = try await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+            return .success("\(label) sent behind", "\(other.localizedName ?? "The app before") is in front again.")
+        }
+        guard app.hide() else { throw RunError("\(label) didn't hide") }
+        return toggle == .hide ? .success("Hid \(label)")
+            : .success("Hid \(label)", "No other app's window was showing to bring forward.")
+    }
+
+    /// The app owning the frontmost ordinary window on screen that isn't
+    /// `pid`'s or this app's. Window owners and layers need no Screen
+    /// Recording permission; only titles do.
+    static func appBeneath(_ pid: pid_t) -> NSRunningApplication? {
+        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+            as? [[String: Any]] ?? []
+        let mine = ProcessInfo.processInfo.processIdentifier
+        for window in windows {
+            guard (window[kCGWindowLayer as String] as? Int) == 0,
+                  let owner = window[kCGWindowOwnerPID as String] as? pid_t, owner != pid, owner != mine,
+                  (window[kCGWindowAlpha as String] as? Double ?? 1) > 0,
+                  let bounds = window[kCGWindowBounds as String] as? [String: Any],
+                  (bounds["Width"] as? Double ?? 0) > 50, (bounds["Height"] as? Double ?? 0) > 50,
+                  let app = NSRunningApplication(processIdentifier: owner), app.activationPolicy == .regular
+            else { continue }
+            return app
+        }
+        return nil
     }
 
     // MARK: - Plumbing

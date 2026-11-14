@@ -401,6 +401,14 @@ it did is on the screen, and the overlay steps aside.
   server's list for the screen to change, and once more for any that didn't.
   Screens already showing theirs are left out, and the pointer's screen goes
   last.
+- `toggle: true`: when every screen the key names already shows its desktop,
+  it goes back to what each showed before (`planBack`). The module remembers
+  the space before the current one on each screen, reading the window
+  server's list at launch, on every `activeSpaceDidChangeNotification` (which
+  doesn't say which screen changed) and around its own switches, so it knows
+  where you were however you got there. If one named screen is elsewhere it
+  switches forward as usual; a screen with nothing remembered, or whose old
+  space has been closed, says so.
 - `SpacesControl` is the protocol tests fake: a made-up window server and
   Mission Control, whose presses can take, come to nothing once, or never.
 - In the tree editor, `SpacesPicker` draws every screen, one under another,

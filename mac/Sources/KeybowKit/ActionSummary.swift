@@ -140,6 +140,11 @@ public struct ActionSummary: Equatable, Sendable {
             if open.isEmpty && target.isEmpty && subject != selection.labels.last {
                 details.append(selection.labels.last ?? "")
             }
+            switch AppToggle(field: field("toggle")) {
+            case .behind?: details.append("pressed again, sent behind")
+            case .hide?: details.append("pressed again, hidden")
+            case nil: break
+            }
         case "shortcut":
             verb = "Run shortcut"
             subject = field("name")

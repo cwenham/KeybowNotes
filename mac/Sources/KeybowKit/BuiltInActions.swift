@@ -246,6 +246,12 @@ public enum BuiltInActions {
                     A channel or place inside the app, noted until it has a link. Add Open with the link to go there.
                     Example: general
                     """),
+                ModuleField(key: "toggle", title: "Toggle", kind: .choice(AppToggle.allCases.map(\.rawValue)),
+                            hint: "else it just opens", help: """
+                    Pressed when the app is already in front: behind brings back the app that was in front \
+                    before; hide hides it, as ⌘H does. Pressed again, it comes forward.
+                    Example: behind
+                    """),
             ]),
         defaults: ["open": .string("{{project.path|}}")])
 

@@ -122,7 +122,7 @@ final class LinkAndClipboardTests: XCTestCase {
         1. Safari [Safari]
            1. Docs [https://developer.apple.com]
         """
-        guard case .openApp(let name, _, let open) = try plan(outline, path: [0, 0]) else { return XCTFail() }
+        guard case .openApp(let name, _, let open, _) = try plan(outline, path: [0, 0]) else { return XCTFail() }
         XCTAssertEqual(name, "Safari")
         XCTAssertEqual(open, "https://developer.apple.com")
     }
@@ -133,8 +133,8 @@ final class LinkAndClipboardTests: XCTestCase {
            1. Tool [open: "https://github.com/{{repo}}", repo: owner/my tool]
            2. Site [open: "{{site}}", site: https://example.com/?a=1&b=2]
         """
-        guard case .openApp(_, _, let open) = try plan(outline, path: [0, 0]),
-              case .openApp(_, _, let whole) = try plan(outline, path: [0, 1]) else { return XCTFail() }
+        guard case .openApp(_, _, let open, _) = try plan(outline, path: [0, 0]),
+              case .openApp(_, _, let whole, _) = try plan(outline, path: [0, 1]) else { return XCTFail() }
         XCTAssertEqual(open, "https://github.com/owner/my%20tool")
         XCTAssertEqual(whole, "https://example.com/?a=1&b=2")
     }

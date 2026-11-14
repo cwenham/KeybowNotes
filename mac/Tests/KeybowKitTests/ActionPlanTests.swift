@@ -226,9 +226,23 @@ final class ActionPlanTests: XCTestCase {
         { "projects": { "Website": { "path": "~/Code/website" } },
           "tree": [ { "label": "Website", "action": { "type": "app.open", "app": "Visual Studio Code" } } ] }
         """, path: [0])
-        guard case .openApp(let name, _, let open) = planned.plan else { return XCTFail("\(planned)") }
+        guard case .openApp(let name, _, let open, _) = planned.plan else { return XCTFail("\(planned)") }
         XCTAssertEqual(name, "Visual Studio Code")
         XCTAssertEqual(open, (("~/Code/website") as NSString).expandingTildeInPath)
+    }
+
+    func testAnAppKeyCanToggle() throws {
+        for (written, toggle) in [("true", AppToggle.behind), ("\"behind\"", .behind), ("\"hide\"", .hide)] {
+            let planned = try plan("""
+            { "tree": [ { "label": "Mail", "action": { "type": "app.open", "app": "Mail", "toggle": \(written) } } ] }
+            """, path: [0])
+            XCTAssertEqual(planned.plan, .openApp(name: "Mail", bundleID: "", open: "", toggle: toggle), written)
+        }
+        let off = try plan("""
+        { "tree": [ { "label": "Mail", "action": { "type": "app.open", "app": "Mail", "toggle": false } } ] }
+        """, path: [0])
+        XCTAssertEqual(off.plan, .openApp(name: "Mail", bundleID: "", open: ""))
+        XCTAssertNil(AppToggle(field: "sideways"))
     }
 
     func testAppWithAChannelButNoURLJustOpens() throws {

@@ -49,7 +49,20 @@ private final class FakeSpaces: SpacesControl, @unchecked Sendable {
     var stuck: Set<CGDirectDisplayID> = []
     var failure: ModuleError?
 
-    func layout() async -> (layout: SpacesLayout, pointer: Int?) { (screens, pointer) }
+    /// When set, the layout shows what `current` says, as the real one does.
+    var live = false
+
+    func layout() async -> (layout: SpacesLayout, pointer: Int?) {
+        guard live else { return (screens, pointer) }
+        let now = managed.map { entry -> [String: Any] in
+            var entry = entry
+            let id = (entry["Display Identifier"] as? String)?.uppercased()
+            let key = id == "MAIN" ? main.identifier : id
+            if let key, let space = current[key] { entry["Current Space"] = desktop(space) }
+            return entry
+        }
+        return (SpacesLayout(managed: now, displays: [main, side, portrait], appName: { $0 == 900 ? "Keynote" : nil }), pointer)
+    }
     func showing() -> [String: Int] { current }
     var mayPress: Bool { allowed }
     func askToPress() { asked = true }
@@ -184,6 +197,78 @@ final class SpacesModuleTests: XCTestCase {
         XCTAssertEqual(failed.detail, "Portrait Display didn't switch: Mission Control didn't open — KeybowNotes opens it to "
                        + "switch Spaces. · LG HDR 4K didn't switch: Mission Control didn't open — KeybowNotes opens it to "
                        + "switch Spaces.")
+    }
+
+    func testAToggleGoesBackToWhereEachScreenWas() async {
+        let fake = FakeSpaces()
+        fake.live = true
+        let module = SpacesModule(control: fake, patience: 0.1)
+        module.noteChange()
+        let mail = request(["screen3": "2", "toggle": "true"])
+
+        // Not there yet: it goes.
+        var outcome = await module.run(mail, now: Date())
+        XCTAssertEqual(outcome, .quiet)
+        XCTAssertEqual(fake.current[side.identifier], 21)
+        // There: back to desktop 1.
+        outcome = await module.run(mail, now: Date())
+        XCTAssertEqual(outcome, .quiet)
+        XCTAssertEqual(fake.current[side.identifier], 20)
+        XCTAssertEqual(fake.pressed, ["3:2", "3:1"])
+
+        // Without toggle, being there does nothing.
+        fake.current[side.identifier] = 21
+        module.noteChange()
+        outcome = await module.run(request(["screen3": "2"]), now: Date())
+        XCTAssertEqual(outcome, .quiet)
+        XCTAssertEqual(fake.pressed, ["3:2", "3:1"])
+    }
+
+    func testAToggleRemembersSwitchesItDidntMake() async {
+        let fake = FakeSpaces()
+        fake.live = true
+        let module = SpacesModule(control: fake, patience: 0.1)
+        module.noteChange()
+        // Swiped to the portrait screen's first desktop, then the side screen's second.
+        fake.current[portrait.identifier] = 30
+        module.noteChange()
+        fake.current[side.identifier] = 21
+        module.noteChange()
+
+        let outcome = await module.run(request(["screen3": "2", "toggle": "yes"]), now: Date())
+        XCTAssertEqual(outcome, .quiet)
+        XCTAssertEqual(fake.pressed, ["3:1"])
+        XCTAssertEqual(fake.current[portrait.identifier], 30, "a screen the key doesn't name is left alone")
+    }
+
+    func testAToggleWithOneScreenElsewhereSwitchesForward() async {
+        let fake = FakeSpaces()
+        fake.live = true
+        let module = SpacesModule(control: fake, patience: 0.1)
+        fake.current[side.identifier] = 21
+        module.noteChange()
+        // Screen 3 is there already; screen 1 isn't.
+        let outcome = await module.run(request(["screen1": "1", "screen3": "2", "toggle": "true"]), now: Date())
+        XCTAssertEqual(outcome, .quiet)
+        XCTAssertEqual(fake.pressed, ["1:1"])
+    }
+
+    func testAToggleSaysWhenTheresNowhereToGoBack() async {
+        let fake = FakeSpaces()
+        fake.live = true
+        fake.current[side.identifier] = 21
+        let module = SpacesModule(control: fake, patience: 0.1)
+        let outcome = await module.run(request(["screen3": "2", "toggle": "true"]), now: Date())
+        XCTAssertEqual(outcome.message, "LG HDR 4K has nowhere to go back to yet")
+        XCTAssertEqual(fake.pressed, [])
+
+        // The desktop it came from was closed.
+        fake.current[side.identifier] = 99
+        module.noteChange()
+        fake.current[side.identifier] = 21
+        module.noteChange()
+        let gone = await module.run(request(["screen3": "2", "toggle": "true"]), now: Date())
+        XCTAssertEqual(gone.message, "The desktop LG HDR 4K showed before has gone")
     }
 
     func testAsksForAccessibilityFirst() async {

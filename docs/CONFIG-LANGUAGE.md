@@ -834,8 +834,10 @@ Mac; *Calls on Other Devices* on the iPhone).
 | `open` | A path (`~` allowed) or a URL (anything with `://`) to open in it. Empty: just launch the app. |
 | `url` | Used if `open` is empty. |
 | `target` | A channel or place in the app, awaiting a URL. With none, the app just opens, with a warning. |
+| `toggle` | Pressed when the app is already in front: `behind` (or `true`) brings back the app with the frontmost window beneath it; `hide` hides it, as ⌘H does. Left out, the app just opens. |
 
-A path that doesn't exist fails with a message saying so.
+A path that doesn't exist fails with a message saying so. `Mail [app: Mail, toggle: behind]`
+brings Mail forward, and pressed again puts it behind the app you were in.
 
 ### `shortcut` — run a Shortcuts shortcut
 

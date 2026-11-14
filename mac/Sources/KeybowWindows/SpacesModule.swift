@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import KeybowKit
 
@@ -19,11 +20,18 @@ import KeybowKit
 /// once for each screen — it closes on the press — after reading which
 /// desktops each screen has from the window server; then watches each screen
 /// change, and goes again for any that didn't.
+///
+/// With `toggle: true`, pressing it again when every screen it names already
+/// shows its desktop goes back to what each showed before — however you got
+/// there: it remembers the last desktop each screen left, watching every
+/// change of Space.
 public final class SpacesModule: KeybowModule, @unchecked Sendable {
     public static let id = "spaces"
     public static let type = "spaces"
     /// Screens it takes a desktop for: `screen1` to `screen6`.
     public static let screenCount = 6
+    /// Goes back when already there.
+    public static let toggleKey = "toggle"
 
     /// What a screen's field says.
     public enum Choice: Equatable, Sendable {
@@ -71,7 +79,7 @@ public final class SpacesModule: KeybowModule, @unchecked Sendable {
         actionTypes: [
             ModuleActionType(
                 type: type, title: "Switch Spaces", keywords: ["Spaces", "Space"], symbol: "square.split.2x1",
-                fields: (1...screenCount).map { screen in
+                fields: (1...screenCount).map { screen -> ModuleField in
                     ModuleField(key: key(forScreen: screen), title: "Screen \(screen)", hint: "a desktop, or no change",
                                 help: """
                         The desktop to show on screen \(screen), counting screens from the left, and that screen's \
@@ -80,7 +88,12 @@ public final class SpacesModule: KeybowModule, @unchecked Sendable {
                         as it is.
                         Example: 2
                         """)
-                }),
+                } + [
+                    ModuleField(key: toggleKey, title: "Toggle", kind: .flag, help: """
+                        Pressed when the screens already show these desktops, go back to the ones they showed \
+                        before — however you got here.
+                        """),
+                ]),
         ])
 
     private let control: SpacesControl
@@ -92,7 +105,49 @@ public final class SpacesModule: KeybowModule, @unchecked Sendable {
         self.patience = patience
     }
 
-    public func start(host: ModuleHost) {}
+    /// The last two spaces each screen showed, by its identifier: what it
+    /// shows now as the module last saw, and the one before.
+    private let lock = NSLock()
+    private var seen: [String: Int] = [:]
+    private var before: [String: Int] = [:]
+    private var observer: NSObjectProtocol?
+
+    public func start(host: ModuleHost) {
+        noteChange()
+        observer = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.noteChange() }
+    }
+
+    deinit {
+        if let observer { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
+    }
+
+    /// Reads what each screen shows, and remembers what any that changed
+    /// showed before. The notification doesn't say which screen changed.
+    func noteChange() {
+        noteShowing(control.showing())
+    }
+
+    private func noteShowing(_ showing: [String: Int]) {
+        lock.lock()
+        defer { lock.unlock() }
+        for (screen, space) in showing {
+            if let last = seen[screen], last != space { before[screen] = last }
+            seen[screen] = space
+        }
+    }
+
+    /// The space a screen showed before the one it shows now.
+    func previous(_ screen: String) -> Int? {
+        lock.lock()
+        defer { lock.unlock() }
+        return before[screen]
+    }
+
+    static func isOn(_ text: String?) -> Bool {
+        ["true", "yes", "on", "1"].contains((text ?? "").lowercased())
+    }
 
     /// The desktop asked for on each screen, by screen number: those saying
     /// `no change` left out.
@@ -122,7 +177,9 @@ public final class SpacesModule: KeybowModule, @unchecked Sendable {
         let shown = Self.wanted(request).desktops.sorted { $0.key < $1.key }
             .map { "desktop \($0.value) on screen \($0.key)" }
         guard let first = shown.first else { return ModuleSummary(verb: "Switch", subject: "Spaces") }
-        return ModuleSummary(verb: "Show", subject: first, details: Array(shown.dropFirst()))
+        var details = Array(shown.dropFirst())
+        if Self.isOn(request.field(Self.toggleKey)) { details.append("pressed again, back to where it was") }
+        return ModuleSummary(verb: "Show", subject: first, details: details)
     }
 
     // MARK: - Switching
@@ -176,6 +233,32 @@ public final class SpacesModule: KeybowModule, @unchecked Sendable {
         return plan
     }
 
+    /// Back to the spaces the screens showed before, for a toggle pressed
+    /// when they're all already there: nil when they aren't, so it switches
+    /// as it would. `previous` gives a screen's space before, by identifier.
+    static func planBack(_ desktops: [Int: Int], layout: SpacesLayout, pointer: Int?,
+                         previous: (String) -> Int?) -> Plan? {
+        let forward = plan(desktops, layout: layout, pointer: pointer)
+        guard forward.steps.isEmpty, forward.failures.isEmpty, forward.already > 0 else { return nil }
+        var back = Plan()
+        for number in desktops.keys.sorted() {
+            guard let screen = layout.screen(number) else { continue }
+            guard let id = previous(screen.identifier) else {
+                back.failures.append(ModuleError("\(screen.name) has nowhere to go back to yet",
+                    "It goes back to the desktop it showed before this one, once it's seen it change."))
+                continue
+            }
+            guard let space = screen.spaces.first(where: { $0.id == id }) else {
+                back.failures.append(ModuleError("The desktop \(screen.name) showed before has gone",
+                    "It was closed, or the screens were rearranged."))
+                continue
+            }
+            back.steps.append(Step(screen: screen, space: space))
+        }
+        back.steps.sort { ($0.screen.number == pointer ? 1 : 0, $0.screen.number) < ($1.screen.number == pointer ? 1 : 0, $1.screen.number) }
+        return back
+    }
+
     public func run(_ request: ModuleRequest, now: Date) async -> ActionOutcome {
         let (desktops, problem) = Self.wanted(request)
         if let problem { return .failure(problem) }
@@ -185,7 +268,13 @@ public final class SpacesModule: KeybowModule, @unchecked Sendable {
                             "Allow it in System Settings → Privacy & Security → Accessibility.")
         }
         let (layout, pointer) = await control.layout()
+        noteShowing(Dictionary(layout.screens.compactMap { screen in screen.showing.map { (screen.identifier, $0) } },
+                               uniquingKeysWith: { first, _ in first }))
         var plan = Self.plan(desktops, layout: layout, pointer: pointer)
+        if Self.isOn(request.field(Self.toggleKey)),
+           let back = Self.planBack(desktops, layout: layout, pointer: pointer, previous: previous) {
+            plan = back
+        }
         var waiting = plan.steps
         var trouble: ModuleError?
         // A visit to Mission Control for each screen — it closes on the
@@ -206,9 +295,10 @@ public final class SpacesModule: KeybowModule, @unchecked Sendable {
             let showing = control.showing()
             waiting.removeAll { showing[$0.screen.identifier] == $0.space.id }
         }
+        noteChange()
         for step in waiting {
             plan.failures.append(trouble.map { ModuleError("\(step.screen.name) didn't switch: \($0.message)", $0.detail) }
-                ?? ModuleError("\(step.screen.name) didn't switch to desktop \(step.space.desktop ?? 0)",
+                ?? ModuleError("\(step.screen.name) didn't switch to \(step.space.desktop.map { "desktop \($0)" } ?? step.space.app ?? "its full-screen app")",
                                "Its thumbnail in Mission Control was pressed, and the screen stayed as it was."))
         }
         guard let first = plan.failures.first else {
